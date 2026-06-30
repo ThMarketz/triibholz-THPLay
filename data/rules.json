@@ -1,0 +1,48 @@
+{
+  "source": {
+    "name": "Swiss Aquatics",
+    "page": "https://www.swiss-aquatics.ch/leistungssport/water-polo/wettkampfbetrieb/downloads-medien/"
+  },
+  "checkedAt": "2026-06-30T15:32:45.006Z",
+  "documents": [
+    {
+      "id": "aqua-water-polo-rules",
+      "title": "World Aquatics Water Polo Rules",
+      "lang": "EN",
+      "category": "International playing rules",
+      "url": "https://d2rzn8tbmk6yhf.cloudfront.net/wp-content/uploads/2025/08/Water-Polo-Rules_06.25.pdf",
+      "version": "06.25"
+    },
+    {
+      "id": "swiss-reglement-5-1",
+      "title": "Swiss Aquatics — Reglement 5.1",
+      "lang": "DE",
+      "category": "Swiss competition regulation",
+      "url": "https://d2rzn8tbmk6yhf.cloudfront.net/wp-content/uploads/2026/04/WP-Reglement_5_1_D_Update_30.04.2026.pdf",
+      "version": "30.04.2026"
+    },
+    {
+      "id": "swiss-reglement-5-1-1",
+      "title": "Swiss Aquatics — Reglement 5.1.1",
+      "lang": "DE",
+      "category": "Swiss competition regulation",
+      "url": "https://d2rzn8tbmk6yhf.cloudfront.net/wp-content/uploads/2025/09/0.-Reglement_5_1_1_D_UPDATE_13.06.2025-per-01.09.2025.pdf",
+      "version": "13.06.2025"
+    }
+  ],
+  "references": [
+    {
+      "title": "Swiss Aquatics — Water Polo downloads & regulations",
+      "url": "https://www.swiss-aquatics.ch/leistungssport/water-polo/wettkampfbetrieb/downloads-medien/"
+    },
+    {
+      "title": "World Aquatics — Competition Regulations",
+      "url": "https://www.worldaquatics.com/rules/competition-regulations"
+    },
+    {
+      "title": "European Aquatics — Water Polo Rules",
+      "url": "https://europeanaquatics.org/sports/water-polo/water-polo-rules/"
+    }
+  ],
+  "note": "Official rule books tracked from Swiss Aquatics. Links point to the authoritative documents; rule text is not reproduced here (copyright)."
+}

@@ -355,3 +355,22 @@ em{color:var(--ink-faint);font-style:italic}
 .basics-src a{color:var(--teal);text-decoration:none}
 .basics-src a:hover{text-decoration:underline}
 @media (max-width:1080px){ .basics-grid{grid-template-columns:1fr} }
+
+/* ========== Official rule books panel ========== */
+.rules-panel{background:linear-gradient(180deg,#13263a,#0f1c2b);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:18px 0 6px}
+.rules-head{display:flex;align-items:center;gap:11px;margin-bottom:12px}
+.rules-ic{flex:0 0 auto;width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-size:17px;font-weight:800;background:#163a2b;color:#5fd99e}
+.rules-head h3{margin:0;font-size:15.5px}
+.rules-checked{font-size:11.5px;color:var(--ink-faint)}
+.rules-docs{display:flex;flex-direction:column;gap:8px}
+.rules-doc{display:flex;align-items:center;gap:11px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:10px 12px;color:var(--ink);text-decoration:none}
+.rules-doc:hover{border-color:var(--teal)}
+.rd-lang{flex:0 0 auto;min-width:26px;text-align:center;font-size:10px;font-weight:800;letter-spacing:.5px;padding:3px 5px;border-radius:6px;background:#15324a;color:#7fc4ff}
+.rd-main{flex:1;display:flex;flex-direction:column;min-width:0}
+.rd-title{font-weight:700;font-size:13.5px}
+.rd-title em{color:var(--ink-faint);font-weight:600}
+.rd-sub{font-size:11.5px;color:var(--ink-faint)}
+.rd-open{flex:0 0 auto;font-size:11.5px;font-weight:700;color:var(--teal)}
+.rules-refs{display:flex;flex-wrap:wrap;gap:14px;margin-top:11px;padding-top:11px;border-top:1px solid var(--line)}
+.rules-refs a{font-size:11.5px;color:var(--ink-dim);text-decoration:none}
+.rules-refs a:hover{color:var(--teal)}

@@ -1,0 +1,10 @@
+{
+  "name": "triibholz-thplay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Triibholz (THPLAY) — water polo playbook & trainer",
+  "type": "module",
+  "scripts": {
+    "update-rules": "node scripts/update-rules.mjs"
+  }
+}

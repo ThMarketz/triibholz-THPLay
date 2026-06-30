@@ -1,0 +1,36 @@
+name: Update water polo rule books
+
+# Keep data/rules.json in sync with the official Swiss Aquatics rule books.
+on:
+  schedule:
+    - cron: '0 6 * * 1'      # every Monday 06:00 UTC
+  workflow_dispatch:          # allow running it manually from the Actions tab
+
+permissions:
+  contents: write             # so the job can commit the refreshed rules.json
+
+jobs:
+  update-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch latest rule books from Swiss Aquatics
+        run: node scripts/update-rules.mjs
+
+      - name: Commit if the rule books changed
+        run: |
+          if git diff --quiet -- data/rules.json; then
+            echo "No rule-book changes."
+          else
+            git config user.name  "triibholz-rules-bot"
+            git config user.email "actions@github.com"
+            git add data/rules.json
+            git commit -m "chore(rules): refresh water polo rule books from Swiss Aquatics [skip ci]"
+            git push
+            echo "Rule books updated."
+          fi

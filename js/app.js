@@ -233,6 +233,36 @@
       '<strong>Dry passing</strong> — catch and release with one hand, keeping the ball out of the water.',
       '<strong>Shooting</strong> — power shots, lobs over the keeper, and quick catch‑and‑shoot off a feed.' ] },
   ];
+  // bundled snapshot — used until data/rules.json loads (and for file:// where fetch is blocked)
+  const RULES_FALLBACK = {
+    source: { name:'Swiss Aquatics', page:'https://www.swiss-aquatics.ch/leistungssport/water-polo/wettkampfbetrieb/downloads-medien/' },
+    checkedAt: null,
+    documents: [
+      { title:'World Aquatics Water Polo Rules', lang:'EN', category:'International playing rules', url:'https://www.worldaquatics.com/rules/competition-regulations', version:'' },
+      { title:'Swiss Aquatics — Reglement 5.1', lang:'DE', category:'Swiss competition regulation', url:'https://www.swiss-aquatics.ch/leistungssport/water-polo/wettkampfbetrieb/downloads-medien/', version:'' },
+    ],
+    references: [
+      { title:'Swiss Aquatics — Water Polo downloads & regulations', url:'https://www.swiss-aquatics.ch/leistungssport/water-polo/wettkampfbetrieb/downloads-medien/' },
+      { title:'World Aquatics — Competition Regulations', url:'https://www.worldaquatics.com/rules/competition-regulations' },
+    ],
+  };
+  function fmtDate(iso){ if(!iso) return ''; try{ return new Date(iso).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); }catch(e){ return iso; } }
+  function rulebooksHtml(data){
+    const docs = (data.documents||[]).filter(d => d.url || d.stale);
+    return `<div class="rules-panel">
+      <div class="rules-head"><span class="rules-ic">§</span>
+        <div><h3>Official rule books — Swiss Aquatics</h3>
+          <span class="rules-checked">${data.checkedAt ? ('Auto‑checked '+fmtDate(data.checkedAt)) : 'Bundled snapshot'} · refreshes automatically from Swiss Aquatics</span></div></div>
+      <div class="rules-docs">${docs.map(d=>`
+        <a class="rules-doc" href="${d.url||data.source.page}" target="_blank" rel="noopener">
+          <span class="rd-lang">${escapeHtml(d.lang||'')}</span>
+          <span class="rd-main"><span class="rd-title">${escapeHtml(d.title)}${d.stale?' <em>(last known)</em>':''}</span>
+            <span class="rd-sub">${escapeHtml(d.category||'')}${d.version?(' · v '+escapeHtml(d.version)):''}</span></span>
+          <span class="rd-open">open ↗</span></a>`).join('')}</div>
+      <div class="rules-refs">${(data.references||[]).map(r=>`<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.title)} ↗</a>`).join('')}</div>
+    </div>`;
+  }
+
   function renderBasics() {
     const v = $('view-basics');
     const legendHtml = `<div class="basics-legend">
@@ -244,6 +274,7 @@
     v.innerHTML = `<div class="dash-wrap">
       <div class="dash-head"><h1>Water polo basics</h1>
         <p class="dash-sub">The high‑level fundamentals — then jump into the Playbook to see them in motion.</p></div>
+      <div id="rules-mount"></div>
       <div class="basics-grid">
         ${BASICS.map(c=>`<div class="basics-card">
           <div class="basics-h"><span class="basics-ic">${c.icon}</span><h3>${c.title}</h3></div>
@@ -261,6 +292,17 @@
         and World Aquatics rules. Details vary by level/governing body.</p>
     </div>`;
     v.querySelectorAll('[data-go]').forEach(b=> b.onclick=()=>switchView(b.dataset.go));
+    // official rule books: show bundled snapshot now, then refresh from data/rules.json
+    const mount = $('rules-mount');
+    if (mount) {
+      mount.innerHTML = rulebooksHtml(RULES_FALLBACK);
+      if (typeof fetch === 'function') {
+        fetch('data/rules.json', { cache:'no-store' })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d && Array.isArray(d.documents) && d.documents.length) mount.innerHTML = rulebooksHtml(d); })
+          .catch(()=>{});
+      }
+    }
   }
 
   /* ======================================================

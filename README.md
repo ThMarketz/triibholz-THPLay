@@ -50,6 +50,19 @@ python3 serve.py        # then open http://localhost:4173
   Saved movement is replayable by anyone, anytime, and editable again later.
 - **Trivia:** a scored water‑polo quiz; your best score is saved to your profile.
 
+## Official rule books (auto‑updated)
+The **Basics** tab shows the current official water‑polo rule books, tracked from
+**Swiss Aquatics**. A scheduled GitHub Action runs `scripts/update-rules.mjs`
+weekly, which reads the Swiss Aquatics water‑polo downloads page, records each
+rule book’s title / link / version‑date into `data/rules.json`, and commits any
+change. The app links to the authoritative PDFs (rule text isn’t reproduced —
+copyright) and shows a “last checked” date.
+
+Run it manually any time:
+```bash
+npm run update-rules        # or: node scripts/update-rules.mjs
+```
+
 ## Files
 | File | Purpose |
 |------|---------|
