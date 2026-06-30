@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "triibholz",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["/Users/cpapp/Library/Mobile Documents/com~apple~CloudDocs/Ultra/Triibholz/serve.py"],
+      "port": 4173,
+      "autoPort": true
+    }
+  ]
+}

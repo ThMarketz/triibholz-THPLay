@@ -1,0 +1,9 @@
+# build/dev artifacts not needed in the image
+.git
+.gitignore
+.claude
+serve.py
+README.md
+*.md
+node_modules
+.DS_Store

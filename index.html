@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Triibholz · THPLAY</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- ===================== AUTH SCREEN ===================== -->
+  <section id="auth-screen" class="screen active">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="auth-logo" aria-hidden="true">
+          <svg viewBox="0 0 64 64" width="56" height="56">
+            <circle cx="32" cy="32" r="30" fill="#0e7c86"/>
+            <circle cx="32" cy="32" r="30" fill="none" stroke="#0a5860" stroke-width="2"/>
+            <path d="M6 38 Q16 30 26 38 T46 38 T66 38" fill="none" stroke="#bff0f4" stroke-width="2.5" opacity=".8"/>
+            <circle cx="32" cy="26" r="7" fill="#ff7a18"/>
+            <path d="M25.5 24.5 q6.5 -5 13 0" stroke="#fff" stroke-width="1.4" fill="none"/>
+            <path d="M25.5 27.5 q6.5 5 13 0" stroke="#fff" stroke-width="1.4" fill="none"/>
+          </svg>
+        </div>
+        <h1>Triibholz</h1>
+        <p class="auth-brandcode">THPLAY · Water Polo Playbook</p>
+        <p class="auth-tag">Strategies &amp; movement patterns — for the team and for every position.</p>
+      </div>
+
+      <div class="auth-actions">
+        <button class="btn-oauth btn-apple" id="signin-apple">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M16.36 1.43c.05 1.04-.34 2.06-1 2.81-.69.78-1.79 1.38-2.86 1.3-.07-1.02.4-2.07 1.04-2.78.71-.79 1.92-1.36 2.82-1.33zM20.5 17.2c-.55 1.27-.82 1.83-1.53 2.95-.99 1.57-2.39 3.52-4.12 3.53-1.54.02-1.94-1-4.03-.99-2.09.01-2.53 1.01-4.07.99-1.73-.02-3.05-1.78-4.04-3.34C-.06 16.94-.36 11.9 1.34 9.22 2.55 7.31 4.46 6.2 6.26 6.2c1.83 0 2.98 1 4.49 1 1.47 0 2.36-1.01 4.48-1.01 1.6 0 3.3.87 4.51 2.38-3.96 2.17-3.32 7.83.76 8.63z"/></svg>
+          <span>Sign in with Apple</span>
+        </button>
+
+        <button class="btn-oauth btn-google" id="signin-google">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z"/><path fill="#EA4335" d="M12 4.75c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 1.44 14.97.5 12 .5A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.3 9.14 5.36 12 4.75z"/></svg>
+          <span>Sign in with Google</span>
+        </button>
+
+        <p class="auth-note">Two sign-in methods, as requested. In this prototype both buttons run a simulated sign-in so you can use the app immediately — real Apple &amp; Google connect when we deploy.</p>
+      </div>
+    </div>
+    <p class="auth-foot">Designated access only · Coaches &amp; Players</p>
+  </section>
+
+  <!-- ===================== ROLE / POSITION SETUP ===================== -->
+  <section id="setup-screen" class="screen">
+    <div class="auth-card">
+      <h2 class="setup-title">Welcome<span id="setup-name"></span></h2>
+      <p class="setup-sub">Tell us who you are so we can tailor the playbook.</p>
+
+      <div class="setup-block">
+        <label class="setup-label">I am a…</label>
+        <div class="seg seg-wrap" id="role-seg">
+          <button class="seg-btn active" data-role="player">Player</button>
+          <button class="seg-btn" data-role="coach">Coach</button>
+          <button class="seg-btn" data-role="trainer">Trainer</button>
+          <button class="seg-btn" data-role="super-admin">Super Admin</button>
+        </div>
+        <p class="setup-note" id="role-note">Players &amp; staff need a Super Admin to approve access before signing in.</p>
+      </div>
+
+      <div class="setup-block" id="position-block">
+        <label class="setup-label">My position</label>
+        <div class="pos-grid" id="position-grid">
+          <button class="pos-chip" data-pos="1">1</button>
+          <button class="pos-chip" data-pos="2">2</button>
+          <button class="pos-chip" data-pos="3">3</button>
+          <button class="pos-chip" data-pos="4">4</button>
+          <button class="pos-chip" data-pos="5">5</button>
+          <button class="pos-chip" data-pos="6">6</button>
+          <button class="pos-chip pos-gk" data-pos="GK">GK</button>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="setup-continue">Request access</button>
+    </div>
+  </section>
+
+  <!-- ===================== PENDING APPROVAL ===================== -->
+  <section id="pending-screen" class="screen">
+    <div class="auth-card status-card">
+      <div class="status-icon wait">◷</div>
+      <h2>Waiting for approval</h2>
+      <p class="status-text">Your access request is in. A <strong>Super Admin</strong> needs to approve <span id="pending-email"></span> before you can enter.</p>
+      <p class="status-sub">Approvals happen in the Super Admin console. You’ll be let in as soon as you’re approved.</p>
+      <div class="status-actions">
+        <button class="btn-ghost" id="pending-recheck">Check again</button>
+        <button class="btn-ghost" id="pending-signout">Use another account</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== DENIED ===================== -->
+  <section id="denied-screen" class="screen">
+    <div class="auth-card status-card">
+      <div class="status-icon deny">✕</div>
+      <h2>Access not granted</h2>
+      <p class="status-text">A Super Admin has declined access for <span id="denied-email"></span>.</p>
+      <div class="status-actions">
+        <button class="btn-ghost" id="denied-signout">Use another account</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== MAIN APP ===================== -->
+  <section id="app-screen" class="screen">
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="brand-mini">
+          <span class="brand-dot"></span> Triibholz <span class="brand-code">THPLAY</span>
+        </div>
+        <nav class="main-nav" id="main-nav">
+          <button class="nav-btn active" data-view="dashboard">Dashboard</button>
+          <button class="nav-btn" data-view="playbook">Playbook</button>
+          <button class="nav-btn" data-view="trivia">Trivia</button>
+          <button class="nav-btn nav-admin" data-view="admin" hidden>Admin <span class="nav-badge" id="nav-admin-badge" hidden>0</span></button>
+        </nav>
+      </div>
+      <div class="topbar-center" id="situation-tabs"><!-- situation tabs injected --></div>
+      <div class="topbar-right">
+        <span class="phase-toggle" id="phase-toggle">
+          <button class="phase-btn active" data-phase="offense">Offense</button>
+          <button class="phase-btn" data-phase="defense">Defense</button>
+        </span>
+        <div class="user-pill" id="user-pill" title="Account">
+          <span class="user-avatar" id="user-avatar">C</span>
+          <span class="user-meta">
+            <span id="user-name">Coach</span>
+            <span id="user-sub" class="user-sub">Coach</span>
+          </span>
+          <button class="logout-btn" id="logout-btn" title="Sign out">⏻</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="views">
+
+    <!-- ===== DASHBOARD VIEW ===== -->
+    <section id="view-dashboard" class="view"></section>
+
+    <!-- ===== TRIVIA VIEW ===== -->
+    <section id="view-trivia" class="view"></section>
+
+    <!-- ===== ADMIN VIEW ===== -->
+    <section id="view-admin" class="view"></section>
+
+    <!-- ===== PLAYBOOK VIEW ===== -->
+    <section id="view-playbook" class="view layout">
+      <!-- LEFT: scenario library -->
+      <aside class="sidebar">
+        <div class="sidebar-head">
+          <h3 id="library-title">Scenarios</h3>
+          <button class="btn-new" id="new-scenario-btn" title="Create a scenario">+ New</button>
+        </div>
+        <div class="sidebar-sub" id="library-sub">Pick a situation above</div>
+        <div class="scenario-list" id="scenario-list"><!-- scenarios injected --></div>
+      </aside>
+
+      <!-- CENTER: pool + controls -->
+      <div class="stage">
+        <div class="stage-head">
+          <div>
+            <h2 id="scenario-title">Select a scenario</h2>
+            <p id="scenario-desc" class="scenario-desc"></p>
+          </div>
+          <div class="stage-head-actions">
+            <button class="btn-ghost" id="edit-btn" hidden>Edit</button>
+          </div>
+        </div>
+
+        <div class="pool-wrap">
+          <svg id="pool" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet" aria-label="Water polo pool"></svg>
+          <div class="pool-empty" id="pool-empty">
+            <div class="pool-empty-inner">
+              <strong>No scenario open</strong>
+              <span>Choose one from the left, or press “+ New” to build a movement pattern.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- playback controls -->
+        <div class="controls" id="controls" hidden>
+          <div class="ctl-row">
+            <button class="ctl-btn" id="step-back" title="Previous step">⏮</button>
+            <button class="ctl-btn ctl-play" id="play-btn" title="Play / pause">▶</button>
+            <button class="ctl-btn" id="step-fwd" title="Next step">⏭</button>
+            <div class="scrub-wrap">
+              <input type="range" id="scrub" min="0" max="1000" value="0" />
+              <div class="frame-label" id="frame-label">Step 1</div>
+            </div>
+            <div class="view-toggle">
+              <button class="vt-btn active" id="view-team">Team</button>
+              <button class="vt-btn" id="view-me">My position</button>
+            </div>
+            <select id="focus-pos" class="focus-select" title="Focus a position">
+              <option value="">Focus…</option>
+              <option value="1">Player 1</option>
+              <option value="2">Player 2</option>
+              <option value="3">Player 3</option>
+              <option value="4">Player 4</option>
+              <option value="5">Player 5</option>
+              <option value="6">Player 6</option>
+              <option value="GK">Goalkeeper</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: assignments / per-position notes -->
+      <aside class="rightbar" id="rightbar">
+        <div class="rightbar-head">
+          <h3>Assignments</h3>
+          <span class="rightbar-hint" id="assign-hint">What each position does</span>
+        </div>
+        <div class="assign-list" id="assign-list"></div>
+      </aside>
+    </section>
+    </main>
+  </section>
+
+  <!-- ===================== EDITOR MODAL ===================== -->
+  <div class="modal-backdrop" id="editor-modal" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="editor-title">New scenario</h3>
+        <button class="modal-x" id="editor-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label>Title</label>
+          <input type="text" id="ed-title" placeholder="e.g. Quick post-up to the wing" />
+        </div>
+        <div class="form-grid2">
+          <div class="form-row">
+            <label>Situation</label>
+            <select id="ed-situation"></select>
+          </div>
+          <div class="form-row">
+            <label>Phase</label>
+            <select id="ed-phase">
+              <option value="offense">Offense (we have the ball)</option>
+              <option value="defense">Defense</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>Description</label>
+          <input type="text" id="ed-desc" placeholder="One line: the idea of this play" />
+        </div>
+
+        <div class="editor-pool-wrap">
+          <svg id="editor-pool" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+
+        <div class="editor-frames">
+          <div class="ef-left">
+            <span class="ef-label">Steps</span>
+            <div class="frame-chips" id="frame-chips"></div>
+            <button class="btn-ghost sm" id="add-frame">+ Capture step</button>
+            <button class="btn-ghost sm danger" id="del-frame">Delete step</button>
+          </div>
+          <div class="ef-mid">
+            <span class="ef-label">Waiting players</span>
+            <div class="wait-btns">
+              <button class="btn-ghost sm" id="add-sub" title="Add a substitute waiting in the flying substitution area">+ Sub</button>
+              <button class="btn-ghost sm" id="add-exc" title="Add an excluded player in the exclusion / re-entry area">+ Excluded</button>
+              <button class="btn-ghost sm danger" id="del-wait" title="Remove last waiting player">– Remove</button>
+            </div>
+            <span class="ef-hint">Stack several players in the flying-sub or exclusion lane; drag them to reposition.</span>
+          </div>
+          <div class="ef-right">
+            <span class="ef-label">Ball carrier</span>
+            <select id="ball-carrier" class="focus-select"></select>
+            <span class="ef-hint">Drag players & the ball, then “Capture step”. Build the movement step by step — it records and plays back.</span>
+          </div>
+        </div>
+
+        <details class="notes-accordion">
+          <summary>Per-position assignments (optional)</summary>
+          <div class="notes-grid" id="notes-grid"></div>
+        </details>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-ghost danger" id="ed-delete" hidden>Delete scenario</button>
+        <div class="spacer"></div>
+        <button class="btn-ghost" id="ed-cancel">Cancel</button>
+        <button class="btn-primary" id="ed-save">Save scenario</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="js/pool.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/animate.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

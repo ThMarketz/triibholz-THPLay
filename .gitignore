@@ -1,0 +1,11 @@
+# macOS
+.DS_Store
+
+# dependencies (none committed; scratch installs only)
+node_modules/
+
+# local env / editor
+*.log
+.env
+.vscode/
+.idea/
