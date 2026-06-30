@@ -104,11 +104,12 @@
   function switchView(view) {
     state.view = view;
     document.querySelectorAll('#main-nav .nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view===view));
-    ['dashboard','playbook','trivia','admin'].forEach(v => $('view-'+v).classList.toggle('active', v===view));
+    ['dashboard','playbook','basics','trivia','admin'].forEach(v => $('view-'+v).classList.toggle('active', v===view));
     const inPlaybook = view==='playbook';
     $('situation-tabs').style.display = inPlaybook ? '' : 'none';
     $('phase-toggle').style.display = inPlaybook ? '' : 'none';
     if (view==='dashboard') renderDashboard();
+    if (view==='basics') renderBasics();
     if (view==='trivia') renderTrivia();
     if (view==='admin') renderAdmin();
     if (view==='playbook' && !state.selectedId) openFirstOrEmpty();
@@ -196,6 +197,70 @@
   function activityRow(a){
     const icon = {signin:'→',approve:'✓',deny:'✕',play:'✎',trivia:'★'}[a.type]||'•';
     return `<div class="act-row"><span class="act-ic ${a.type}">${icon}</span><span class="act-text">${escapeHtml(a.text)}</span></div>`;
+  }
+
+  /* ======================================================
+     BASICS — high-level water polo fundamentals
+     ====================================================== */
+  const BASICS = [
+    { icon:'◎', title:'Object of the game', body:[
+      'Two teams try to throw the ball into the opponent’s goal. A goal counts only when the ball <strong>fully crosses the goal line</strong>.',
+      'Play starts with both teams on their own goal lines; the referee releases the ball at mid‑pool and the teams swim for it.',
+      'You must get a shot away before your possession time runs out, or the ball turns over.' ] },
+    { icon:'7', title:'Team & positions', body:[
+      'Each team has <strong>7 in the water</strong>: 6 field players + 1 goalkeeper (plus subs on the bench).',
+      'In this app we number the field players <strong>1–6</strong> and mark them by team colour.',
+      'A common shape: perimeter players (wings, flats, point) around the arc, with a <strong>centre‑forward (“hole set”)</strong> posted at the 2 m line in front of goal.' ],
+      legend:true },
+    { icon:'⏱', title:'Game structure', body:[
+      'Played in <strong>4 quarters</strong> (8 minutes of effective time each at senior level).',
+      'A <strong>shot‑clock (~30 s)</strong> limits each possession — shoot before it expires.',
+      'Teams change ends each quarter; substitutions happen on the fly through the flying‑substitution area.' ] },
+    { icon:'▦', title:'The pool & its lines', body:[
+      '<strong>Goal line</strong> · <strong>2 m line (red)</strong> — no attacker may sit inside it ahead of the ball.',
+      '<strong>5 m line (yellow)</strong> — penalty‑throw distance. <strong>6 m line (green)</strong> — a free throw from here or beyond may be shot directly.',
+      '<strong>Half‑distance line</strong> at the middle. Excluded players wait and re‑enter from the <strong>exclusion / re‑entry</strong> corner.' ] },
+    { icon:'⚠', title:'Fouls & penalties', body:[
+      '<strong>Ordinary (minor) fouls</strong> — pushing the ball under, two hands on the ball (field players), impeding a free player — give a <strong>free throw / change of possession</strong>.',
+      '<strong>Major (exclusion) fouls</strong> — holding/sinking an opponent, persistent fouling — send the offender out for <strong>20 seconds</strong> (a “man‑up” for the other team) until a goal, change of possession, or time elapses.',
+      'A major foul inside <strong>5 m</strong> that stops a likely goal is a <strong>penalty shot</strong> from the 5 m line.' ] },
+    { icon:'✛', title:'The goalkeeper', body:[
+      'Wears the <strong>red cap</strong> and defends the goal.',
+      'Inside the 5 m area the keeper may <strong>use two hands</strong> and (where depth allows) push off the bottom — things field players can’t do.',
+      'The keeper starts the counter‑attack: a fast, accurate outlet pass turns defence into offence.' ] },
+    { icon:'≈', title:'Core skills', body:[
+      '<strong>Eggbeater kick</strong> — the alternating leg motion that keeps you high and stable without using your hands.',
+      '<strong>Dry passing</strong> — catch and release with one hand, keeping the ball out of the water.',
+      '<strong>Shooting</strong> — power shots, lobs over the keeper, and quick catch‑and‑shoot off a feed.' ] },
+  ];
+  function renderBasics() {
+    const v = $('view-basics');
+    const legendHtml = `<div class="basics-legend">
+        <span class="bl"><span class="bl-dot att"></span>Attack (white)</span>
+        <span class="bl"><span class="bl-dot def"></span>Defence (black)</span>
+        <span class="bl"><span class="bl-dot gk"></span>Goalkeeper (red)</span>
+        <span class="bl"><span class="bl-dot ball"></span>Ball (orange)</span>
+      </div>`;
+    v.innerHTML = `<div class="dash-wrap">
+      <div class="dash-head"><h1>Water polo basics</h1>
+        <p class="dash-sub">The high‑level fundamentals — then jump into the Playbook to see them in motion.</p></div>
+      <div class="basics-grid">
+        ${BASICS.map(c=>`<div class="basics-card">
+          <div class="basics-h"><span class="basics-ic">${c.icon}</span><h3>${c.title}</h3></div>
+          <ul>${c.body.map(p=>`<li>${p}</li>`).join('')}</ul>
+          ${c.legend?legendHtml:''}
+        </div>`).join('')}
+      </div>
+      <div class="basics-cta">
+        <button class="btn-primary sm" data-go="playbook">See it in the Playbook</button>
+        <button class="btn-ghost" data-go="trivia">Test yourself with Trivia</button>
+      </div>
+      <p class="basics-src">Fundamentals summarised from
+        <a href="https://vancouvervipers.ca/water-polo-basics/" target="_blank" rel="noopener">Vancouver Vipers — Water Polo Basics</a>,
+        <a href="https://www.wikihow.com/Play-Water-Polo" target="_blank" rel="noopener">wikiHow — Play Water Polo</a>,
+        and World Aquatics rules. Details vary by level/governing body.</p>
+    </div>`;
+    v.querySelectorAll('[data-go]').forEach(b=> b.onclick=()=>switchView(b.dataset.go));
   }
 
   /* ======================================================

@@ -517,6 +517,18 @@ const DATA = (() => {
     { q:'The half-distance line divides the pool into…',
       a:['Attack and defence thirds','Two halves','Quarters'], correct:1,
       why:'It marks the midpoint of the field of play between the two goals.' },
+    { q:'A penalty throw is taken from which line?',
+      a:['The 2 m line','The 5 m line','The half line'], correct:1,
+      why:'A major foul inside 5 m that stops a likely goal is a penalty from the 5 m line.' },
+    { q:'Roughly how long does a team have to shoot each possession (shot clock)?',
+      a:['About 30 seconds','90 seconds','No limit'], correct:0,
+      why:'A ~30‑second shot clock limits each possession; shoot before it expires.' },
+    { q:'What is the "eggbeater"?',
+      a:['A type of shot','A leg kick that keeps you up without your hands','A foul'], correct:1,
+      why:'The alternating eggbeater kick keeps players high and stable so the hands stay free.' },
+    { q:'How many quarters is a match played in?',
+      a:['Two','Four','Three'], correct:1,
+      why:'Water polo is played in four quarters; teams switch ends between them.' },
   ];
 
   return { SITUATIONS, sit, DEFAULTS, defaultFrame, blankNotes, clone, load, save, reset, newScenario, GK_POS,
