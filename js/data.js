@@ -95,6 +95,7 @@ const DATA = (() => {
 
   /* ---------------- seed scenarios ---------------- */
   function seeds() {
+    idCounter = 1;        // stable ids every call so the merge stays idempotent
     const list = [];
 
     // 6 on 6 — drive & kick to the wing, hole posts up
@@ -261,6 +262,121 @@ const DATA = (() => {
           'GK':'Talk the slides; protect the near post on a drive.' }));
     })();
 
+    /* ===== additional worked situations (problem → solution) ===== */
+
+    // SET OFFENSE 6v6 — top pick, slip to the hole
+    (() => {
+      const f0 = defaultFrame('6v6'); f0.ball = { carrier:'A2' };
+      const f1 = frameFrom(f0, f => { f.att[3]={x:240,y:92}; f.def[3]={x:252,y:88}; });            // 3 lifts to screen for 2
+      const f2 = frameFrom(f1, f => { f.att[2]={x:250,y:104}; f.ball={carrier:'A2'}; f.def[2]={x:250,y:88}; }); // 2 uses pick, drives middle
+      const f3 = frameFrom(f2, f => { f.att[6]={x:278,y:118}; f.ball={carrier:null,x:278,y:118}; }); // 2 dumps to hole slipping ball-side
+      const f4 = frameFrom(f3, f => { f.ball={carrier:'A6'}; });
+      list.push(scn('6v6','offense','Top pick — slip to the hole',
+        '3 screens for 2 at the top; 2 drives the seam to pull the hole defender, then dumps to 6 slipping ball-side for the inside shot.',
+        [f0,f1,f2,f3,f4],
+        { '1':'Balance the floor up top; be the reset if the dump isn’t there.',
+          '2':'Use 3’s pick, attack the middle, read the hole D — dump or shoot.',
+          '3':'Set a hard, legal screen on 2’s man, then re-spot to the point.',
+          '4':'Hold weak-side flat; your man can’t help on the hole.',
+          '5':'Spread low; pin your defender so there’s no second helper.',
+          '6':'Slip to the ball side as 2 drives; seal and finish the dump.',
+          'GK':'(defending) Stay square to 2’s drive; the dump-down is the danger.' }));
+    })();
+
+    // SET OFFENSE 6v6 — wing drive baseline, dump to hole
+    (() => {
+      const f0 = defaultFrame('6v6'); f0.ball = { carrier:'A1' };
+      const f1 = frameFrom(f0, f => { f.att[1]={x:262,y:64}; f.def[1]={x:272,y:74}; });             // 1 drives the wing baseline
+      const f2 = frameFrom(f1, f => { f.att[6]={x:276,y:124}; f.def[6]={x:286,y:116}; });            // hole opens to weak side
+      const f3 = frameFrom(f2, f => { f.ball={carrier:null,x:276,y:124}; });                          // baseline dump to 6
+      const f4 = frameFrom(f3, f => { f.ball={carrier:'A6'}; });
+      list.push(scn('6v6','offense','Wing drive baseline — dump to the hole',
+        '1 drives the wing along the goal line to commit the keeper and the hole D; 6 cross-faces to the open side for the baseline dump.',
+        [f0,f1,f2,f3,f4],
+        { '1':'Attack the baseline hard; draw the keeper, then dump to 6.',
+          '2':'Replace at the top for shot-clock safety.',
+          '3':'Hold the point; you’re the swing if it kicks back out.',
+          '4':'Stay weak-side flat, ready for the cross-cage skip.',
+          '5':'Clear the corner so 1 has a lane.',
+          '6':'Cross-face to the open side as 1 drives; present a target, finish.',
+          'GK':'(defending) Don’t over-commit to 1; the cross-cage dump beats you.' }));
+    })();
+
+    // MAN-UP 5v4 — pick-and-release at the post
+    (() => {
+      const f0 = defaultFrame('5v4'); f0.ball = { carrier:'A1' };
+      const f1 = frameFrom(f0, f => { f.ball={carrier:null,x:228,y:96}; });                           // 1 -> 2
+      const f2 = frameFrom(f1, f => { f.ball={carrier:'A2'}; f.att[4]={x:240,y:150}; });              // 4 lifts to screen the post D
+      const f3 = frameFrom(f2, f => { f.att[5]={x:280,y:120}; f.def[3]={x:276,y:108}; });             // 5 releases off the pick
+      const f4 = frameFrom(f3, f => { f.ball={carrier:null,x:280,y:120}; });
+      const f5 = frameFrom(f4, f => { f.ball={carrier:'A5'}; });
+      list.push(scn('5v4','offense','Extra man — pick-and-release at the post',
+        'Swing 1→2, while 4 screens the post defender so 5 releases free at the post for the catch-and-shoot.',
+        [f0,f1,f2,f3,f4,f5],
+        { '1':'Start the swing to 2, then relocate for the skip-back.',
+          '2':'Catch and look post immediately — 5 will be open off the pick.',
+          '3':'Balance weak side; be the kick-out valve.',
+          '4':'Lift and screen 5’s defender — that pick springs the shot.',
+          '5':'Release off 4’s pick to the post; catch low and shoot.',
+          '6':'(out in 5v4 — next sub).',
+          'GK':'(defending) Communicate the switch or the post is wide open.' }));
+    })();
+
+    // TRANSITION 4v3 — trailer post-up
+    (() => {
+      const f0 = defaultFrame('4v3'); f0.ball = { carrier:'A1' };
+      const f1 = frameFrom(f0, f => { f.att[1]={x:244,y:84}; f.def[1]={x:256,y:96}; });               // 1 pushes the ball
+      const f2 = frameFrom(f1, f => { f.att[3]={x:276,y:110}; f.def[2]={x:276,y:96}; });              // 3 trails into the hole
+      const f3 = frameFrom(f2, f => { f.ball={carrier:null,x:276,y:110}; });                           // feed the trailer
+      const f4 = frameFrom(f3, f => { f.ball={carrier:'A3'}; });
+      list.push(scn('4v3','offense','Transition 4v3 — feed the trailer',
+        'The first wave (1,2,4) spreads the 3 defenders; the trailer 3 posts straight into the hole and gets the feed before the D recovers.',
+        [f0,f1,f2,f3,f4],
+        { '1':'Push the ball at the top D, then hit the trailer when he posts.',
+          '2':'Run your lane wide to stretch the defense.',
+          '3':'Trail hard into the hole — you’re the finish, post and seal.',
+          '4':'Fill the opposite corner; occupy the low defender.',
+          '5':'(not in this break).', '6':'(not in this break).',
+          'GK':'(defending) Hold the middle; force the outside shot, not the post.' }));
+    })();
+
+    // DEFENSE 6v6 — drop zone, protect the hole
+    (() => {
+      const f0 = defaultFrame('6v6'); f0.ball = { carrier:'A3' };
+      const f1 = frameFrom(f0, f => { f.def[6]={x:283,y:106}; f.def[3]={x:256,y:110}; });             // front hole, ball-pressure drops
+      const f2 = frameFrom(f1, f => { f.ball={carrier:null,x:236,y:84}; f.def[2]={x:258,y:86}; });     // attack swings, we rotate
+      const f3 = frameFrom(f2, f => { f.ball={carrier:'A2'}; f.def[6]={x:284,y:100}; });
+      list.push(scn('6v6','defense','Drop zone — protect the hole',
+        'Sink the field into a zone that fronts the hole and walls the 5m; concede a contested outside shot, never the inside catch.',
+        [f0,f1,f2,f3],
+        { '1':'Zone the ball-side passing lane; high hands, no easy skip.',
+          '2':'Drop and wall the 5m; close out only on the catch.',
+          '3':'Pressure the ball just enough to slow the swing.',
+          '4':'Hold the weak-side gap; you’re the backside rotation.',
+          '5':'Sink low; double the hole if the ball goes in.',
+          '6':'Front the center every pass — never let him catch at 2m.',
+          'GK':'Quarterback the rotations; own the near post on a drive.' }));
+    })();
+
+    // DEFENSE 6v5 — man-down box, deny the post
+    (() => {
+      const f0 = defaultFrame('6v5'); f0.ball = { carrier:'A3' };
+      f0.extra = [ waitDisc('D','EX','exc',0) ];                                                       // our excluded player waiting
+      const f1 = frameFrom(f0, f => { f.def[5]={x:284,y:110}; });                                      // tighten the box on the post
+      const f2 = frameFrom(f1, f => { f.ball={carrier:null,x:230,y:134}; f.def[2]={x:258,y:132}; });   // they swing low, box shifts
+      const f3 = frameFrom(f2, f => { f.ball={carrier:'A4'}; });
+      list.push(scn('6v5','defense','Man-down box — deny the post',
+        'Defending a man-up: hold a 4-man box that always covers the two posts; shift as a unit on the swing and make them shoot from outside.',
+        [f0,f1,f2,f3],
+        { '1':'Top of the box — slide to the ball, hands in the lane.',
+          '2':'Bottom of the box — shift on the swing, never get split.',
+          '3':'Pressure the ball only at the top; don’t over-commit.',
+          '4':'Cover the near post; box stays compact.',
+          '5':'Cover the far post — that catch is the goal we can’t give.',
+          '6':'(excluded — wait in the re-entry area, re-enter on the whistle).',
+          'GK':'Call the shift early; take the outside shot, deny the post feed.' }));
+    })();
+
     return list;
   }
 
@@ -286,6 +402,12 @@ const DATA = (() => {
       save(fresh);
       return fresh;
     }
+    // non-destructive merge: add any new built-in sample not already stored
+    const fresh = seeds();
+    const have = new Set(saved.scenarios.map(s => s.id));
+    let changed = false;
+    fresh.forEach(s => { if (!have.has(s.id)) { saved.scenarios.push(s); changed = true; } });
+    if (changed) save(saved.scenarios);
     return saved.scenarios;
   }
   function save(scenarios) {

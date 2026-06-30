@@ -17,6 +17,7 @@
     renderer: null,
     viewMode: 'team',
     focus: null,
+    mode: 'solution',   // 'problem' | 'solution'
     view: 'dashboard',
     setup: { role: 'player', position: null },
   };
@@ -370,8 +371,10 @@
     state.selectedId = null;
     if (state.viewer) { state.viewer.stop(); state.viewer = null; }
     $('controls').hidden = true; $('pool-empty').hidden = false;
+    $('mode-toggle').hidden = true; $('problem-overlay').hidden = true;
     $('scenario-title').textContent = 'Select a scenario';
-    $('scenario-desc').textContent = ''; $('edit-btn').hidden = true;
+    $('scenario-desc').textContent = ''; $('scenario-desc').style.display = '';
+    $('edit-btn').hidden = true;
     $('assign-list').innerHTML = ''; POOL.render($('pool'));
   }
 
@@ -388,7 +391,38 @@
     state.viewer = new ANIM.Player(state.renderer, scn, onViewerFrame);
     state.viewer.setOnState(playing => { $('play-btn').textContent = playing ? '❚❚' : '▶'; $('play-btn').classList.toggle('playing', playing); });
     state.viewer.setFocus(state.focus);
-    syncFocusUI(); renderAssignments(scn); refreshTabs(); renderLibrary();
+    syncFocusUI();
+    // Problem→Solution: players start in "problem" mode, staff in "solution"
+    $('mode-toggle').hidden = false;
+    state.mode = (state.user.role==='player') ? 'problem' : 'solution';
+    state.scenarioDesc = scn.description || '';
+    applyMode();
+    refreshTabs(); renderLibrary();
+  }
+
+  function setMode(mode, autoplay) {
+    state.mode = mode;
+    applyMode();
+    if (mode==='solution' && autoplay && state.viewer) state.viewer.play();
+  }
+  function applyMode() {
+    const scn = state.scenarios.find(s=>s.id===state.selectedId);
+    const problem = state.mode==='problem';
+    document.querySelectorAll('#mode-toggle .mode-btn').forEach(b=> b.classList.toggle('active', b.dataset.mode===state.mode));
+    $('problem-overlay').hidden = !problem;
+    $('controls').hidden = problem;
+    $('scenario-desc').style.display = problem ? 'none' : '';
+    if (state.viewer) {
+      if (problem) { state.viewer.stop(); state.viewer.seek(0); state.viewer.setPaths(false); }
+      else { state.viewer.setPaths(true); }
+    }
+    if (problem && scn) {
+      const sd = DATA.sit(scn.situation);
+      $('problem-prompt').textContent = scn.phase==='defense'
+        ? `${sd.label} — they have the ball. How do we defend it?`
+        : `${sd.label} — we have the ball. How do we score from here?`;
+    }
+    if (scn) renderAssignments(scn);
   }
   function defaultFocus() {
     if (state.user.role==='player' && state.user.position) return state.user.position;
@@ -406,6 +440,14 @@
   }
   function renderAssignments(scn) {
     const wrap = $('assign-list'); wrap.innerHTML='';
+    const masked = state.mode==='problem';
+    wrap.classList.toggle('masked', masked);
+    if (masked) {
+      const note = document.createElement('div');
+      note.className='assign-mask-note';
+      note.textContent = 'Think it through first — reveal the solution to see what each position does.';
+      wrap.appendChild(note);
+    }
     const order = ['1','2','3','4','5','6','GK'];
     const sd = DATA.sit(scn.situation);
     order.forEach(pos => {
@@ -641,6 +683,9 @@
     $('view-team').onclick = ()=>{ state.viewMode='team'; state.focus=null; if(state.viewer)state.viewer.setFocus(null); syncFocusUI(); const s=state.scenarios.find(x=>x.id===state.selectedId); if(s)renderAssignments(s); };
     $('view-me').onclick = ()=>{ state.viewMode='me'; state.focus=defaultFocus()||(state.user.position||'1'); if(state.viewer)state.viewer.setFocus(state.focus); syncFocusUI(); const s=state.scenarios.find(x=>x.id===state.selectedId); if(s)renderAssignments(s); };
     $('focus-pos').onchange = (e)=>{ state.focus=e.target.value||null; state.viewMode=state.focus?'me':'team'; if(state.viewer)state.viewer.setFocus(state.focus); syncFocusUI(); const s=state.scenarios.find(x=>x.id===state.selectedId); if(s)renderAssignments(s); };
+
+    document.querySelectorAll('#mode-toggle .mode-btn').forEach(b=> b.onclick=()=>setMode(b.dataset.mode, false));
+    $('reveal-btn').onclick = ()=> setMode('solution', true);
 
     $('new-scenario-btn').onclick = ()=> { if(canEdit()) openEditor(DATA.newScenario(state.situation, state.phase), true); };
     $('edit-btn').onclick = ()=>{ const s=state.scenarios.find(x=>x.id===state.selectedId); if(s&&canEdit()) openEditor(s,false); };

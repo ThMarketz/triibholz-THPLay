@@ -166,6 +166,10 @@
             <p id="scenario-desc" class="scenario-desc"></p>
           </div>
           <div class="stage-head-actions">
+            <span class="mode-toggle" id="mode-toggle" hidden>
+              <button class="mode-btn" data-mode="problem">Problem</button>
+              <button class="mode-btn active" data-mode="solution">Solution</button>
+            </span>
             <button class="btn-ghost" id="edit-btn" hidden>Edit</button>
           </div>
         </div>
@@ -176,6 +180,14 @@
             <div class="pool-empty-inner">
               <strong>No scenario open</strong>
               <span>Choose one from the left, or press “+ New” to build a movement pattern.</span>
+            </div>
+          </div>
+          <div class="problem-overlay" id="problem-overlay" hidden>
+            <div class="problem-card">
+              <span class="problem-kicker">Problem</span>
+              <strong id="problem-prompt">Read the setup. What’s the play here?</strong>
+              <span class="problem-hint">Players & ball are in their starting spots — no movement shown yet.</span>
+              <button class="btn-primary reveal-btn" id="reveal-btn">Reveal solution ▶</button>
             </div>
           </div>
         </div>

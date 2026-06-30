@@ -316,3 +316,21 @@ em{color:var(--ink-faint);font-style:italic}
   .main-nav{margin-left:4px}
   .nav-btn{padding:6px 9px;font-size:12px}
 }
+
+/* ========== Problem → Solution mode ========== */
+.stage-head-actions{display:flex;align-items:center;gap:10px}
+.mode-toggle{display:inline-flex;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:3px}
+.mode-btn{padding:7px 13px;border:none;background:transparent;color:var(--ink-dim);border-radius:7px;font-size:13px;font-weight:700}
+.mode-btn.active[data-mode="problem"]{background:#3a3417;color:#ffd874}
+.mode-btn.active[data-mode="solution"]{background:#163a2b;color:#5fd99e}
+
+.problem-overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(7,15,23,.55);backdrop-filter:blur(2px);z-index:5}
+.problem-card{display:flex;flex-direction:column;align-items:center;gap:9px;text-align:center;background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:16px;padding:22px 26px;max-width:min(440px,86%);box-shadow:var(--shadow)}
+.problem-kicker{font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#ffd874;background:#3a3417;padding:3px 10px;border-radius:7px}
+.problem-card strong{font-size:16px;line-height:1.4}
+.problem-hint{font-size:12px;color:var(--ink-faint);line-height:1.5}
+.reveal-btn{width:auto;padding:11px 20px;margin-top:4px;font-size:14px}
+
+/* masked assignments in problem mode */
+.assign-list.masked .assign-text{filter:blur(4px);user-select:none;opacity:.7}
+.assign-mask-note{padding:10px 12px;font-size:12px;color:var(--ink-faint);line-height:1.5;border:1px dashed var(--line);border-radius:10px;margin-bottom:8px}
