@@ -21,14 +21,19 @@ const POOL = (() => {
   const GHALF = WATER.h * 0.16;           // half goal-mouth (board scale)
 
   // ---- staging zones ----
-  // Flying substitution: central strip on the bottom side.
-  // Exclusion / re-entry: the corner at EACH goal line, on the OFFICIAL-TABLE
-  // side (top), behind the goal line, marked 2 m from the corner. An excluded
-  // player waits in the corner at their own defensive end.
-  const SUBZONE = { x0: 100, x1: 220, y0: 200, y1: 218, cy: 209 };
-  const EXC_L   = { x0: 2,   x1: 31,  y0: 31, y1: 68, cy: 47 };   // left goal, table side
-  const EXC_R   = { x0: 289, x1: 318, y0: 31, y1: 68, cy: 47 };   // right goal, table side
-  const EXCZONE = EXC_R;                   // excluded defender waits here (we attack right)
+  // Flying substitution: strip along the bottom (-Y) side.
+  // Exclusion / re-entry: a red right-angle bracket in EACH of the four corners,
+  // against the goal line, inside the 2 m zone. An excluded player exits to the
+  // re-entry corner at their OWN defensive end.
+  const SUBZONE = { x0: 70, x1: 250, y0: 200, y1: 218, cy: 209 };
+  const CORNERS = [
+    { x0: WATER.x0,     x1: fromLeft(2),  y0: WATER.y0,      y1: WATER.y0 + 30 }, // top-left  (+Y, table)
+    { x0: fromRight(2), x1: WATER.x1,     y0: WATER.y0,      y1: WATER.y0 + 30 }, // top-right (+Y, table)
+    { x0: WATER.x0,     x1: fromLeft(2),  y0: WATER.y1 - 30, y1: WATER.y1 },      // bottom-left  (-Y, sub)
+    { x0: fromRight(2), x1: WATER.x1,     y0: WATER.y1 - 30, y1: WATER.y1 },      // bottom-right (-Y, sub)
+  ];
+  // excluded defender waits at their defensive (right) end, table-side corner
+  const EXCZONE = { x0: fromRight(2) + 2, x1: WATER.x1 - 3, y0: WATER.y0 + 5, y1: WATER.y0 + 30, cy: WATER.y0 + 16 };
 
   function svg(tag, attrs) {
     const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -95,7 +100,7 @@ const POOL = (() => {
       vline(f(5), '#ffd400', 1.8, '4 3'); // 5 m yellow
       vline(f(6), '#39e08a', 1.6, '2 3'); // 6 m green
     });
-    vline(WATER.x0 + WATER.w / 2, '#ffffff', 1.8);  // half
+    vline(WATER.x0 + WATER.w / 2, '#ffffff', 1.8, '3 3');  // half / centre (dotted)
     lineG.appendChild(svg('circle', { cx: WATER.x0 + WATER.w / 2, cy: CY, r: 2, fill: '#ffffff' }));
     svgEl.appendChild(lineG);
 
@@ -148,17 +153,18 @@ const POOL = (() => {
     box(SUBZONE, 'rgba(15,58,47,0.65)', '#3fd08a');
     label(svgEl, (SUBZONE.x0 + SUBZONE.x1) / 2, SUBZONE.y1 + 9, 'FLYING SUBSTITUTION', '#8fe0bc', 'middle', 5.5);
 
-    // ---- exclusion / re-entry: corner at each goal line, table side, 2 m from the corner ----
-    [ 'L', 'R' ].forEach(end => {
-      const glx = end === 'L' ? fromLeft(0.3) : fromRight(0.3);   // goal line
-      const z = end === 'L' ? EXC_L : EXC_R;
-      // solid red 2 m re-entry marker down the goal line from the (top) corner
-      svgEl.appendChild(svg('line', { x1: glx, y1: WATER.y0, x2: glx, y2: WATER.y0 + 2 * pxPerM,
-        stroke: '#ff3b3b', 'stroke-width': 3, 'stroke-linecap': 'round' }));
-      // the corner box behind the goal line where the excluded player waits
-      box(z, 'rgba(58,28,28,0.55)', '#ff7a7a');
-      label(svgEl, (z.x0 + z.x1) / 2, z.y1 + 8, 'RE-ENTRY', '#ff9e9e', 'middle', 4.5);
-    });
+    // ---- exclusion / re-entry: red right-angle bracket in each corner ----
+    const bracket = (cx, cy, sx, sy) => {
+      const ix = 3, gl = 16, sl = 14;                 // inset + arm lengths
+      const x = cx + ix * sx, y = cy + ix * sy;
+      svgEl.appendChild(svg('path', { d: `M ${x} ${y + gl * sy} L ${x} ${y} L ${x + sl * sx} ${y}`,
+        fill: 'none', stroke: '#ff3b3b', 'stroke-width': 2.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
+    };
+    bracket(WATER.x0, WATER.y0, +1, +1);  // top-left
+    bracket(WATER.x1, WATER.y0, -1, +1);  // top-right
+    bracket(WATER.x0, WATER.y1, +1, -1);  // bottom-left
+    bracket(WATER.x1, WATER.y1, -1, -1);  // bottom-right
+    label(svgEl, (EXCZONE.x0 + EXCZONE.x1) / 2, EXCZONE.y1 + 6, 're-entry', '#ff9e9e', 'middle', 4.5);
 
     const pathLayer = svg('g', { id: 'path-layer' });
     const discLayer = svg('g', { id: 'disc-layer' });
@@ -212,17 +218,18 @@ const POOL = (() => {
   function clampToWater(p) {
     return { x: clamp(p.x, WATER.x0 + 4, WATER.x1 - 4), y: clamp(p.y, WATER.y0 + 4, WATER.y1 - 4) };
   }
-  // allow dropping into water OR any staging zone (sub strip / re-entry corners)
+  // allow dropping into water OR a staging zone (sub strip / any re-entry corner)
   function clampAnywhere(p) {
-    for (const z of [EXC_R, EXC_L, SUBZONE]) if (inBox(z, p)) return { x: clamp(p.x, z.x0 + 4, z.x1 - 4), y: clamp(p.y, z.y0 + 6, z.y1 - 6) };
+    for (const z of CORNERS) if (inBox(z, p)) return { x: clamp(p.x, z.x0 + 3, z.x1 - 3), y: clamp(p.y, z.y0 + 3, z.y1 - 3) };
+    if (inBox(SUBZONE, p)) return { x: clamp(p.x, SUBZONE.x0 + 4, SUBZONE.x1 - 4), y: clamp(p.y, SUBZONE.y0 + 4, SUBZONE.y1 - 4) };
     return clampToWater(p);
   }
   function zoneOf(p) {
-    if (inBox(EXC_R, p) || inBox(EXC_L, p)) return 'exc';
+    for (const z of CORNERS) if (inBox(z, p)) return 'exc';
     if (inBox(SUBZONE, p)) return 'sub';
     return 'water';
   }
 
-  return { VB, WATER, SUBZONE, EXCZONE, EXC_L, EXC_R, pxPerM, fromLeft, fromRight, svg, render, disc, ball,
+  return { VB, WATER, SUBZONE, EXCZONE, CORNERS, pxPerM, fromLeft, fromRight, svg, render, disc, ball,
            stackPos, eventToVB, clampToWater, clampAnywhere, zoneOf };
 })();
