@@ -456,3 +456,9 @@ em{color:var(--ink-faint);font-style:italic}
 .demo-btn:hover{border-color:var(--teal)}
 .demo-btn:active{transform:scale(.97)}
 .demo-ic{font-size:19px;line-height:1}
+
+/* roles & responsibilities: three across */
+.resp-grid{grid-template-columns:repeat(3,1fr)}
+.resp-card ul{gap:8px}
+.resp-card li{font-size:12.5px}
+@media (max-width:1080px){ .resp-grid{grid-template-columns:1fr} }

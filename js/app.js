@@ -377,6 +377,32 @@
     </div>`;
   }
 
+  const RESPONSIBILITIES = [
+    { icon:'🤽', title:'Players', items:[
+      'Know your position and your job on every play — offense <em>and</em> defense.',
+      'Follow the game plan and the coach’s calls; run the set plays.',
+      'Communicate constantly — call screens, presses and switches.',
+      'Play within the rules: manage your fouls and avoid needless exclusions.',
+      'Sprint transitions — first back on defense, first up on the counter.',
+      'Support the goalkeeper and protect the front of goal.',
+      'Respect teammates, opponents and officials; give full effort when tired.' ] },
+    { icon:'🎯', title:'Coach', items:[
+      'Prepare the team: training plans, tactics and set plays.',
+      'Pick the line-up and manage substitutions and time-outs.',
+      'Teach roles and positions; develop every player.',
+      'Read the game and adjust tactics in real time (man-up, man-down, press vs drop).',
+      'Motivate, set standards and manage the bench.',
+      'Look after player welfare, safety and fair play.',
+      'Communicate clearly and respect the officials.' ] },
+    { icon:'⚖️', title:'Referee', items:[
+      'Enforce the rules and keep the game fair and safe.',
+      'Award ordinary fouls, exclusions (20 s) and penalties (from 5 m).',
+      'Manage exclusions and re-entry from the corner.',
+      'Signal decisions clearly and coordinate with the table / timekeepers.',
+      'Control the match and both benches; stay impartial.',
+      'Protect players from dangerous play.' ] },
+  ];
+
   function renderBasics() {
     const v = $('view-basics');
     const legendHtml = `<div class="basics-legend">
@@ -395,6 +421,13 @@
           <div class="basics-h"><span class="basics-ic">${c.icon}</span><h3>${c.title}</h3></div>
           <ul>${c.body.map(p=>`<li>${p}</li>`).join('')}</ul>
           ${c.legend?legendHtml:''}
+        </div>`).join('')}
+      </div>
+      <h3 class="dash-h3">Roles &amp; responsibilities</h3>
+      <div class="basics-grid resp-grid">
+        ${RESPONSIBILITIES.map(c=>`<div class="basics-card resp-card">
+          <div class="basics-h"><span class="basics-ic">${c.icon}</span><h3>${c.title}</h3></div>
+          <ul>${c.items.map(p=>`<li>${p}</li>`).join('')}</ul>
         </div>`).join('')}
       </div>
       <div class="basics-cta">
