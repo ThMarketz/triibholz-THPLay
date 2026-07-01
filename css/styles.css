@@ -19,6 +19,9 @@ body{
 .screen.active{display:flex}
 button{font-family:inherit;cursor:pointer}
 em{color:var(--ink-faint);font-style:italic}
+/* the hidden attribute must always win over component display rules
+   (otherwise e.g. .modal-backdrop{display:grid} keeps a "hidden" modal on top) */
+[hidden]{display:none !important}
 
 /* ---------- AUTH ---------- */
 #auth-screen,#setup-screen{flex-direction:column;align-items:center;justify-content:center;gap:18px}
