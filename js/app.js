@@ -73,14 +73,15 @@
     document.querySelectorAll('#position-grid .pos-chip').forEach(b => b.classList.remove('active'));
     updatePositionBlock();
     show('setup-screen');
+    if (joinParam()) setTimeout(()=> toast('You’re joining ' + loadTeam().name + ' — pick your cap number'), 400);
   }
   function updatePositionBlock() {
     const isPlayer = state.setup.role === 'player';
+    const T = (typeof I18N!=='undefined') ? I18N.t : (k=>k);
     $('position-block').style.display = isPlayer ? '' : 'none';
-    $('role-note').textContent = state.setup.role === 'super-admin'
-      ? 'Super Admins are provisioned directly and can approve everyone else.'
-      : 'Players & staff need a Super Admin to approve access before signing in.';
-    $('setup-continue').textContent = state.setup.role === 'super-admin' ? 'Enter as Super Admin' : 'Request access';
+    $('position-block').querySelector('.setup-label').textContent = isPlayer ? T('setup.posReq') : T('setup.posOpt');
+    $('role-note').textContent = state.setup.role === 'super-admin' ? T('setup.noteAdmin') : T('setup.noteStaff');
+    $('setup-continue').textContent = state.setup.role === 'super-admin' ? T('setup.enterAdmin') : T('setup.request');
   }
   function submitSetup() {
     if (state.setup.role === 'player' && !state.setup.position) { toast('Pick your position'); return; }
@@ -92,6 +93,7 @@
       name: idn.name, email: idn.email, provider: idn.provider,
       role, position: role==='player' ? state.setup.position : null,
       status, createdAt: DATA.nowStamp(), triviaBest: 0,
+      teamCode: joinParam() || loadTeam().code,
     };
     DATA.upsertUser(user);
     DATA.logActivity('signin', `${user.name} requested access as ${DATA.roleLabel(role)}`, user.name);
@@ -118,13 +120,12 @@
   /* ---------------- enter app ---------------- */
   function enterApp() {
     state.scenarios = DATA.load();
+    const streak = DATA.touchStreak(state.user.email);
+    if (streak>=3) DATA.addBadge(state.user.email,'streak-3');
+    state.user = DATA.findUserByEmail(state.user.email) || state.user;
     state.situation='6v6'; state.phase='offense';
     state.viewMode = state.user.role==='player' ? 'me' : 'team';
-    $('user-name').textContent = state.user.name;
-    $('user-sub').textContent = state.user.role==='player'
-      ? `Player ${state.user.position||''} · ${state.user.provider}`
-      : `${DATA.roleLabel(state.user.role)} · ${state.user.provider}`;
-    $('user-avatar').textContent = (state.user.name||'?').charAt(0).toUpperCase();
+    updateUserPill();
     const isAdmin = state.user.role==='super-admin';
     $('main-nav').querySelector('.nav-admin').hidden = !isAdmin;
     $('new-scenario-btn').style.display = canEdit() ? '' : 'none';
@@ -133,6 +134,7 @@
     show('app-screen');
     refreshAdminBadge();
     switchView('dashboard');
+    maybeRunTour();
   }
   function refreshAdminBadge() {
     if (state.user.role!=='super-admin') return;
@@ -149,9 +151,10 @@
     const scn = state.scenarios;
     const acts = DATA.loadActivity();
     const card = (cls, inner) => `<div class="dash-card ${cls||''}">${inner}</div>`;
-    let html = `<div class="dash-wrap"><div class="dash-head">
-      <h1>${greeting()}, ${escapeHtml(u.name.split(' ')[0])}</h1>
-      <p class="dash-sub">${DATA.roleLabel(u.role)}${u.position?` · Position ${u.position}`:''}</p></div>`;
+    const mascot = (typeof FX!=='undefined') ? FX.mascot(40) : '';
+    let html = `<div class="dash-wrap"><div class="dash-head with-mascot">${mascot}
+      <div><h1>${greeting()}, ${escapeHtml(u.name.split(' ')[0])}</h1>
+      <p class="dash-sub">${roleL(u.role)}${u.position?` · Position ${u.position}`:''}</p></div></div>`;
 
     if (u.role === 'player') {
       const total = scn.length;
@@ -159,6 +162,12 @@
         ${card('accent', `<span class="dc-k">Your position</span><span class="dc-v big">${u.position||'—'}</span><span class="dc-note">Tap “My position” in any play to see only your movement.</span>`)}
         ${card('', `<span class="dc-k">Plays to know</span><span class="dc-v big">${total}</span><span class="dc-note">across 6v6 → 1‑on‑GK, offense & defense</span>`)}
         ${card('', `<span class="dc-k">Trivia best</span><span class="dc-v big">${u.triviaBest||0}<small>/${DATA.TRIVIA.length}</small></span><button class="btn-primary sm" data-go="trivia">Take the quiz</button>`)}
+      </div>
+      <div class="progress-card">
+        <div class="pc-item"><span class="pc-v">${u.xp||0}</span><span class="pc-k">XP</span></div>
+        <div class="pc-item"><span class="pc-v">🔥 ${u.streak||0}</span><span class="pc-k">day streak</span></div>
+        <div class="pc-badges">${badgesHtml(u.badges)}</div>
+        <button class="btn-primary sm" data-challenge="1">🏆 Challenge</button>
       </div>
       <h3 class="dash-h3">Study your role</h3>
       <div class="dash-list">${scn.slice(0,5).map(s=>scnRow(s)).join('')||'<div class="muted">No plays yet.</div>'}</div>`;
@@ -184,10 +193,102 @@
     }
     html += `</div>`;
     v.innerHTML = html;
+    // staff get an invite (link + QR) card
+    if (EDIT_ROLES.includes(u.role)) {
+      const wrap = v.querySelector('.dash-wrap');
+      const holder = document.createElement('div'); holder.innerHTML = inviteCardHtml();
+      const grid = wrap.querySelector('.dash-grid');
+      if (grid) grid.insertAdjacentElement('afterend', holder.firstElementChild);
+      else wrap.appendChild(holder.firstElementChild);
+      bindInvite(v);
+    }
     v.querySelectorAll('[data-go]').forEach(b=> b.onclick=()=>switchView(b.dataset.go));
+    v.querySelectorAll('[data-challenge]').forEach(b=> b.onclick=()=>runChallenge());
     v.querySelectorAll('[data-open]').forEach(b=> b.onclick=()=>{ const s=state.scenarios.find(x=>x.id===b.dataset.open); if(s){ state.situation=s.situation; state.phase=s.phase; switchView('playbook'); openScenario(s.id);} });
   }
   function greeting(){ return 'Welcome'; }
+  function badgesHtml(ids){
+    ids = ids||[];
+    if (!ids.length) return '<span class="pc-none">No badges yet — study a play or take a challenge</span>';
+    return ids.map(id => { const b=DATA.BADGES[id]; return b?`<span class="badge-chip" title="${escapeHtml(b.label)}">${b.icon} ${escapeHtml(b.label)}</span>`:''; }).join('');
+  }
+  // reward studying a play (triggered from Reveal solution)
+  function onStudied(){
+    if (!state.user) return;
+    if (typeof FX!=='undefined') FX.sound('pop');
+    const scn = state.scenarios.find(s=>s.id===state.selectedId);
+    DATA.awardXp(state.user.email, 5);
+    const first = DATA.addBadge(state.user.email, 'first-study');
+    if (scn && scn.situation==='6v5') DATA.addBadge(state.user.email, 'power-play');
+    state.user = DATA.findUserByEmail(state.user.email);
+    if (first && typeof FX!=='undefined') FX.confetti(40);
+  }
+
+  /* ---------------- Challenge mode (auto-generated from plays) ---------------- */
+  function buildChallenge(){
+    const pool = state.scenarios.filter(s => s.phase==='offense' && s.frames.length>1 &&
+      /^A[1-6]$/.test((s.frames[s.frames.length-1].ball||{}).carrier||''));
+    const qs = [];
+    const shuffled = pool.slice().sort((a,b)=> (a.id>b.id?1:-1));
+    for (const s of shuffled){
+      const carrier = s.frames[s.frames.length-1].ball.carrier.slice(1);
+      const inPlay = Object.keys(s.frames[0].att);
+      const distractors = inPlay.filter(p=>p!==carrier);
+      // pick 2 distractors deterministically
+      const opts = [carrier, distractors[0], distractors[1]].filter(Boolean);
+      while (opts.length<3 && inPlay.length) { const extra=inPlay.find(p=>!opts.includes(p)); if(!extra)break; opts.push(extra); }
+      const options = opts.sort((a,b)=> (Number(a)-Number(b)));
+      qs.push({ title:s.title, situation:s.situation, correct:carrier, options });
+      if (qs.length>=5) break;
+    }
+    return qs;
+  }
+  function runChallenge(){
+    const qs = buildChallenge();
+    if (!qs.length){ toast('No plays available to challenge yet'); return; }
+    let i=0, score=0;
+    const ov=document.createElement('div'); ov.className='modal-backdrop'; ov.id='challenge-modal';
+    document.body.appendChild(ov);
+    function step(){
+      const q=qs[i];
+      ov.innerHTML=`<div class="modal challenge-modal">
+        <div class="modal-head"><h3>🏆 Challenge — ${i+1}/${qs.length}</h3><button class="modal-x" id="ch-x">✕</button></div>
+        <div class="modal-body">
+          <p class="ch-q">In <strong>“${escapeHtml(q.title)}”</strong> (${q.situation}), which player finishes the play?</p>
+          <div class="ch-opts">${q.options.map(o=>`<button class="ch-opt" data-o="${o}">${o==='GK'?'Goalkeeper':'Player '+o}</button>`).join('')}</div>
+          <div class="ch-why" id="ch-why" hidden></div>
+          <button class="btn-primary" id="ch-next" hidden>${i===qs.length-1?'Finish':'Next'}</button>
+        </div></div>`;
+      ov.querySelector('#ch-x').onclick = close;
+      let answered=false;
+      ov.querySelectorAll('.ch-opt').forEach(b=> b.onclick=()=>{
+        if(answered) return; answered=true;
+        const correct = b.dataset.o===q.correct;
+        if(correct){ score++; if(typeof FX!=='undefined') FX.sound('tick'); }
+        ov.querySelectorAll('.ch-opt').forEach(x=> x.classList.add(x.dataset.o===q.correct?'right':(x===b?'wrong':'mute')));
+        const w=ov.querySelector('#ch-why'); w.hidden=false;
+        w.innerHTML = correct? '<strong>Correct!</strong> That’s the finisher.' : `<strong>Not quite.</strong> Player ${q.correct} finishes this one.`;
+        ov.querySelector('#ch-next').hidden=false;
+      });
+      ov.querySelector('#ch-next').onclick=()=>{ i++; if(i>=qs.length) finish(); else step(); };
+    }
+    function finish(){
+      DATA.awardXp(state.user.email, score*8);
+      DATA.addBadge(state.user.email, 'challenger');
+      DATA.logActivity('trivia', `${state.user.name} scored ${score}/${qs.length} on a play challenge`, state.user.name);
+      state.user = DATA.findUserByEmail(state.user.email);
+      const perfect = score===qs.length;
+      ov.innerHTML=`<div class="modal challenge-modal"><div class="modal-body ch-result">
+        <div class="trivia-score-ring">${score}<small>/${qs.length}</small></div>
+        <h2>${perfect?'Flawless!':score>=qs.length*0.6?'Nice work':'Keep studying'}</h2>
+        <p class="dash-sub">+${score*8} XP</p>
+        <button class="btn-primary" id="ch-done">Done</button></div></div>`;
+      ov.querySelector('#ch-done').onclick=close;
+      if (typeof FX!=='undefined'){ if(perfect) FX.celebrate('Flawless!', score+'/'+qs.length+' correct'); else FX.confetti(40); }
+    }
+    function close(){ ov.remove(); if(state.view==='dashboard') renderDashboard(); }
+    step();
+  }
   function scnRow(s){
     return `<button class="dash-row" data-open="${s.id}">
       <span class="dr-tag ${s.phase}">${s.situation}</span>
@@ -251,7 +352,7 @@
     const docs = (data.documents||[]).filter(d => d.url || d.stale);
     return `<div class="rules-panel">
       <div class="rules-head"><span class="rules-ic">§</span>
-        <div><h3>Official rule books — Swiss Aquatics</h3>
+        <div><h3>${(typeof I18N!=='undefined')?I18N.t('basics.rulebooks'):'Official rule books — Swiss Aquatics'}</h3>
           <span class="rules-checked">${data.checkedAt ? ('Auto‑checked '+fmtDate(data.checkedAt)) : 'Bundled snapshot'} · refreshes automatically from Swiss Aquatics</span></div></div>
       <div class="rules-docs">${docs.map(d=>`
         <a class="rules-doc" href="${d.url||data.source.page}" target="_blank" rel="noopener">
@@ -271,9 +372,10 @@
         <span class="bl"><span class="bl-dot gk"></span>Goalkeeper (red)</span>
         <span class="bl"><span class="bl-dot ball"></span>Ball (orange)</span>
       </div>`;
+    const T = (typeof I18N!=='undefined') ? I18N.t : (k=>k);
     v.innerHTML = `<div class="dash-wrap">
-      <div class="dash-head"><h1>Water polo basics</h1>
-        <p class="dash-sub">The high‑level fundamentals — then jump into the Playbook to see them in motion.</p></div>
+      <div class="dash-head"><h1>${T('basics.title')}</h1>
+        <p class="dash-sub">${T('basics.sub')}</p></div>
       <div id="rules-mount"></div>
       <div class="basics-grid">
         ${BASICS.map(c=>`<div class="basics-card">
@@ -283,8 +385,8 @@
         </div>`).join('')}
       </div>
       <div class="basics-cta">
-        <button class="btn-primary sm" data-go="playbook">See it in the Playbook</button>
-        <button class="btn-ghost" data-go="trivia">Test yourself with Trivia</button>
+        <button class="btn-primary sm" data-go="playbook">${T('basics.seePlaybook')}</button>
+        <button class="btn-ghost" data-go="trivia">${T('basics.testTrivia')}</button>
       </div>
       <p class="basics-src">Fundamentals summarised from
         <a href="https://vancouvervipers.ca/water-polo-basics/" target="_blank" rel="noopener">Vancouver Vipers — Water Polo Basics</a>,
@@ -315,10 +417,10 @@
     v.innerHTML = `<div class="trivia-wrap"><div class="trivia-card" id="trivia-card">
       <div class="trivia-intro">
         <span class="dc-k">Knowledge check</span>
-        <h1>Water Polo Trivia</h1>
+        <h1>${(typeof I18N!=='undefined')?I18N.t('trivia.title'):'Water Polo Trivia'}</h1>
         <p class="dash-sub">${DATA.TRIVIA.length} questions on rules, positions & tactics. Your best score is saved to your profile.</p>
         <p class="dash-sub">Your best so far: <strong>${state.user.triviaBest||0}/${DATA.TRIVIA.length}</strong></p>
-        <button class="btn-primary" id="trivia-start">Start quiz</button>
+        <button class="btn-primary" id="trivia-start">${(typeof I18N!=='undefined')?I18N.t('trivia.start'):'Start quiz'}</button>
       </div></div></div>`;
     $('trivia-start').onclick = () => showQuestion();
   }
@@ -350,8 +452,14 @@
   function finishTrivia() {
     const total = DATA.TRIVIA.length;
     DATA.setTriviaBest(state.user.email, trivia.score);
-    state.user = DATA.findUserByEmail(state.user.email);
+    DATA.awardXp(state.user.email, trivia.score*10);
+    if (trivia.score===total) DATA.addBadge(state.user.email, 'trivia-ace');
     DATA.logActivity('trivia', `${state.user.name} scored ${trivia.score}/${total} on trivia`, state.user.name);
+    if (typeof FX!=='undefined') {
+      if (trivia.score===total) FX.celebrate('Perfect!', total+'/'+total+' — Trivia Ace');
+      else if (trivia.score/total>=0.6) { FX.confetti(50); FX.sound('pop'); }
+    }
+    state.user = DATA.findUserByEmail(state.user.email);
     const c = $('trivia-card');
     const pct = Math.round(trivia.score/total*100);
     c.innerHTML = `<div class="trivia-result">
@@ -759,6 +867,81 @@
     closeEditor(); renderLibrary(); toast('Deleted');
   }
 
+  /* ======================================================
+     ONBOARDING — team invite (link + QR), join flow, guided tour
+     ====================================================== */
+  const TEAM_KEY = 'thplay.team.v1';
+  function loadTeam(){
+    try { return JSON.parse(localStorage.getItem(TEAM_KEY)) || { name:'Triibholz WPC', code:'TRII-2026' }; }
+    catch(e){ return { name:'Triibholz WPC', code:'TRII-2026' }; }
+  }
+  function inviteLink(){ const t=loadTeam(); return location.origin + location.pathname + '?join=' + encodeURIComponent(t.code); }
+  function joinParam(){ try { return new URLSearchParams(location.search).get('join'); } catch(e){ return null; } }
+
+  function inviteCardHtml(){
+    const t = loadTeam(); const link = inviteLink();
+    let qr=''; try { if (typeof QR!=='undefined') qr = QR.toSVG(link, { size:148, quiet:2 }); } catch(e){ qr=''; }
+    return `<div class="invite-card">
+      <div class="invite-left">
+        <span class="dc-k">Invite players</span>
+        <div class="invite-code">${escapeHtml(t.code)}</div>
+        <p class="dc-note">Players scan the code (or open the link) and tap their cap number — no typing, no accounts to set up.</p>
+        <div class="invite-actions"><button class="btn-primary sm" id="invite-copy">Copy invite link</button></div>
+      </div>
+      <div class="invite-qr" title="${escapeHtml(link)}">${qr||'<span class="dc-note">QR unavailable</span>'}</div>
+    </div>`;
+  }
+  function bindInvite(root){
+    const b = root.querySelector('#invite-copy'); if(!b) return;
+    b.onclick = () => {
+      const link = inviteLink();
+      const done = ()=> toast('Invite link copied — share it with your players');
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(done).catch(()=>toast(link));
+      else toast(link);
+    };
+  }
+
+  // first-run guided tour (coach-marks)
+  function maybeRunTour(){
+    let done; try { done = localStorage.getItem('thplay.toured'); } catch(e){}
+    if (done) return;
+    setTimeout(()=>{
+      const visible = (el)=>{
+        if(!el) return false; if(el.hidden) return false;
+        const cs = (typeof getComputedStyle==='function') ? getComputedStyle(el) : null;
+        return !(cs && (cs.display==='none' || cs.visibility==='hidden'));
+      };
+      const steps = [
+        { sel:'#main-nav',        text:'Move between Dashboard, Playbook, Basics and Trivia here.' },
+        { sel:'#lang-switch-top', text:'Change language any time — the whole app follows.' },
+        { sel:'#user-pill',       text:'Your account lives here — tap the power icon to sign out.' },
+      ].filter(s => visible(document.querySelector(s.sel)));
+      if (steps.length) runTour(steps, ()=>{ try{ localStorage.setItem('thplay.toured','1'); }catch(e){} });
+    }, 350);
+  }
+  function runTour(steps, done){
+    let i=0;
+    const ov=document.createElement('div'); ov.className='tour-overlay'; document.body.appendChild(ov);
+    function render(){
+      const s=steps[i]; const el=document.querySelector(s.sel);
+      if(!el){ finish(); return; }
+      const r=el.getBoundingClientRect();
+      const tipLeft=Math.min(Math.max(8,r.left), (window.innerWidth||360)-268);
+      const tipTop=Math.min(r.bottom+12, (window.innerHeight||600)-150);
+      ov.innerHTML=`<div class="tour-hole" style="left:${r.left-6}px;top:${r.top-6}px;width:${r.width+12}px;height:${r.height+12}px"></div>
+        <div class="tour-tip" style="left:${tipLeft}px;top:${tipTop}px">
+          <p>${escapeHtml(s.text)}</p>
+          <div class="tour-actions"><span class="tour-step">${i+1}/${steps.length}</span>
+            <button class="btn-ghost sm" id="tour-skip">Skip</button>
+            <button class="btn-primary sm" id="tour-next">${i===steps.length-1?'Got it':'Next'}</button></div>
+        </div>`;
+      ov.querySelector('#tour-next').onclick=()=>{ i++; if(i>=steps.length) finish(); else render(); };
+      ov.querySelector('#tour-skip').onclick=finish;
+    }
+    function finish(){ ov.remove(); if(done) done(); }
+    render();
+  }
+
   /* ---------------- wire events ---------------- */
   function wire() {
     $('signin-apple').onclick  = (e)=> simulateSignIn('apple', e.currentTarget);
@@ -792,7 +975,13 @@
     $('focus-pos').onchange = (e)=>{ state.focus=e.target.value||null; state.viewMode=state.focus?'me':'team'; if(state.viewer)state.viewer.setFocus(state.focus); syncFocusUI(); const s=state.scenarios.find(x=>x.id===state.selectedId); if(s)renderAssignments(s); };
 
     document.querySelectorAll('#mode-toggle .mode-btn').forEach(b=> b.onclick=()=>setMode(b.dataset.mode, false));
-    $('reveal-btn').onclick = ()=> setMode('solution', true);
+    $('reveal-btn').onclick = ()=>{ setMode('solution', true); onStudied(); };
+    $('sound-toggle').onclick = (e)=>{
+      const on = !FX.isSoundOn(); FX.setSound(on);
+      e.currentTarget.textContent = on ? '🔊' : '🔇';
+      if (on) FX.sound('whistle');
+      toast(on ? 'Sound on' : 'Sound off');
+    };
 
     $('new-scenario-btn').onclick = ()=> { if(canEdit()) openEditor(DATA.newScenario(state.situation, state.phase), true); };
     $('edit-btn').onclick = ()=>{ const s=state.scenarios.find(x=>x.id===state.selectedId); if(s&&canEdit()) openEditor(s,false); };
@@ -807,8 +996,48 @@
     $('editor-modal').onclick = (e)=>{ if(e.target===$('editor-modal')) closeEditor(); };
   }
 
+  /* ---------------- i18n glue ---------------- */
+  function roleL(r){ return (typeof I18N!=='undefined') ? I18N.t('role.'+r) : DATA.roleLabel(r); }
+  function buildLangSwitch(id){
+    const el = $(id); if (!el || typeof I18N==='undefined') return;
+    el.innerHTML='';
+    I18N.SUPPORTED.forEach(l=>{
+      const b=document.createElement('button');
+      b.className='lang-btn'+(l.code===I18N.lang?' active':'');
+      b.innerHTML=`<span class="lang-flag">${l.flag}</span><span class="lang-code">${l.code.toUpperCase()}</span>`;
+      b.title=l.label;
+      b.onclick=()=>{ I18N.setLang(l.code); if(state.user && typeof DATA!=='undefined') DATA.addBadge(state.user.email,'polyglot'); };
+      el.appendChild(b);
+    });
+  }
+  function refreshLangSwitches(){ buildLangSwitch('lang-switch-auth'); buildLangSwitch('lang-switch-top'); }
+  function updateUserPill(){
+    if(!state.user) return;
+    $('user-name').textContent = state.user.name;
+    $('user-sub').textContent = state.user.role==='player'
+      ? `${roleL('player')} ${state.user.position||''} · ${state.user.provider}`
+      : `${roleL(state.user.role)} · ${state.user.provider}`;
+    $('user-avatar').textContent = (state.user.name||'?').charAt(0).toUpperCase();
+  }
+
   function boot() {
+    if (typeof I18N!=='undefined') {
+      I18N.init();
+      I18N.onChange(()=>{
+        refreshLangSwitches();
+        updateUserPill();
+        if ($('app-screen').classList.contains('active')) switchView(state.view);
+        if ($('setup-screen').classList.contains('active')) updatePositionBlock();
+      });
+    }
     wire();
+    refreshLangSwitches();
+    if (typeof FX!=='undefined' && $('sound-toggle')) $('sound-toggle').textContent = FX.isSoundOn() ? '🔊' : '🔇';
+    if (typeof I18N!=='undefined') I18N.apply(document);
+    // PWA: register the service worker when served over http(s)
+    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+    }
     const sess = loadSession();
     if (sess && sess.email) { const u = DATA.findUserByEmail(sess.email); if (u && u.role) { routeUser(u); return; } }
     show('auth-screen');

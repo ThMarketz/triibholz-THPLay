@@ -8,9 +8,12 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # app files
 COPY index.html /usr/share/nginx/html/index.html
-COPY css/  /usr/share/nginx/html/css/
-COPY js/   /usr/share/nginx/html/js/
-COPY data/ /usr/share/nginx/html/data/
+COPY manifest.webmanifest /usr/share/nginx/html/manifest.webmanifest
+COPY sw.js /usr/share/nginx/html/sw.js
+COPY css/   /usr/share/nginx/html/css/
+COPY js/    /usr/share/nginx/html/js/
+COPY data/  /usr/share/nginx/html/data/
+COPY icons/ /usr/share/nginx/html/icons/
 
 EXPOSE 80
 

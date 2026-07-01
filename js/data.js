@@ -476,6 +476,37 @@ const DATA = (() => {
     if (x && score > (x.triviaBest||0)) { x.triviaBest = score; saveUsers(u); } return x;
   }
 
+  /* ---- gamification: XP, streaks, badges ---- */
+  const BADGES = {
+    'first-study': { icon:'🎯', label:'First Play Studied' },
+    'trivia-ace':  { icon:'⭐', label:'Trivia Ace' },
+    'power-play':  { icon:'🧠', label:'Power-Play Professor' },
+    'challenger':  { icon:'🏆', label:'Challenger' },
+    'polyglot':    { icon:'🌍', label:'Polyglot' },
+    'streak-3':    { icon:'🔥', label:'3-Day Streak' },
+  };
+  function today(){ try { return new Date().toISOString().slice(0,10); } catch(e){ return '0'; } }
+  function awardXp(email, n) {
+    const u = loadUsers(); const x = u.find(y => y.email === email);
+    if (x) { x.xp = (x.xp||0) + n; saveUsers(u); return x.xp; } return 0;
+  }
+  function addBadge(email, id) {
+    const u = loadUsers(); const x = u.find(y => y.email === email);
+    if (x) { x.badges = x.badges||[]; if (!x.badges.includes(id)) { x.badges.push(id); saveUsers(u); return true; } }
+    return false;
+  }
+  function touchStreak(email) {
+    const u = loadUsers(); const x = u.find(y => y.email === email);
+    if (!x) return 0;
+    const t = today();
+    if (x.lastDay !== t) {
+      let y='0'; try { y=new Date(Date.now()-86400000).toISOString().slice(0,10); } catch(e){}
+      x.streak = (x.lastDay===y) ? (x.streak||0)+1 : 1;
+      x.lastDay = t; saveUsers(u);
+    }
+    return x.streak || 1;
+  }
+
   function loadActivity() { try { return JSON.parse(localStorage.getItem(ACT_KEY)) || []; } catch(e){ return []; } }
   function logActivity(type, text, actor) {
     const a = loadActivity();
@@ -534,5 +565,6 @@ const DATA = (() => {
   return { SITUATIONS, sit, DEFAULTS, defaultFrame, blankNotes, clone, load, save, reset, newScenario, GK_POS,
            waitDisc,
            ROLES, roleLabel, loadUsers, saveUsers, upsertUser, findUserByEmail, setUserStatus, setUserRole,
-           setTriviaBest, loadActivity, logActivity, nowStamp, TRIVIA };
+           setTriviaBest, loadActivity, logActivity, nowStamp, TRIVIA,
+           BADGES, awardXp, addBadge, touchStreak };
 })();
