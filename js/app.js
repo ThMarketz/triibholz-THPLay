@@ -711,7 +711,8 @@
     const ss = $('ed-situation'); ss.innerHTML='';
     DATA.SITUATIONS.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=s.label; ss.appendChild(o); });
     ss.value = edit.scenario.situation;
-    $('ed-phase').value = edit.scenario.phase;
+    if (!ss.value) { ss.selectedIndex = 0; edit.scenario.situation = ss.value; edit.scenario.frames = [ DATA.defaultFrame(ss.value) ]; }
+    $('ed-phase').value = edit.scenario.phase || 'offense';
     $('ed-delete').hidden = isNew;
     buildNotesGrid();
     edit.layers = POOL.render($('editor-pool'));
@@ -948,8 +949,9 @@
             <button class="btn-ghost sm" id="tour-skip">Skip</button>
             <button class="btn-primary sm" id="tour-next">${i===steps.length-1?'Got it':'Next'}</button></div>
         </div>`;
-      ov.querySelector('#tour-next').onclick=()=>{ i++; if(i>=steps.length) finish(); else render(); };
-      ov.querySelector('#tour-skip').onclick=finish;
+      const next=ov.querySelector('#tour-next'), skip=ov.querySelector('#tour-skip');
+      if(next) next.onclick=()=>{ i++; if(i>=steps.length) finish(); else render(); };
+      if(skip) skip.onclick=finish;
     }
     function finish(){ ov.remove(); if(done) done(); }
     render();

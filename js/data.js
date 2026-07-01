@@ -419,6 +419,8 @@ const DATA = (() => {
   }
 
   function newScenario(situation, phase) {
+    situation = SITUATIONS.some(s => s.id === situation) ? situation : '6v6';
+    phase = (phase === 'offense' || phase === 'defense') ? phase : 'offense';
     return {
       id: 'usr-' + Math.abs(hash(situation + phase + (typeof performance!=='undefined'?performance.now():Date.now()))),
       situation, phase,
