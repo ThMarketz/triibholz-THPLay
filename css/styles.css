@@ -441,3 +441,12 @@ em{color:var(--ink-faint);font-style:italic}
 .ch-opt.mute{opacity:.5}
 .ch-why{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:13px;color:var(--ink-dim);margin-bottom:12px}
 .ch-result{text-align:center}
+
+/* ========== demo personas (auth screen) ========== */
+.demo-divider{display:flex;align-items:center;gap:10px;margin:16px 0 12px;color:var(--ink-faint);font-size:11px}
+.demo-divider::before,.demo-divider::after{content:"";flex:1;height:1px;background:var(--line)}
+.demo-personas{display:flex;gap:8px}
+.demo-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 6px;border:1px solid var(--line);background:var(--bg2);color:var(--ink);border-radius:11px;font-size:12px;font-weight:700;transition:border-color .15s,transform .08s}
+.demo-btn:hover{border-color:var(--teal)}
+.demo-btn:active{transform:scale(.97)}
+.demo-ic{font-size:19px;line-height:1}

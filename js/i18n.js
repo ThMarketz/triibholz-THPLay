@@ -39,6 +39,7 @@ const I18N = (() => {
       'basics.rulebooks':'Official rule books — Swiss Aquatics','basics.seePlaybook':'See it in the Playbook','basics.testTrivia':'Test yourself with Trivia',
       'trivia.title':'Water Polo Trivia','trivia.start':'Start quiz','trivia.again':'Try again','trivia.back':'Back to dashboard',
       'common.signout':'Sign out','common.save':'Save','common.cancel':'Cancel','common.edit':'Edit','common.lang':'Language',
+      'demo.or':'or jump straight into the demo','demo.coach':'Coach demo','demo.player':'Player demo','demo.admin':'Admin demo',
     },
     de: {
       'app.tagline':'Strategien & Laufwege — fürs Team und für jede Position.',
@@ -64,6 +65,7 @@ const I18N = (() => {
       'basics.rulebooks':'Offizielle Reglemente — Swiss Aquatics','basics.seePlaybook':'Im Playbook ansehen','basics.testTrivia':'Im Quiz testen',
       'trivia.title':'Wasserball-Quiz','trivia.start':'Quiz starten','trivia.again':'Nochmal','trivia.back':'Zur Übersicht',
       'common.signout':'Abmelden','common.save':'Speichern','common.cancel':'Abbrechen','common.edit':'Bearbeiten','common.lang':'Sprache',
+      'demo.or':'oder direkt in die Demo','demo.coach':'Trainer-Demo','demo.player':'Spieler-Demo','demo.admin':'Admin-Demo',
     },
     fr: {
       'app.tagline':'Stratégies & déplacements — pour l’équipe et pour chaque poste.',
@@ -89,6 +91,7 @@ const I18N = (() => {
       'basics.rulebooks':'Règlements officiels — Swiss Aquatics','basics.seePlaybook':'Voir dans le Playbook','basics.testTrivia':'Teste-toi au Quiz',
       'trivia.title':'Quiz Water-Polo','trivia.start':'Commencer','trivia.again':'Recommencer','trivia.back':'Au tableau de bord',
       'common.signout':'Se déconnecter','common.save':'Enregistrer','common.cancel':'Annuler','common.edit':'Modifier','common.lang':'Langue',
+      'demo.or':'ou accède directement à la démo','demo.coach':'Démo entraîneur','demo.player':'Démo joueur','demo.admin':'Démo admin',
     },
     it: {
       'app.tagline':'Strategie & movimenti — per la squadra e per ogni ruolo.',
@@ -114,6 +117,7 @@ const I18N = (() => {
       'basics.rulebooks':'Regolamenti ufficiali — Swiss Aquatics','basics.seePlaybook':'Guarda nel Playbook','basics.testTrivia':'Mettiti alla prova col Quiz',
       'trivia.title':'Quiz Pallanuoto','trivia.start':'Inizia','trivia.again':'Riprova','trivia.back':'Alla dashboard',
       'common.signout':'Esci','common.save':'Salva','common.cancel':'Annulla','common.edit':'Modifica','common.lang':'Lingua',
+      'demo.or':'oppure entra subito nella demo','demo.coach':'Demo allenatore','demo.player':'Demo giocatore','demo.admin':'Demo admin',
     },
   };
 

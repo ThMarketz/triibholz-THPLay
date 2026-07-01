@@ -447,7 +447,11 @@ const DATA = (() => {
       { id:'u-pending2', name:'Lena Brun', email:'lena@icloud.com', provider:'Apple',
         role:'trainer', position:null, status:'pending', createdAt:0, triviaBest:0 },
       { id:'u-coach', name:'Coach Ruiz', email:'ruiz@triibholz.app', provider:'Google',
-        role:'coach', position:null, status:'approved', createdAt:0, triviaBest:0 },
+        role:'coach', position:null, status:'approved', createdAt:0, triviaBest:0, xp:80, streak:5, badges:['first-study'] },
+      { id:'u-p-nora', name:'Nora Frei', email:'nora@icloud.com', provider:'Apple',
+        role:'player', position:'2', status:'approved', createdAt:0, triviaBest:12, xp:210, streak:6, badges:['first-study','trivia-ace','polyglot'] },
+      { id:'u-p-timo', name:'Timo Koch', email:'timo@gmail.com', provider:'Google',
+        role:'player', position:'5', status:'approved', createdAt:0, triviaBest:9, xp:95, streak:2, badges:['first-study','challenger'] },
     ];
   }
   function loadUsers() {
@@ -507,7 +511,23 @@ const DATA = (() => {
     return x.streak || 1;
   }
 
-  function loadActivity() { try { return JSON.parse(localStorage.getItem(ACT_KEY)) || []; } catch(e){ return []; } }
+  function seedActivity() {
+    return [
+      { type:'trivia',  text:'Nora Frei scored 12/15 on trivia', actor:'Nora Frei', at:6 },
+      { type:'play',    text:'Coach Ruiz updated “Power play — 4-2 swing to the post” (6v5 offense)', actor:'Coach Ruiz', at:5 },
+      { type:'approve', text:'Mika Adler approved Timo Koch (Player)', actor:'Mika Adler', at:4 },
+      { type:'signin',  text:'Timo Koch requested access as Player', actor:'Timo Koch', at:3 },
+      { type:'play',    text:'Coach Ruiz created “Top pick — slip to the hole” (6v6 offense)', actor:'Coach Ruiz', at:2 },
+      { type:'trivia',  text:'Timo Koch scored 9/15 on a play challenge', actor:'Timo Koch', at:1 },
+    ];
+  }
+  function loadActivity() {
+    try {
+      const raw = localStorage.getItem(ACT_KEY);
+      if (raw === null) { const s = seedActivity(); localStorage.setItem(ACT_KEY, JSON.stringify(s)); return s; }
+      return JSON.parse(raw) || [];
+    } catch(e){ return []; }
+  }
   function logActivity(type, text, actor) {
     const a = loadActivity();
     a.unshift({ type, text, actor: actor||'', at: nowStamp() });

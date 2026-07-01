@@ -51,6 +51,19 @@
       else openSetup(idn);
     }, 650);
   }
+  // one-tap demo personas — pre-approved, no OAuth delay, no approval gate
+  const DEMO_USERS = {
+    'coach':       { id:'demo-coach',  name:'Demo Coach',  email:'coach@demo.triibholz',  provider:'Demo', role:'coach',       position:null, status:'approved', xp:60,  streak:3, badges:['first-study'] },
+    'player':      { id:'demo-player', name:'Demo Player', email:'player@demo.triibholz', provider:'Demo', role:'player',      position:'6',  status:'approved', xp:120, streak:4, badges:['first-study','trivia-ace','power-play'] },
+    'super-admin': { id:'demo-admin',  name:'Demo Admin',  email:'admin@demo.triibholz',  provider:'Demo', role:'super-admin', position:null, status:'approved', xp:0,   streak:2, badges:[] },
+  };
+  function enterDemo(role){
+    const u = DEMO_USERS[role] || DEMO_USERS['coach'];
+    DATA.upsertUser(u);
+    const stored = DATA.findUserByEmail(u.email) || u;
+    DATA.logActivity('signin', `${stored.name} entered the demo`, stored.name);
+    state.user = stored; saveSession(stored); enterApp();
+  }
   function loadSession() { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch(e){ return null; } }
   function saveSession(u) { try { localStorage.setItem(SESSION_KEY, JSON.stringify({ email: u.email })); } catch(e){} }
   function clearSession() { try { localStorage.removeItem(SESSION_KEY); } catch(e){} }
@@ -946,6 +959,7 @@
   function wire() {
     $('signin-apple').onclick  = (e)=> simulateSignIn('apple', e.currentTarget);
     $('signin-google').onclick = (e)=> simulateSignIn('google', e.currentTarget);
+    document.querySelectorAll('.demo-btn').forEach(b=> b.onclick=()=> enterDemo(b.dataset.demo));
 
     document.querySelectorAll('#role-seg .seg-btn').forEach(b=> b.onclick=()=>{
       state.setup.role=b.dataset.role;
