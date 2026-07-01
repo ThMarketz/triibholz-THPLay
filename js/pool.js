@@ -1,9 +1,11 @@
 /* ============================================================
-   pool.js — accurate top-down water polo pool + player discs
-   Coordinate system: viewBox 320 x 262.
-   Water rectangle x:24..296 y:30..190 (30m x 20m, 3:2).
-   Left goal = WATER.x0 , Right goal = WATER.x1 (we attack RIGHT).
-   Below the water: two waiting lanes — flying substitution & exclusion/re-entry.
+   pool.js — accurate top-down water polo pool + player discs.
+   viewBox 320 x 262. Water x:24..296 y:30..190 (30m x 20m).
+   Left goal = WATER.x0, Right goal = WATER.x1 (we attack RIGHT).
+   Official table = top. Flying substitution = bottom (opposite).
+   Exclusion / re-entry = small boxes in the two BOTTOM corners,
+   behind each goal line, next to the flying-substitution strip.
+   Red goal box = 2 m deep (goal line → 2 m) and 1 m beyond each post.
    ============================================================ */
 const POOL = (() => {
   const VB = { w: 320, h: 262 };
@@ -11,14 +13,19 @@ const POOL = (() => {
   WATER.w = WATER.x1 - WATER.x0;   // 272
   WATER.h = WATER.y1 - WATER.y0;   // 160
   const METERS = 30;
-  const pxPerM = WATER.w / METERS;
+  const pxPerM = WATER.w / METERS; // ≈ 9.07 px / metre
 
   const fromLeft  = (m) => WATER.x0 + m * pxPerM;
   const fromRight = (m) => WATER.x1 - m * pxPerM;
+  const CY = WATER.y0 + WATER.h / 2;      // 110
+  const GHALF = WATER.h * 0.16;           // half goal-mouth (board scale)
 
-  // waiting lanes below the field of play
-  const SUBZONE = { x0: WATER.x0, x1: WATER.x1, y0: 198, y1: 218, cy: 208 };  // flying substitution
-  const EXCZONE = { x0: WATER.x0, x1: WATER.x1, y0: 232, y1: 252, cy: 242 };  // exclusion / re-entry
+  // ---- staging zones in the bottom deck ----
+  // flying substitution: central strip; exclusion/re-entry: the two corners.
+  const SUBZONE = { x0: 100, x1: 220, y0: 200, y1: 218, cy: 209 };
+  const EXC_L   = { x0: 26,  x1: 74,  y0: 198, y1: 230, cy: 214 };
+  const EXC_R   = { x0: 246, x1: 294, y0: 198, y1: 230, cy: 214 };
+  const EXCZONE = EXC_R;                   // excluded players wait here (we attack right)
 
   function svg(tag, attrs) {
     const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -30,7 +37,7 @@ const POOL = (() => {
   }
   function label(svgEl, x, y, text, fill, anchor='middle', size=7) {
     const t = svg('text', { x, y, 'text-anchor': anchor, 'font-size': size, 'font-weight': 700,
-      fill, 'font-family': 'Helvetica, Arial, sans-serif', 'letter-spacing': 1 });
+      fill, 'font-family': 'Helvetica, Arial, sans-serif', 'letter-spacing': 0.8 });
     t.textContent = text; svgEl.appendChild(t); return t;
   }
 
@@ -55,10 +62,12 @@ const POOL = (() => {
     // deck
     svgEl.appendChild(svg('rect', { x: 0, y: 0, width: VB.w, height: VB.h, fill: '#0c2030' }));
 
-    // top strip: OFFICIAL TABLE
+    // top strip: OFFICIAL TABLE + goal judges
     const tableW = 120, tableX = (VB.w - tableW) / 2;
     svgEl.appendChild(svg('rect', { x: tableX, y: 6, width: tableW, height: 14, rx: 2, fill: '#ffffff' }));
     label(svgEl, VB.w / 2, 16, 'OFFICIAL TABLE', '#0b2030');
+    label(svgEl, WATER.x0 + 6, 14, 'GOAL JUDGE', '#8fb0c4', 'start', 5.5);
+    label(svgEl, WATER.x1 - 6, 14, 'GOAL JUDGE', '#8fb0c4', 'end', 5.5);
 
     // water
     svgEl.appendChild(svg('rect', { x: WATER.x0, y: WATER.y0, width: WATER.w, height: WATER.h, fill: 'url(#waterGrad)', stroke: '#0a5860', 'stroke-width': 1.5 }));
@@ -78,13 +87,13 @@ const POOL = (() => {
     };
     [ 'L', 'R' ].forEach(end => {
       const f = end === 'L' ? fromLeft : fromRight;
-      vline(f(0.3), '#ffffff', 1.6);   // goal line
-      vline(f(2), '#ff3b3b', 1.8);     // 2 m red
+      vline(f(0.3), '#ffffff', 1.6);      // goal line
+      vline(f(2), '#ff3b3b', 1.8);        // 2 m red
       vline(f(5), '#ffd400', 1.8, '4 3'); // 5 m yellow
       vline(f(6), '#39e08a', 1.6, '2 3'); // 6 m green
     });
     vline(WATER.x0 + WATER.w / 2, '#ffffff', 1.8);  // half
-    lineG.appendChild(svg('circle', { cx: WATER.x0 + WATER.w / 2, cy: WATER.y0 + WATER.h / 2, r: 2, fill: '#ffffff' }));
+    lineG.appendChild(svg('circle', { cx: WATER.x0 + WATER.w / 2, cy: CY, r: 2, fill: '#ffffff' }));
     svgEl.appendChild(lineG);
 
     // side rail colour markers
@@ -99,48 +108,46 @@ const POOL = (() => {
       });
     });
 
-    const cy = WATER.y0 + WATER.h / 2;
-    const ghalf = (WATER.h * 0.16);
-
-    // ---- red goal-area box in front of each goal ----
+    // ---- red goal box: goal line → 2 m deep, 1 m beyond each post ----
+    const redHalf = GHALF + pxPerM;                 // 1 m beyond each post
     [ 'L', 'R' ].forEach(end => {
       const f = end === 'L' ? fromLeft : fromRight;
       const gx = end === 'L' ? WATER.x0 : WATER.x1;
       const x2 = f(2);
       const bx = Math.min(gx, x2), bw = Math.abs(x2 - gx);
-      svgEl.appendChild(svg('rect', { x: bx, y: cy - ghalf, width: bw, height: ghalf * 2,
-        fill: 'rgba(226,59,59,0.14)', stroke: '#ff3b3b', 'stroke-width': 1.2 }));
+      svgEl.appendChild(svg('rect', { x: bx, y: CY - redHalf, width: bw, height: redHalf * 2,
+        fill: 'rgba(226,59,59,0.10)', stroke: '#ff3b3b', 'stroke-width': 1.4 }));
     });
 
     // ---- goals ----
     [ WATER.x0, WATER.x1 ].forEach((gx, idx) => {
       const dir = idx === 0 ? -1 : 1;
       const net = svg('g', { stroke: '#cfeff3', 'stroke-width': 0.5, opacity: 0.6 });
-      for (let i = 1; i < 5; i++) net.appendChild(svg('line', { x1: gx + dir * (i * 1.2), y1: cy - ghalf, x2: gx + dir * (i * 1.2), y2: cy + ghalf }));
+      for (let i = 1; i < 5; i++) net.appendChild(svg('line', { x1: gx + dir * (i * 1.2), y1: CY - GHALF, x2: gx + dir * (i * 1.2), y2: CY + GHALF }));
       svgEl.appendChild(net);
-      const post = svg('g', { stroke: '#ffffff', 'stroke-width': 2.2, fill: 'none' });
-      post.appendChild(svg('line', { x1: gx, y1: cy - ghalf, x2: gx + dir * 6, y2: cy - ghalf }));
-      post.appendChild(svg('line', { x1: gx, y1: cy + ghalf, x2: gx + dir * 6, y2: cy + ghalf }));
-      post.appendChild(svg('line', { x1: gx + dir * 6, y1: cy - ghalf, x2: gx + dir * 6, y2: cy + ghalf }));
+      const post = svg('g', { stroke: '#ffffff', 'stroke-width': 2.4, fill: 'none' });
+      post.appendChild(svg('line', { x1: gx, y1: CY - GHALF, x2: gx + dir * 6, y2: CY - GHALF }));
+      post.appendChild(svg('line', { x1: gx, y1: CY + GHALF, x2: gx + dir * 6, y2: CY + GHALF }));
+      post.appendChild(svg('line', { x1: gx + dir * 6, y1: CY - GHALF, x2: gx + dir * 6, y2: CY + GHALF }));
       svgEl.appendChild(post);
     });
 
-    // ---- corner re-entry / exclusion markings on the field ----
-    [[WATER.x0, WATER.y0, 1, 1], [WATER.x1, WATER.y0, -1, 1], [WATER.x0, WATER.y1, 1, -1], [WATER.x1, WATER.y1, -1, -1]]
-      .forEach(([x, y, sx, sy]) => {
-        svgEl.appendChild(svg('path', { d: `M${x} ${y + sy*10} A 10 10 0 0 ${sx*sy>0?0:1} ${x + sx*10} ${y}`,
-          fill: 'none', stroke: '#e23b3b', 'stroke-width': 1.2, opacity: 0.85 }));
-        svgEl.appendChild(svg('rect', { x: x - 3, y: y - 3, width: 6, height: 6, fill: '#e23b3b', stroke: '#fff', 'stroke-width': 0.6 }));
-      });
+    // ---- goal-judge marks (top corners only) ----
+    [[WATER.x0, WATER.y0], [WATER.x1, WATER.y0]].forEach(([cx, cy]) => {
+      svgEl.appendChild(svg('rect', { x: cx - 3, y: cy - 3, width: 6, height: 6, fill: '#e23b3b', stroke: '#fff', 'stroke-width': 0.6 }));
+    });
 
-    // ---- waiting lanes ----
-    function lane(zone, fill, stroke, text) {
+    // ---- bottom staging: flying substitution (centre) + exclusion (corners) ----
+    function box(zone, fill, stroke) {
       svgEl.appendChild(svg('rect', { x: zone.x0, y: zone.y0, width: zone.x1 - zone.x0, height: zone.y1 - zone.y0,
         rx: 3, fill, stroke, 'stroke-width': 1, 'stroke-dasharray': '4 3' }));
-      label(svgEl, zone.x0 + 4, (zone.y0 + zone.y1) / 2 + 2.4, text, stroke, 'start', 6.5);
     }
-    lane(SUBZONE, 'rgba(15,58,47,0.65)', '#3fd08a', 'FLYING SUBSTITUTION');
-    lane(EXCZONE, 'rgba(58,28,28,0.6)', '#ff7a7a', 'EXCLUSION / RE-ENTRY');
+    box(SUBZONE, 'rgba(15,58,47,0.65)', '#3fd08a');
+    label(svgEl, (SUBZONE.x0 + SUBZONE.x1) / 2, SUBZONE.y1 + 9, 'FLYING SUBSTITUTION', '#8fe0bc', 'middle', 5.5);
+    [EXC_L, EXC_R].forEach(z => {
+      box(z, 'rgba(58,28,28,0.6)', '#ff7a7a');
+      label(svgEl, (z.x0 + z.x1) / 2, z.y1 + 9, 'RE-ENTRY', '#ff9e9e', 'middle', 5.5);
+    });
 
     const pathLayer = svg('g', { id: 'path-layer' });
     const discLayer = svg('g', { id: 'disc-layer' });
@@ -171,10 +178,10 @@ const POOL = (() => {
     return g;
   }
 
-  // stacked slot inside a waiting lane — anchored at the right, filling leftward,
-  // so discs stay clear of the left-aligned lane label.
+  // stacked slot inside a zone — right-anchored, filling leftward
   function stackPos(zone, i) {
-    const rightX = zone.x1 - 14, gap = 17, perRow = Math.max(1, Math.floor((zone.x1 - zone.x0 - 130) / gap));
+    const rightX = zone.x1 - 12, gap = 16;
+    const perRow = Math.max(1, Math.floor((zone.x1 - zone.x0 - 12) / gap));
     const col = i % perRow;
     return { x: rightX - col * gap, y: zone.cy };
   }
@@ -189,23 +196,23 @@ const POOL = (() => {
   }
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const inX = (z, x) => x >= z.x0 - 6 && x <= z.x1 + 6;
   function clampToWater(p) {
     return { x: clamp(p.x, WATER.x0 + 4, WATER.x1 - 4), y: clamp(p.y, WATER.y0 + 4, WATER.y1 - 4) };
   }
-  // allow dropping into water OR either waiting lane
+  // allow dropping into water OR any bottom staging zone
   function clampAnywhere(p) {
-    if (p.y >= SUBZONE.y0 - 8 && p.y <= SUBZONE.y1 + 6)
-      return { x: clamp(p.x, SUBZONE.x0 + 6, SUBZONE.x1 - 6), y: SUBZONE.cy };
-    if (p.y >= EXCZONE.y0 - 8)
-      return { x: clamp(p.x, EXCZONE.x0 + 6, EXCZONE.x1 - 6), y: EXCZONE.cy };
+    if (p.y >= WATER.y1 + 2) {
+      const z = inX(EXC_R, p.x) ? EXC_R : inX(EXC_L, p.x) ? EXC_L : SUBZONE;
+      return { x: clamp(p.x, z.x0 + 6, z.x1 - 6), y: z.cy };
+    }
     return clampToWater(p);
   }
   function zoneOf(p) {
-    if (p.y >= SUBZONE.y0 - 8 && p.y <= SUBZONE.y1 + 6) return 'sub';
-    if (p.y >= EXCZONE.y0 - 8) return 'exc';
+    if (p.y >= WATER.y1 + 2) return (inX(EXC_R, p.x) || inX(EXC_L, p.x)) ? 'exc' : 'sub';
     return 'water';
   }
 
-  return { VB, WATER, SUBZONE, EXCZONE, pxPerM, fromLeft, fromRight, svg, render, disc, ball,
+  return { VB, WATER, SUBZONE, EXCZONE, EXC_L, EXC_R, pxPerM, fromLeft, fromRight, svg, render, disc, ball,
            stackPos, eventToVB, clampToWater, clampAnywhere, zoneOf };
 })();

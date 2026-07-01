@@ -177,9 +177,10 @@ em{color:var(--ink-faint);font-style:italic}
 .form-row label{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint)}
 .form-row input,.form-row select{background:var(--bg2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:10px 12px;font-size:14px;font-family:inherit}
 .form-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.editor-pool-wrap{background:#091420;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:6px 0 12px}
-/* let the editor SVG size itself from its viewBox (robust across browsers) */
-#editor-pool{display:block;width:100%;height:auto}
+/* ratio box (262/320 = 81.875%) so the editor pool always has height,
+   independent of SVG intrinsic sizing — bulletproof across browsers */
+.editor-pool-wrap{position:relative;width:100%;height:0;padding-top:81.875%;background:#091420;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:6px 0 12px}
+#editor-pool{position:absolute;inset:0;width:100%;height:100%;display:block}
 .editor-frames{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-bottom:8px}
 .ef-left,.ef-right{display:flex;flex-direction:column;gap:7px}
 .ef-right{flex:1;min-width:200px}
