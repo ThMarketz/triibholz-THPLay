@@ -178,7 +178,7 @@
       html += `<div class="dash-grid">
         ${card('accent', `<span class="dc-k">Your position</span><span class="dc-v big">${u.position||'—'}</span><span class="dc-note">Tap “My position” in any play to see only your movement.</span>`)}
         ${card('', `<span class="dc-k">Plays to know</span><span class="dc-v big">${total}</span><span class="dc-note">across 6v6 → 1‑on‑GK, offense & defense</span>`)}
-        ${card('', `<span class="dc-k">Trivia best</span><span class="dc-v big">${u.triviaBest||0}<small>/${DATA.TRIVIA.length}</small></span><button class="btn-primary sm" data-go="trivia">Take the quiz</button>`)}
+        ${card('', `<span class="dc-k">Trivia best</span><span class="dc-v big">${u.triviaBest||0}<small>/${DATA.TRIVIA.length}</small></span><span class="dc-note">🏛️ History & legends: ${u.triviaBestHist||0}/${(DATA.TRIVIA_HISTORY||[]).length}</span><button class="btn-primary sm" data-go="trivia">Take the quiz</button>`)}
       </div>
       <div class="progress-card">
         <div class="pc-item"><span class="pc-v">${u.xp||0}</span><span class="pc-k">XP</span></div>
@@ -462,32 +462,49 @@
   /* ======================================================
      TRIVIA
      ====================================================== */
-  const trivia = { i:0, score:0, answered:false };
+  const trivia = { set:null, i:0, score:0, answered:false };
+  function triviaSets(){ return DATA.TRIVIA_SETS || [{ id:'rules', icon:'📘', label:'Rules & basics', questions: DATA.TRIVIA }]; }
+  function bestField(setId){ return setId==='history' ? 'triviaBestHist' : 'triviaBest'; }
   function renderTrivia() {
-    trivia.i = 0; trivia.score = 0; trivia.answered = false;
+    trivia.set = null; trivia.i = 0; trivia.score = 0; trivia.answered = false;
     const v = $('view-trivia');
+    const sets = triviaSets();
     v.innerHTML = `<div class="trivia-wrap"><div class="trivia-card" id="trivia-card">
       <div class="trivia-intro">
         <span class="dc-k">Knowledge check</span>
         <h1>${(typeof I18N!=='undefined')?I18N.t('trivia.title'):'Water Polo Trivia'}</h1>
-        <p class="dash-sub">${DATA.TRIVIA.length} questions on rules, positions & tactics. Your best score is saved to your profile.</p>
-        <p class="dash-sub">Your best so far: <strong>${state.user.triviaBest||0}/${DATA.TRIVIA.length}</strong></p>
-        <button class="btn-primary" id="trivia-start">${(typeof I18N!=='undefined')?I18N.t('trivia.start'):'Start quiz'}</button>
+        <p class="dash-sub">Pick a quiz — your best score for each is saved to your profile.</p>
+        <div class="trivia-sets">
+          ${sets.map(st=>`
+            <div class="trivia-set">
+              <span class="ts-icon">${st.icon}</span>
+              <div class="ts-main"><strong>${escapeHtml(st.label)}</strong>
+                <span class="ts-sub">${st.questions.length} questions · best ${state.user[bestField(st.id)]||0}/${st.questions.length}</span></div>
+              <button class="btn-primary sm" id="trivia-start${st.id==='rules'?'':'-'+st.id}" data-set="${st.id}">
+                ${(typeof I18N!=='undefined')?I18N.t('trivia.start'):'Start quiz'}</button>
+            </div>`).join('')}
+        </div>
       </div></div></div>`;
-    $('trivia-start').onclick = () => showQuestion();
+    v.querySelectorAll('[data-set]').forEach(b=> b.onclick=()=> startSet(b.dataset.set));
+  }
+  function startSet(id){
+    trivia.set = triviaSets().find(s=>s.id===id) || triviaSets()[0];
+    trivia.i = 0; trivia.score = 0; trivia.answered = false;
+    showQuestion();
   }
   function showQuestion() {
-    const c = $('trivia-card'); const item = DATA.TRIVIA[trivia.i];
+    const qs = trivia.set.questions;
+    const c = $('trivia-card'); const item = qs[trivia.i];
     trivia.answered = false;
     c.innerHTML = `<div class="trivia-q">
-      <div class="trivia-prog">Question ${trivia.i+1} / ${DATA.TRIVIA.length} · Score ${trivia.score}</div>
+      <div class="trivia-prog">${trivia.set.icon} ${escapeHtml(trivia.set.label)} · Question ${trivia.i+1} / ${qs.length} · Score ${trivia.score}</div>
       <h2>${escapeHtml(item.q)}</h2>
       <div class="trivia-opts">${item.a.map((opt,idx)=>`<button class="trivia-opt" data-idx="${idx}">${escapeHtml(opt)}</button>`).join('')}</div>
       <div class="trivia-why" id="trivia-why" hidden></div>
-      <button class="btn-primary" id="trivia-next" hidden>${trivia.i===DATA.TRIVIA.length-1?'See result':'Next'}</button>
+      <button class="btn-primary" id="trivia-next" hidden>${trivia.i===qs.length-1?'See result':'Next'}</button>
     </div>`;
     c.querySelectorAll('.trivia-opt').forEach(b => b.onclick = () => answer(parseInt(b.dataset.idx,10), item));
-    $('trivia-next').onclick = () => { trivia.i++; if (trivia.i>=DATA.TRIVIA.length) finishTrivia(); else showQuestion(); };
+    $('trivia-next').onclick = () => { trivia.i++; if (trivia.i>=qs.length) finishTrivia(); else showQuestion(); };
   }
   function answer(idx, item) {
     if (trivia.answered) return; trivia.answered = true;
@@ -502,13 +519,14 @@
     $('trivia-next').hidden = false;
   }
   function finishTrivia() {
-    const total = DATA.TRIVIA.length;
-    DATA.setTriviaBest(state.user.email, trivia.score);
+    const total = trivia.set.questions.length;
+    const field = bestField(trivia.set.id);
+    DATA.setTriviaBest(state.user.email, trivia.score, field);
     DATA.awardXp(state.user.email, trivia.score*10);
-    if (trivia.score===total) DATA.addBadge(state.user.email, 'trivia-ace');
-    DATA.logActivity('trivia', `${state.user.name} scored ${trivia.score}/${total} on trivia`, state.user.name);
+    if (trivia.score===total) DATA.addBadge(state.user.email, trivia.set.id==='history' ? 'historian' : 'trivia-ace');
+    DATA.logActivity('trivia', `${state.user.name} scored ${trivia.score}/${total} on ${trivia.set.label} trivia`, state.user.name);
     if (typeof FX!=='undefined') {
-      if (trivia.score===total) FX.celebrate('Perfect!', total+'/'+total+' — Trivia Ace');
+      if (trivia.score===total) FX.celebrate('Perfect!', total+'/'+total+(trivia.set.id==='history'?' — Historian':' — Trivia Ace'));
       else if (trivia.score/total>=0.6) { FX.confetti(50); FX.sound('pop'); }
     }
     state.user = DATA.findUserByEmail(state.user.email);

@@ -477,9 +477,10 @@ const DATA = (() => {
     const u = loadUsers(); const x = u.find(y => y.id === id);
     if (x) { x.role = role; saveUsers(u); } return x;
   }
-  function setTriviaBest(email, score) {
+  function setTriviaBest(email, score, field) {
+    field = field || 'triviaBest';
     const u = loadUsers(); const x = u.find(y => y.email === email);
-    if (x && score > (x.triviaBest||0)) { x.triviaBest = score; saveUsers(u); } return x;
+    if (x && score > (x[field]||0)) { x[field] = score; saveUsers(u); } return x;
   }
 
   /* ---- gamification: XP, streaks, badges ---- */
@@ -490,6 +491,7 @@ const DATA = (() => {
     'challenger':  { icon:'🏆', label:'Challenger' },
     'polyglot':    { icon:'🌍', label:'Polyglot' },
     'streak-3':    { icon:'🔥', label:'3-Day Streak' },
+    'historian':   { icon:'🏛️', label:'Historian' },
   };
   function today(){ try { return new Date().toISOString().slice(0,10); } catch(e){ return '0'; } }
   function awardXp(email, n) {
@@ -590,9 +592,80 @@ const DATA = (() => {
       why:'Rule 5.1: two 1-minute timeouts, callable only by the team in possession — even right after a goal.' },
   ];
 
+  /* ---------------- trivia bank: history & legends ----------------
+     Sources: waterpolo.hu/archivum (Hungarian federation archive),
+     history of water polo (Wikipedia/World Aquatics). Verified 2026-07. */
+  const TRIVIA_HISTORY = [
+    { q:'Where and when did water polo originate?',
+      a:['19th-century Britain, in rivers and lakes','Ancient Greece','1920s USA'], correct:0,
+      why:'It grew out of rugby-style ball games played in British rivers and lakes from the 1850s–70s.' },
+    { q:'Who wrote the sport’s first set of rules?',
+      a:['William Wilson, a Glasgow swimming instructor','Pierre de Coubertin','James Naismith'], correct:0,
+      why:'Wilson, working at the Arlington Baths Club in Glasgow, drew up the early rules.' },
+    { q:'What was the game first called?',
+      a:['“Water rugby”','“Pool ball”','“Aqua handball”'], correct:0,
+      why:'Early names included water rugby and aquatic football — the rough rugby roots showed.' },
+    { q:'Where does the word “polo” come from?',
+      a:['The Balti/Tibetan word “pulu”, meaning ball','The Italian city of Empoli','The Latin for “pool”'], correct:0,
+      why:'English speakers borrowed “pulu” (ball) — the same root as horseback polo.' },
+    { q:'One of the first recorded matches (1873) was played at…',
+      a:['Crystal Palace, London','Lake Balaton','Coney Island, New York'], correct:0,
+      why:'A match at London’s Crystal Palace on 15 September 1873 is among the earliest recorded.' },
+    { q:'The earliest games were played with what kind of ball?',
+      a:['An India-rubber ball','A modern yellow water polo ball','A wooden ball'], correct:0,
+      why:'The rubber ball came straight from the sport’s river-rugby origins.' },
+    { q:'When did water polo join the Olympic Games?',
+      a:['Paris 1900 — among the first team sports at the Olympics','Athens 1896','Berlin 1936'], correct:0,
+      why:'Water polo was in the very first wave of Olympic team sports at Paris 1900.' },
+    { q:'Which nation has won the most Olympic water polo golds?',
+      a:['Hungary — nine','Italy','USA'], correct:0,
+      why:'Hungary has 9 golds (1932, 1936, 1952, 1956, 1964, 1976, 2000, 2004, 2008); no other nation has more than four.' },
+    { q:'When did Hungary first play Olympic water polo?',
+      a:['Stockholm 1912','Paris 1900','Helsinki 1952'], correct:0,
+      why:'Hungary debuted at Stockholm 1912, finishing 5th — the start of the sport’s greatest dynasty.' },
+    { q:'The famous 1956 “Blood in the Water” match in Melbourne was…',
+      a:['Hungary beating the USSR 4–0 in the semi-final','A final Hungary lost','A friendly'], correct:0,
+      why:'Weeks after the Hungarian uprising was crushed, Hungary beat the Soviet Union 4–0 and went on to win gold.' },
+    { q:'Which Hungarian player left the 1956 USSR match bleeding, giving it its name?',
+      a:['Ervin Zádor','Dezső Gyarmati','Tamás Faragó'], correct:0,
+      why:'Valentin Prokopov struck Ervin Zádor above the eye in the final minute.' },
+    { q:'Dezső Gyarmati’s Olympic record is…',
+      a:['Medals at five straight Games (3 gold, 1 silver, 1 bronze)','Two golds','One silver'], correct:0,
+      why:'Gyarmati medalled at every Games from 1948 to 1964 — gold in 1952, 1956 and 1964.' },
+    { q:'Who coached Hungary to three consecutive Olympic golds (2000, 2004, 2008)?',
+      a:['Dénes Kemény','Tibor Benedek','Ratko Rudić'], correct:0,
+      why:'Kemény’s golden team completed the triple in Sydney, Athens and Beijing.' },
+    { q:'When was the first men’s World Championship, and who won it?',
+      a:['1973 in Belgrade — Hungary','1954 in Rome — Italy','1986 in Madrid — Spain'], correct:0,
+      why:'The first FINA World Championship title in 1973 went to Hungary.' },
+    { q:'Which nation won the 2023 men’s World Championship in Fukuoka?',
+      a:['Hungary','Serbia','Spain'], correct:0,
+      why:'Hungary took the 2023 world title in Fukuoka — a modern chapter of the tradition.' },
+    { q:'When did women’s water polo become Olympic?',
+      a:['Sydney 2000 — Australia won with a last-second goal','Los Angeles 1984','Moscow 1980'], correct:0,
+      why:'Women debuted at Sydney 2000; the hosts beat the USA with a dramatic late winner.' },
+    { q:'Manuel Estiarte of Spain is famous for…',
+      a:['Playing in six Olympic Games','Inventing the eggbeater','Coaching Hungary'], correct:0,
+      why:'Estiarte competed at six Olympics and was the Games’ top scorer four times.' },
+    { q:'Which Hollywood “Tarzan” also won an Olympic water polo medal?',
+      a:['Johnny Weissmuller','Clint Eastwood','Buster Crabbe'], correct:0,
+      why:'Swimming legend Weissmuller took water polo bronze with the USA at Paris 1924 — then played Tarzan.' },
+    { q:'Italy’s men’s national team is nicknamed…',
+      a:['Settebello — “the beautiful seven”','Gli Squali — “the sharks”','La Máquina'], correct:0,
+      why:'Settebello, after the prized seven card in the Italian game of scopa.' },
+    { q:'Which nation won three consecutive Olympic golds in 2016, 2021 and 2024?',
+      a:['Serbia','Croatia','Greece'], correct:0,
+      why:'Serbia won Rio 2016, Tokyo 2020(21) and Paris 2024 — the modern powerhouse.' },
+  ];
+
+  const TRIVIA_SETS = [
+    { id:'rules',   icon:'📘',  label:'Rules & basics',    questions: TRIVIA },
+    { id:'history', icon:'🏛️', label:'History & legends', questions: TRIVIA_HISTORY },
+  ];
+
   return { SITUATIONS, sit, DEFAULTS, defaultFrame, blankNotes, clone, load, save, reset, newScenario, GK_POS,
            waitDisc,
            ROLES, roleLabel, loadUsers, saveUsers, upsertUser, findUserByEmail, setUserStatus, setUserRole,
-           setTriviaBest, loadActivity, logActivity, nowStamp, TRIVIA,
+           setTriviaBest, loadActivity, logActivity, nowStamp, TRIVIA, TRIVIA_HISTORY, TRIVIA_SETS,
            BADGES, awardXp, addBadge, touchStreak };
 })();
