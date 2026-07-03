@@ -137,6 +137,38 @@ const ANIM = (() => {
     const layers = POOL.render(svgEl);
     let discEls = {};   // cache disc <g> by key e.g. 'A1','D2','GK'
 
+    /* ---- water FX: swim wakes + catch splashes (playback only) ---- */
+    const REDUCED = (typeof matchMedia === 'function') && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const lastPts = {}, lastSplash = {};
+    let ballPos = null;
+    function spawnSplash(x, y, size) {
+      if (REDUCED || !layers.splashLayer) return;
+      const sl = layers.splashLayer;
+      while (sl.childElementCount > 34) sl.removeChild(sl.firstChild);
+      const g = POOL.svg('g', { class: 'splash', transform: `translate(${x.toFixed(1)},${y.toFixed(1)})` });
+      const inner = POOL.svg('g', { class: 'splash-anim' });
+      inner.appendChild(POOL.svg('circle', { r: size, fill: 'none', stroke: '#eafcff', 'stroke-width': 1.1, opacity: 0.85 }));
+      inner.appendChild(POOL.svg('circle', { r: size * 0.45, fill: '#eafcff', opacity: 0.5 }));
+      g.appendChild(inner);
+      sl.appendChild(g);
+      setTimeout(() => { if (g.parentNode) g.parentNode.removeChild(g); }, 750);
+    }
+    // a swimming disc kicks up a wake every few pixels of TRAVELLED distance
+    // (per-frame deltas are sub-pixel at 60 fps, so we anchor on the last splash)
+    function maybeWake(key, p, playing, isBall) {
+      if (!playing) { lastPts[key] = { x: p.x, y: p.y }; return; }   // scrubbing never splashes
+      const anchor = lastPts[key];
+      if (!anchor) { lastPts[key] = { x: p.x, y: p.y }; return; }
+      const d = Math.hypot(p.x - anchor.x, p.y - anchor.y);
+      if (d < (isBall ? 9 : 6)) return;
+      const now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+      if (lastSplash[key] && now - lastSplash[key] < 110) return;
+      lastSplash[key] = now;
+      lastPts[key] = { x: p.x, y: p.y };
+      spawnSplash(anchor.x, anchor.y, isBall ? 4.2 : 4.6);
+    }
+    function ballBurst() { if (ballPos) spawnSplash(ballPos.x, ballPos.y, 7); }
+
     function ensureDisc(key, team, label, small) {
       if (discEls[key]) return discEls[key];
       const g = POOL.disc(team, label, small);
@@ -160,7 +192,7 @@ const ANIM = (() => {
     function drawPaths(scenario, focusPos) { drawTactics(layers, scenario, focusPos); }
 
     // render a state (interpolated or a single frame's geometry)
-    function renderState(scenario, state, focusPos) {
+    function renderState(scenario, state, focusPos, playing) {
       const dimOthers = !!focusPos;
       // attackers
       const seen = new Set();
@@ -171,6 +203,7 @@ const ANIM = (() => {
         const focused = focusPos==='GK'? false : (focusPos && String(focusPos)===String(pos));
         g.style.opacity = dimOthers ? (focused?'1':'0.35') : '1';
         g.classList.toggle('focused', focused);
+        maybeWake('A'+pos, state.att[pos], playing);
       });
       Object.keys(state.def).forEach(pos => {
         const key='D'+pos; seen.add(key);
@@ -178,6 +211,7 @@ const ANIM = (() => {
         place(g, state.def[pos]);
         g.style.opacity = dimOthers ? '0.3' : '1';
         g.classList.remove('focused');
+        maybeWake('D'+pos, state.def[pos], playing);
       });
       if (state.gk) {
         const key='GK'; seen.add(key);
@@ -186,6 +220,7 @@ const ANIM = (() => {
         const focused = focusPos==='GK';
         g.style.opacity = dimOthers ? (focused?'1':'0.35') : '1';
         g.classList.toggle('focused', focused);
+        maybeWake('GK', state.gk, playing);
       }
       // waiting / extra discs
       (state.extra || []).forEach((e, i) => {
@@ -204,6 +239,8 @@ const ANIM = (() => {
       const b = ensureBall();
       place(b, state.ball);
       b.style.opacity = dimOthers ? '0.95' : '1';
+      ballPos = state.ball;
+      maybeWake('__ball', state.ball, playing, true);
     }
 
     function draw(scenario, opts) {
@@ -211,12 +248,12 @@ const ANIM = (() => {
       const t = opts.t != null ? opts.t : 0;
       if (opts.showPaths !== false) drawPaths(scenario, opts.focusPos);
       else clearPaths();
-      renderState(scenario, stateAt(scenario, t), opts.focusPos);
+      renderState(scenario, stateAt(scenario, t), opts.focusPos, !!opts.playing);
     }
 
     function destroy() { discEls = {}; }
 
-    return { draw, drawPaths, renderState, clearPaths, layers, destroy, svgEl };
+    return { draw, drawPaths, renderState, clearPaths, ballBurst, layers, destroy, svgEl };
   }
 
   /* ---------- Player: drives a Renderer over time ---------- */
@@ -229,7 +266,14 @@ const ANIM = (() => {
     function setFocus(p){ focusPos=p||null; render(); }
     function setPaths(v){ showPaths=v; render(); }
 
-    function render(){ renderer.draw(scenario, { t, focusPos, showPaths }); if(onFrame) onFrame(t, currentStep(), segCount()); }
+    let prevStep = null;
+    function render(){
+      renderer.draw(scenario, { t, focusPos, showPaths, playing });
+      const st = currentStep();
+      if (playing && prevStep != null && st !== prevStep) renderer.ballBurst();  // catch splash
+      prevStep = st;
+      if(onFrame) onFrame(t, st, segCount());
+    }
 
     function currentStep(){
       // nearest frame index for the step label

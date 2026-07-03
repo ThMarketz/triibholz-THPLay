@@ -69,6 +69,15 @@ const POOL = (() => {
     const fl = svg('filter', { id: 'discShadow', x: '-40%', y: '-40%', width: '180%', height: '180%' });
     fl.appendChild(svg('feDropShadow', { dx: '0', dy: '1.2', stdDeviation: '1.4', 'flood-color': '#00131a', 'flood-opacity': '0.45' }));
     defs.appendChild(fl);
+    // clip for the animated water layers + a soft light sheen
+    const clip = svg('clipPath', { id: 'waterClip' });
+    clip.appendChild(svg('rect', { x: WATER.x0, y: WATER.y0, width: WATER.w, height: WATER.h }));
+    defs.appendChild(clip);
+    const sheen = svg('radialGradient', { id: 'waterSheen', cx: '0.3', cy: '0.18', r: '0.9' });
+    sheen.appendChild(svg('stop', { offset: '0', 'stop-color': '#ffffff', 'stop-opacity': '0.16' }));
+    sheen.appendChild(svg('stop', { offset: '0.55', 'stop-color': '#ffffff', 'stop-opacity': '0.04' }));
+    sheen.appendChild(svg('stop', { offset: '1', 'stop-color': '#ffffff', 'stop-opacity': '0' }));
+    defs.appendChild(sheen);
     svgEl.appendChild(defs);
 
     // deck
@@ -83,12 +92,19 @@ const POOL = (() => {
 
     // water
     svgEl.appendChild(svg('rect', { x: WATER.x0, y: WATER.y0, width: WATER.w, height: WATER.h, fill: 'url(#waterGrad)', stroke: '#0a5860', 'stroke-width': 1.5 }));
-    const ripples = svg('g', { opacity: '0.10', stroke: '#eafcff', 'stroke-width': '1', fill: 'none' });
-    for (let i = 0; i < 4; i++) {
-      const yy = WATER.y0 + 32 + i * 36;
-      ripples.appendChild(svg('path', { d: `M${WATER.x0} ${yy} q 18 -6 36 0 t 36 0 t 36 0 t 36 0 t 36 0 t 36 0 t 36 0` }));
-    }
-    svgEl.appendChild(ripples);
+    // living water: two ripple layers drift in opposite directions (CSS keyframes),
+    // drawn wider than the pool and clipped so the loop is seamless
+    const wavePath = (yy) => `M${WATER.x0 - 72} ${yy} q 18 -6 36 0` + ' t 36 0'.repeat(11);
+    const mkRipples = (cls, ys, w, op) => {
+      const g = svg('g', { class: cls, stroke: '#eafcff', 'stroke-width': w, fill: 'none',
+        opacity: op, 'clip-path': 'url(#waterClip)' });
+      ys.forEach(yy => g.appendChild(svg('path', { d: wavePath(yy) })));
+      svgEl.appendChild(g);
+    };
+    mkRipples('ripples-a', [62, 98, 134, 170].map(y=>y-32+WATER.y0-30+32), 1, 0.10);
+    mkRipples('ripples-b', [46, 80, 116, 152, 186].map(y=>y-32+WATER.y0-30+32), 0.8, 0.07);
+    svgEl.appendChild(svg('rect', { x: WATER.x0, y: WATER.y0, width: WATER.w, height: WATER.h,
+      fill: 'url(#waterSheen)', 'pointer-events': 'none' }));
     svgEl.appendChild(svg('rect', { x: WATER.x0, y: WATER.y0, width: WATER.w, height: WATER.h, fill: 'none', stroke: '#2bd07a', 'stroke-width': 1.5, opacity: 0.85 }));
 
     const lineG = svg('g', { 'stroke-width': 1.6 });
@@ -170,10 +186,12 @@ const POOL = (() => {
     bracket(WATER.x1, WATER.y1, -1, -1);  // bottom-right
 
     const pathLayer = svg('g', { id: 'path-layer' });
+    const splashLayer = svg('g', { id: 'splash-layer', 'clip-path': 'url(#waterClip)' });
     const discLayer = svg('g', { id: 'disc-layer' });
     svgEl.appendChild(pathLayer);
+    svgEl.appendChild(splashLayer);
     svgEl.appendChild(discLayer);
-    return { pathLayer, discLayer, WATER };
+    return { pathLayer, splashLayer, discLayer, WATER };
   }
 
   /* Build a player disc <g>. team: 'A' white | 'D' black | 'GK' red. small=waiting */

@@ -488,3 +488,16 @@ em{color:var(--ink-faint);font-style:italic}
 .ts-main strong{font-size:14.5px}
 .ts-sub{font-size:11.5px;color:var(--ink-faint)}
 .trivia-set .btn-primary.sm{margin-top:0}
+
+/* ========== living water ========== */
+.ripples-a{animation:waveDriftA 11s linear infinite}
+.ripples-b{animation:waveDriftB 17s linear infinite}
+@keyframes waveDriftA{to{transform:translateX(72px)}}
+@keyframes waveDriftB{to{transform:translateX(-72px)}}
+.splash{pointer-events:none}
+.splash-anim{transform-box:fill-box;transform-origin:center;animation:splashPop .7s ease-out forwards}
+@keyframes splashPop{0%{opacity:.95;transform:scale(.35)}65%{opacity:.55}100%{opacity:0;transform:scale(1.75)}}
+@media (prefers-reduced-motion: reduce){
+  .ripples-a,.ripples-b{animation:none}
+  .splash{display:none}
+}
