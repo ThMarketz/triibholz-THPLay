@@ -26,12 +26,12 @@ const DATA = (() => {
 
   const DEFAULTS = {
     '6v6': {
-      att: { 1:{x:252,y:58}, 2:{x:236,y:84}, 3:{x:228,y:110}, 4:{x:236,y:136}, 5:{x:252,y:162}, 6:{x:276,y:110} },
-      def: { 1:{x:266,y:64}, 2:{x:256,y:88}, 3:{x:250,y:110}, 4:{x:256,y:132}, 5:{x:266,y:156}, 6:{x:284,y:110} },
+      att: { 1:{x:258,y:50}, 2:{x:234,y:82}, 3:{x:226,y:110}, 4:{x:234,y:138}, 5:{x:258,y:170}, 6:{x:271,y:110} },
+      def: { 1:{x:271,y:57}, 2:{x:250,y:88}, 3:{x:242,y:110}, 4:{x:250,y:132}, 5:{x:271,y:163}, 6:{x:281,y:122} },
       gk: GK_POS, ball: 'A3',
     },
     '6v5': {
-      att: { 1:{x:246,y:58}, 2:{x:230,y:86}, 3:{x:226,y:110}, 4:{x:230,y:134}, 5:{x:246,y:162}, 6:{x:276,y:110} },
+      att: { 1:{x:246,y:54}, 2:{x:228,y:84}, 3:{x:226,y:110}, 4:{x:228,y:136}, 5:{x:246,y:166}, 6:{x:271,y:110} },
       def: { 1:{x:260,y:82}, 2:{x:260,y:138}, 3:{x:278,y:92}, 4:{x:278,y:128}, 5:{x:286,y:110} },
       gk: GK_POS, ball: 'A3',
     },
@@ -656,11 +656,20 @@ const DATA = (() => {
     { q:'Which nation won three consecutive Olympic golds in 2016, 2021 and 2024?',
       a:['Serbia','Croatia','Greece'], correct:0,
       why:'Serbia won Rio 2016, Tokyo 2020(21) and Paris 2024 — the modern powerhouse.' },
+    { q:'Story time: who won the very first Olympic water polo gold, Paris 1900?',
+      a:['A British club side — the Osborne Swimming Club','A French navy team','A university all-star team'], correct:0,
+      why:'Nations sent clubs back then — Manchester’s Osborne Swimming Club took the first gold for Great Britain.' },
+    { q:'Story time: what was odd about the 1904 St. Louis Olympic tournament?',
+      a:['Only American club teams entered','It was played in the sea','Matches lasted one hour'], correct:0,
+      why:'No foreign teams made the trip, so three US clubs played it out — New York AC took the title.' },
+    { q:'Story time: why is the modern ball bright yellow?',
+      a:['So players, referees and spectators can see it better','It floats better','A sponsor chose it'], correct:0,
+      why:'The early leather balls soaked up water and turned dark and slippery — the yellow ball fixed visibility for everyone, including TV.' },
   ];
 
   const TRIVIA_SETS = [
     { id:'rules',   icon:'📘',  label:'Rules & basics',    questions: TRIVIA },
-    { id:'history', icon:'🏛️', label:'History & legends', questions: TRIVIA_HISTORY },
+    { id:'history', icon:'🏛️', label:'History, legends & stories', questions: TRIVIA_HISTORY },
   ];
 
   return { SITUATIONS, sit, DEFAULTS, defaultFrame, blankNotes, clone, load, save, reset, newScenario, GK_POS,

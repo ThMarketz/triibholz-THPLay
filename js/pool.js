@@ -18,7 +18,7 @@ const POOL = (() => {
   const fromLeft  = (m) => WATER.x0 + m * pxPerM;
   const fromRight = (m) => WATER.x1 - m * pxPerM;
   const CY = WATER.y0 + WATER.h / 2;      // 110
-  const GHALF = WATER.h * 0.16;           // half goal-mouth (board scale)
+  const GHALF = 1.5 * pxPerM;             // half goal-mouth — true 3 m goal
 
   // ---- staging zones ----
   // Flying substitution: strip along the bottom (-Y) side.
@@ -61,9 +61,11 @@ const POOL = (() => {
     grad.appendChild(svg('stop', { offset: '0', 'stop-color': '#1aa3b0' }));
     grad.appendChild(svg('stop', { offset: '1', 'stop-color': '#0c7f8c' }));
     defs.appendChild(grad);
-    const mk = svg('marker', { id: 'arrow', viewBox: '0 0 10 10', refX: '8', refY: '5', markerWidth: '6', markerHeight: '6', orient: 'auto-start-reverse' });
-    mk.appendChild(svg('path', { d: 'M0 0 L10 5 L0 10 z', fill: 'currentColor' }));
-    defs.appendChild(mk);
+    [['arrow','#eafdff'],['arrowBall','#ffb057'],['arrowCtx','#ff8a8a']].forEach(([id,fill])=>{
+      const mk = svg('marker', { id, viewBox: '0 0 10 10', refX: '7.5', refY: '5', markerWidth: '5.5', markerHeight: '5.5', orient: 'auto-start-reverse' });
+      mk.appendChild(svg('path', { d: 'M0 0 L10 5 L0 10 z', fill }));
+      defs.appendChild(mk);
+    });
     const fl = svg('filter', { id: 'discShadow', x: '-40%', y: '-40%', width: '180%', height: '180%' });
     fl.appendChild(svg('feDropShadow', { dx: '0', dy: '1.2', stdDeviation: '1.4', 'flood-color': '#00131a', 'flood-opacity': '0.45' }));
     defs.appendChild(fl);
@@ -177,13 +179,13 @@ const POOL = (() => {
   /* Build a player disc <g>. team: 'A' white | 'D' black | 'GK' red. small=waiting */
   function disc(team, labelTxt, small) {
     const g = svg('g', { class: 'disc' + (small ? ' wait' : ''), 'data-team': team, 'data-label': labelTxt });
-    const r = small ? 6.6 : 8.5;
+    const r = small ? 5.2 : 6.6;   // compact discs — the tactics must stay readable
     let fill = '#ffffff', stroke = '#0b1f2c', txt = '#0b1f2c';
     if (team === 'D') { fill = '#11151c'; stroke = '#000'; txt = '#ffffff'; }
     if (team === 'GK') { fill = '#e23b3b'; stroke = '#7a0f0f'; txt = '#ffffff'; }
     g.appendChild(svg('circle', { r, fill, stroke, 'stroke-width': 1.6, filter: 'url(#discShadow)' }));
-    const t = svg('text', { 'text-anchor': 'middle', y: small ? 2.6 : 3.2, fill: txt,
-      'font-size': small ? 7 : 9, 'font-weight': 800, 'font-family': 'Helvetica, Arial, sans-serif' });
+    const t = svg('text', { 'text-anchor': 'middle', y: small ? 2.1 : 2.6, fill: txt,
+      'font-size': small ? 5.8 : 7.4, 'font-weight': 800, 'font-family': 'Helvetica, Arial, sans-serif' });
     t.textContent = labelTxt;
     g.appendChild(t);
     return g;
@@ -191,15 +193,15 @@ const POOL = (() => {
 
   function ball() {
     const g = svg('g', { class: 'ball' });
-    g.appendChild(svg('circle', { r: 4.4, fill: '#ff7a18', stroke: '#9c3d00', 'stroke-width': 1, filter: 'url(#discShadow)' }));
-    g.appendChild(svg('path', { d: 'M-3.6 -1.4 q3.6 -2.6 7.2 0 M-3.6 1.4 q3.6 2.6 7.2 0', stroke: '#fff', 'stroke-width': 0.7, fill: 'none', opacity: .85 }));
+    g.appendChild(svg('circle', { r: 3.6, fill: '#ff7a18', stroke: '#9c3d00', 'stroke-width': 1, filter: 'url(#discShadow)' }));
+    g.appendChild(svg('path', { d: 'M-2.9 -1.1 q2.9 -2.1 5.8 0 M-2.9 1.1 q2.9 2.1 5.8 0', stroke: '#fff', 'stroke-width': 0.6, fill: 'none', opacity: .85 }));
     return g;
   }
 
   // stacked slot inside a zone — grid, filling from the right, wrapping downward
   // (narrow corner boxes therefore stack vertically)
   function stackPos(zone, i) {
-    const gap = 15;
+    const gap = 12;
     const perRow = Math.max(1, Math.floor((zone.x1 - zone.x0 - 4) / gap));
     const col = i % perRow, row = Math.floor(i / perRow);
     return { x: (zone.x1 - 8) - col * gap, y: zone.y0 + 10 + row * 14 };

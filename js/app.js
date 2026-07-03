@@ -762,7 +762,9 @@
 
   function openEditor(scn, isNew) {
     edit.scenario = DATA.clone(scn); edit.idx = 0; edit.isNew = isNew;
+    edit.origTitle = scn.title || '';
     $('editor-title').textContent = isNew ? 'New scenario' : 'Edit scenario';
+    $('ed-saveas').hidden = isNew;
     $('ed-title').value = edit.scenario.title||'';
     $('ed-desc').value = edit.scenario.description||'';
     const ss = $('ed-situation'); ss.innerHTML='';
@@ -804,20 +806,7 @@
     addEditableBall(layers, f);
     buildFrameChips(); buildCarrierSelect();
   }
-  function drawEditorPaths(layers, scenario) {
-    if (scenario.frames.length<2) return;
-    [['att','#eafdff'],['def','#9fb2c0']].forEach(([which,col])=>{
-      const sample = scenario.frames[0][which]||{};
-      Object.keys(sample).forEach(pos=>{
-        const pts = scenario.frames.map(fr=>fr[which]&&fr[which][pos]).filter(Boolean);
-        if (pts.length<2) return;
-        const moved = pts.some((p,i)=>i>0&&(Math.abs(p.x-pts[0].x)>2||Math.abs(p.y-pts[0].y)>2));
-        if(!moved) return;
-        const d = pts.map((p,i)=>(i?'L':'M')+p.x.toFixed(1)+' '+p.y.toFixed(1)).join(' ');
-        layers.pathLayer.appendChild(POOL.svg('path',{d,fill:'none',stroke:col,'stroke-width':1.5,'stroke-dasharray':which==='att'?'5 3':'2 3','marker-end':'url(#arrow)',color:col,opacity:0.6}));
-      });
-    });
-  }
+  function drawEditorPaths(layers, scenario) { ANIM.drawTactics(layers, scenario, null); }
   function addEditableDisc(layers, team, pos, pt) {
     const g = POOL.disc(team, pos); g.classList.add('editable');
     g.setAttribute('transform', `translate(${pt.x},${pt.y})`);
@@ -853,11 +842,7 @@
   }
   function ballGeom(f){ const b=ANIM.ballPoint(f); return {x:b.x,y:b.y}; }
   function updateBallEl(f){ if(!ballEl)return; const p=ballGeom(f); ballEl.setAttribute('transform',`translate(${p.x},${p.y})`); }
-  function drawEditorPathsRefresh(){
-    const layers=edit.layers;
-    while (layers.pathLayer.firstChild) layers.pathLayer.removeChild(layers.pathLayer.firstChild);
-    drawEditorPaths(layers, edit.scenario);
-  }
+  function drawEditorPathsRefresh(){ ANIM.drawTactics(edit.layers, edit.scenario, null); }
   function buildFrameChips() {
     const wrap=$('frame-chips'); wrap.innerHTML='';
     edit.scenario.frames.forEach((fr,i)=>{
@@ -930,6 +915,19 @@
     closeEditor(); refreshTabs(); renderLibrary(); openScenario(sc.id);
     toast('Saved ✓');
   }
+  // trainer adjusts an existing play and keeps BOTH: save the adjusted
+  // version as a brand-new movement, leaving the original untouched
+  function saveScenarioAs() {
+    if (!edit.scenario) return;
+    const sc = edit.scenario;
+    sc.id = 'usr-' + Math.abs(hash((sc.title||'play') + (typeof performance!=='undefined'?performance.now():'') + Math.random()));
+    const t = $('ed-title').value.trim();
+    if (!t || t === edit.origTitle) $('ed-title').value = (t || edit.origTitle || 'Play') + ' — variant';
+    sc.builtIn = false; sc.author = state.user.name || 'You';
+    edit.isNew = true;               // saveScenario now inserts instead of replacing
+    saveScenario();
+  }
+
   function deleteScenario() {
     const id=edit.scenario.id;
     state.scenarios=state.scenarios.filter(s=>s.id!==id); DATA.save(state.scenarios);
@@ -1059,7 +1057,7 @@
     $('new-scenario-btn').onclick = ()=> { if(canEdit()) openEditor(DATA.newScenario(state.situation, state.phase), true); };
     $('edit-btn').onclick = ()=>{ const s=state.scenarios.find(x=>x.id===state.selectedId); if(s&&canEdit()) openEditor(s,false); };
     $('editor-close').onclick = closeEditor; $('ed-cancel').onclick = closeEditor;
-    $('ed-save').onclick = saveScenario; $('ed-delete').onclick = deleteScenario;
+    $('ed-save').onclick = saveScenario; $('ed-saveas').onclick = saveScenarioAs; $('ed-delete').onclick = deleteScenario;
     $('add-frame').onclick = addFrame; $('del-frame').onclick = delFrame;
     $('add-sub').onclick = ()=>addWaiting('sub'); $('add-exc').onclick = ()=>addWaiting('exc'); $('del-wait').onclick = delWaiting;
     $('ed-situation').onchange = (e)=>{ edit.scenario.situation=e.target.value; edit.scenario.frames=[DATA.defaultFrame(e.target.value)]; edit.idx=0; editorRender(); toast('Formation reset for '+DATA.sit(e.target.value).label); };

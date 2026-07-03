@@ -60,6 +60,78 @@ const ANIM = (() => {
     return out;
   }
 
+  /* ---------- whiteboard tactics: movement + pass arrows ----------
+     Coaching convention: SOLID arrow = player movement (one arrow per step),
+     DASHED orange arrow with a numbered chip = pass / ball travel.
+     Defenders and the keeper stay as faint context so the attack reads first. */
+  function drawTactics(layers, scenario, focusPos) {
+    while (layers.pathLayer.firstChild) layers.pathLayer.removeChild(layers.pathLayer.firstChild);
+    const frames = scenario.frames;
+    if (!frames || frames.length < 2) return;
+    const moved = (a, b) => a && b && (Math.abs(a.x-b.x) > 3 || Math.abs(a.y-b.y) > 3);
+    // pull both ends in so arrows sit BESIDE discs, not underneath them
+    const trim = (a, b, ts, te) => {
+      const dx=b.x-a.x, dy=b.y-a.y, L=Math.hypot(dx,dy);
+      if (L <= ts+te+4) { const m={x:(a.x+b.x)/2,y:(a.y+b.y)/2}; return [{x:m.x-dx*0.3,y:m.y-dy*0.3},{x:m.x+dx*0.3,y:m.y+dy*0.3}]; }
+      const ux=dx/L, uy=dy/L;
+      return [{x:a.x+ux*ts,y:a.y+uy*ts},{x:b.x-ux*te,y:b.y-uy*te}];
+    };
+
+    // defenders + GK first (underneath): faint dashed context trails
+    const ctxTrail = (pts, color, focused) => {
+      if (pts.length < 2 || !pts.some((p,i)=>i>0 && moved(pts[0], p))) return;
+      const d = pts.map((p,i)=>(i?'L':'M')+p.x.toFixed(1)+' '+p.y.toFixed(1)).join(' ');
+      layers.pathLayer.appendChild(POOL.svg('path', { d, fill:'none', stroke:color,
+        'stroke-width': focused ? 2.2 : 1.1, 'stroke-dasharray':'3 3',
+        'marker-end': focused ? 'url(#arrowCtx)' : null,
+        opacity: focused ? 0.95 : (focusPos ? 0.1 : 0.28),
+        'stroke-linecap':'round','stroke-linejoin':'round' }));
+    };
+    Object.keys(frames[0].def || {}).forEach(pos => {
+      ctxTrail(frames.map(f=>f.def && f.def[pos]).filter(Boolean), '#9fb2c0', false);
+    });
+    ctxTrail(frames.map(f=>f.gk).filter(Boolean), '#ff8a8a', focusPos==='GK');
+
+    // attacker movement: one SOLID arrow per step segment
+    Object.keys(frames[0].att || {}).forEach(pos => {
+      const focused = focusPos && focusPos!=='GK' && String(focusPos)===String(pos);
+      const dim = focusPos && !focused;
+      for (let i=0; i<frames.length-1; i++) {
+        const a0 = frames[i].att && frames[i].att[pos], b0 = frames[i+1].att && frames[i+1].att[pos];
+        if (!moved(a0, b0) || Math.hypot(b0.x-a0.x, b0.y-a0.y) < 9) continue;   // micro-adjusts stay silent
+        const [a, b] = trim(a0, b0, 7.5, 8.5);
+        layers.pathLayer.appendChild(POOL.svg('path', {
+          d:`M${a.x.toFixed(1)} ${a.y.toFixed(1)} L${b.x.toFixed(1)} ${b.y.toFixed(1)}`,
+          fill:'none', stroke:'#eafdff', 'stroke-width': focused ? 2.8 : 2.2,
+          'marker-end':'url(#arrow)',
+          opacity: dim ? 0.12 : 0.95, 'stroke-linecap':'round' }));
+      }
+    });
+
+    // ball travel: dashed orange arrows with numbered step chips
+    let passNo = 0;
+    for (let i=0; i<frames.length-1; i++) {
+      const a0 = ballPoint(frames[i]), b0 = ballPoint(frames[i+1]);
+      if (!moved(a0, b0)) continue;
+      passNo++;
+      const [a, b] = trim(a0, b0, 5, 6.5);
+      const g = POOL.svg('g', { class:'pass-arrow' });
+      g.appendChild(POOL.svg('path', {
+        d:`M${a.x.toFixed(1)} ${a.y.toFixed(1)} L${b.x.toFixed(1)} ${b.y.toFixed(1)}`,
+        fill:'none', stroke:'#ffb057', 'stroke-width':1.7, 'stroke-dasharray':'4.5 3',
+        'marker-end':'url(#arrowBall)',
+        opacity: focusPos ? 0.55 : 0.95, 'stroke-linecap':'round' }));
+      // rectangular step badge — deliberately NOT round, so it can't read as a ball
+      const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+      g.appendChild(POOL.svg('rect', { x:mx-4, y:my-3.6, width:8, height:7.2, rx:1.6,
+        fill:'#ff7a18', stroke:'#fff', 'stroke-width':0.8 }));
+      const t = POOL.svg('text', { x:mx, y:my+2.2, 'text-anchor':'middle', 'font-size':5.6,
+        'font-weight':800, fill:'#fff', 'font-family':'Helvetica, Arial, sans-serif' });
+      t.textContent = passNo; g.appendChild(t);
+      layers.pathLayer.appendChild(g);
+    }
+  }
+
   /* ---------- a Renderer bound to one svg ---------- */
   function Renderer(svgEl) {
     const layers = POOL.render(svgEl);
@@ -84,48 +156,8 @@ const ANIM = (() => {
 
     function clearPaths() { while (layers.pathLayer.firstChild) layers.pathLayer.removeChild(layers.pathLayer.firstChild); }
 
-    // draw movement trails for the whole scenario
-    function drawPaths(scenario, focusPos) {
-      clearPaths();
-      const frames = scenario.frames;
-      if (frames.length < 2) return;
-
-      const drawSet = (which, teamClass) => {
-        const sample = frames[0][which] || {};
-        Object.keys(sample).forEach(pos => {
-          const pts = frames.map(f => f[which] && f[which][pos]).filter(Boolean);
-          if (pts.length < 2) return;
-          const moved = pts.some((p,i) => i>0 && (Math.abs(p.x-pts[0].x)>2 || Math.abs(p.y-pts[0].y)>2));
-          if (!moved) return;
-          const d = pts.map((p,i) => (i===0?'M':'L') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' ');
-          const focused = focusPos && String(focusPos) === String(pos) && which === 'att';
-          const dim = focusPos && !focused;
-          const path = POOL.svg('path', {
-            d, fill:'none',
-            stroke: teamClass==='att' ? '#eafdff' : (teamClass==='gk' ? '#ff8a8a' : '#9fb2c0'),
-            'stroke-width': focused ? 2.4 : 1.6,
-            'stroke-dasharray': teamClass==='att' ? '5 3' : '2 3',
-            'stroke-linecap':'round','stroke-linejoin':'round',
-            opacity: dim ? 0.18 : (teamClass==='att'?0.95:0.5),
-            'marker-end':'url(#arrow)',
-            color: teamClass==='att' ? '#eafdff' : '#9fb2c0',
-          });
-          layers.pathLayer.appendChild(path);
-        });
-      };
-      drawSet('att','att');
-      drawSet('def','def');
-      drawSet('gk','gk'); // gk is object not map; handle below
-      // gk path (single)
-      const gkPts = frames.map(f => f.gk).filter(Boolean);
-      if (gkPts.length>1) {
-        const moved = gkPts.some((p,i)=>i>0 && (Math.abs(p.x-gkPts[0].x)>2||Math.abs(p.y-gkPts[0].y)>2));
-        if (moved) {
-          const d = gkPts.map((p,i)=>(i===0?'M':'L')+p.x.toFixed(1)+' '+p.y.toFixed(1)).join(' ');
-          layers.pathLayer.appendChild(POOL.svg('path',{ d, fill:'none', stroke:'#ff8a8a','stroke-width':1.4,'stroke-dasharray':'2 3','marker-end':'url(#arrow)', color:'#ff8a8a', opacity: focusPos && focusPos!=='GK'?0.18:0.7 }));
-        }
-      }
-    }
+    // whiteboard-style tactics are drawn by the shared drawTactics()
+    function drawPaths(scenario, focusPos) { drawTactics(layers, scenario, focusPos); }
 
     // render a state (interpolated or a single frame's geometry)
     function renderState(scenario, state, focusPos) {
@@ -234,5 +266,5 @@ const ANIM = (() => {
     return { play, pause, toggle, stop, seek, stepFwd, stepBack, gotoStep, currentStep, segCount, setScenario, setFocus, setPaths, setOnState, get playing(){return playing;}, get t(){return t;} };
   }
 
-  return { Renderer, Player, stateAt, ballPoint };
+  return { Renderer, Player, stateAt, ballPoint, drawTactics };
 })();
