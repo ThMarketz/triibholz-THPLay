@@ -1,84 +1,82 @@
-# Triibholz · THPLAY
+# Triibholz · THPLAY — v1.0.0
 
-**Triibholz** (code **THPLAY**) is a tactics trainer for water polo. Coaches build possession scenarios and
-movement patterns; every player (positions **1–6** + **goalkeeper**) sees
-exactly what to do — for the whole team or just their own position — across
-every situation: **6v6, 6v5, 5v4, 4v3, 3v2, 2v1, 1v1, and 1‑on‑GK**.
+**Triibholz** (code **THPLAY**) is a water polo tactics trainer. Coaches build
+possession scenarios and movement patterns; every player (positions **1–6** +
+**goalkeeper**) sees exactly what to do — for the whole team or just their own
+position — across every situation: **6v6, 6v5, 5v4, 4v3, 3v2, 2v1, 1v1, and
+1‑on‑GK**. Installable, offline‑capable, in four languages.
 
-## Field convention (from your board photos)
-- **Attack** = white discs · **Defence** = black discs
-- **Goalkeeper** = red · **Ball** = orange
-- Markings: goal lines, 2 m (red), 5 m (yellow), 6 m (green), half‑distance line,
-  **red goal‑area box** in front of each goal, corner **re‑entry/exclusion** arcs,
-  goal judges, official table.
-- Two waiting lanes below the field hold **multiple players**:
-  **Flying Substitution** and **Exclusion / Re‑entry** (e.g. an excluded defender
-  waits there during a 6‑on‑5).
-- The attacking team always attacks the **right‑hand goal** (defended by the red GK).
-
-## Roles & access
-- **Super Admin** — approves logins, manages roles, and sees a live activity feed.
-- **Coach / Trainer** — record & adjust plays (build movement, capture steps, edit anytime).
-- **Player** — views plays (team or just their position) and takes trivia.
-
-**Login approval:** Coaches, Trainers and Players land in **“waiting for approval”**
-until a Super Admin approves them in the **Admin** console. (In this single‑browser
-prototype, sign in and choose **Super Admin** to get in and approve the others —
-two demo requests are pre‑loaded in the queue. With a real backend this becomes a
-proper cross‑device gate so only **designated users** get in.)
-
-## How to open it
-**Easiest:** double‑click `index.html` (it runs entirely in the browser — no install).
-
-**Or run the bundled server** (recommended for Safari, which restricts `file://`):
+## Try it in 10 seconds
 ```bash
-python3 serve.py        # then open http://localhost:4173
+docker compose up -d          # or: bash scripts/docker-build.sh
+# open http://localhost:8088 → tap a demo persona (Coach / Player / Admin)
 ```
+No sign‑up needed — the login screen has one‑tap **demo personas** with a
+pre‑seeded team, plays, activity and progress.
 
-## Using it
-- **Sign in** with Apple or Google (prototype = simulated sign‑in; real OAuth is
-  wired at deploy time — that needs an Apple Developer account + a hosted domain).
-- Pick your **role** (and **position** if you’re a player), then request access.
-- **Nav:** **Dashboard** (your personal overview) · **Playbook** · **Trivia** ·
-  **Admin** (Super Admin only).
-- **Playbook:** top tabs = the 8 situations · **Offense / Defense** toggle ·
-  left = scenario library · center = pool with **Play / step ◀ ▶ / scrub** and
-  **Team vs My‑position** views · right = per‑position assignments.
-- **Coaches/Trainers** press **“+ New”** (or **Edit**) to build/adjust a play:
-  drag players & the ball, **“Capture step”** to record each movement step,
-  add **waiting players** with **+ Sub / + Excluded**, set per‑position notes, save.
-  Saved movement is replayable by anyone, anytime, and editable again later.
-- **Trivia:** a scored water‑polo quiz; your best score is saved to your profile.
+## The field (matches the official board)
+- **Attack = white**, **defence = black**, **goalkeeper = red**, **ball = orange**.
+- Lines: goal line (white), **2 m red**, **5 m yellow** (penalty), **6 m green**,
+  dotted white **centre line**.
+- **Red goal box**: 2 m deep, 1 m beyond each post.
+- **Exclusion / re‑entry**: red corner brackets in **all four corners** against
+  the goal lines, inside the 2 m zone — an excluded player waits at a corner of
+  their own defensive end (20 s / possession change / goal).
+- **Official table** + goal judges on top; **flying‑substitution** strip along
+  the bottom. Waiting players (subs, excluded) render as smaller discs and can
+  be stacked in the staging zones.
 
-## Official rule books (auto‑updated)
-The **Basics** tab shows the current official water‑polo rule books, tracked from
-**Swiss Aquatics**. A scheduled GitHub Action runs `scripts/update-rules.mjs`
-weekly, which reads the Swiss Aquatics water‑polo downloads page, records each
-rule book’s title / link / version‑date into `data/rules.json`, and commits any
-change. The app links to the authoritative PDFs (rule text isn’t reproduced —
-copyright) and shows a “last checked” date.
+## Features
+| Area | What you get |
+|------|--------------|
+| **Playbook** | Scenario library per situation & phase (offense/defense), animated playback + step‑by‑step, scrubbing, **Team vs My‑position** focus view, per‑position assignments |
+| **Problem → Solution** | Freeze any play as a *problem* (assignments masked), then **Reveal solution ▶** animates the answer — players default to problem mode |
+| **Editor** (coach/trainer/admin) | Drag players & ball, **capture steps** to record movement, add **waiting subs / excluded players**, per‑position notes; replay & re‑edit anytime |
+| **Roles & approval** | Super Admin / Coach / Trainer / Player; new sign‑ins wait for **Super Admin approval** (console with queue, role management, live activity feed) |
+| **Dashboards** | Per‑role home: player progress (XP, 🔥 streaks, badges), coach squad + invite card, admin approvals & activity |
+| **Onboarding** | Team code + copy‑link + **QR code** invite; players join by tapping their cap number; first‑run guided tour |
+| **Basics** | Water polo fundamentals, **Players / Coach / Referee responsibilities**, colour legend |
+| **Rule books** | Official **Swiss Aquatics / World Aquatics** rule books auto‑tracked weekly by a GitHub Action (`scripts/update-rules.mjs` → `data/rules.json`) — links + version dates, no copyrighted text reproduced |
+| **Trivia & Challenge** | 15‑question scored quiz with explanations; auto‑generated **play challenges** (“who finishes this play?”); best scores saved |
+| **Playful layer** | Polo the mascot, confetti celebrations, opt‑in sound (default off), XP/badges tied to real study |
+| **Languages** | **EN / DE / FR / IT**, auto‑detected, flag switcher (tactical play content stays English‑first) |
+| **PWA** | Installable on phones/tablets, fully offline via service worker |
 
-Run it manually any time:
-```bash
-npm run update-rules        # or: node scripts/update-rules.mjs
-```
+## Run / deploy
+- **Docker** (recommended): `bash scripts/docker-build.sh` — stages a clean copy
+  and (re)builds `triibholz-thplay:latest`, serving on **:8088** via
+  nginx‑alpine. *(Use the script, not `docker compose build` — iCloud Drive
+  folders confuse Docker's build context.)*
+- **No install**: `python3 serve.py` → http://localhost:4173, or host the
+  folder on any static host (GitHub Pages / Netlify / Cloudflare Pages).
+- See **DEPLOY.md** for registry push & hosting details.
 
-## Files
-| File | Purpose |
+## Repository map
+| Path | Purpose |
 |------|---------|
-| `index.html` | App shell (auth, app, editor) |
-| `css/styles.css` | Styling |
-| `js/pool.js` | Accurate pool + player/ball SVG |
-| `js/data.js` | Situations, formations, sample plays, users/approvals, activity, trivia bank, localStorage |
-| `js/animate.js` | Keyframe interpolation + playback (incl. waiting players) |
-| `js/app.js` | Auth/approvals, nav, dashboards, trivia, admin console, library, viewer, editor |
-| `serve.py` | Tiny static server (honors `$PORT`) |
+| `index.html`, `css/styles.css` | App shell & styling |
+| `js/pool.js` | Regulation field renderer + discs/ball + staging zones |
+| `js/data.js` | Situations, formations, sample plays, users/approvals, activity, trivia, gamification |
+| `js/animate.js` | Keyframe interpolation, playback engine |
+| `js/app.js` | Auth/approvals, nav, dashboards, playbook, editor, trivia, challenge, admin, onboarding |
+| `js/i18n.js` | EN/DE/FR/IT runtime |
+| `js/qr.js` | Dependency‑free QR encoder (invite codes) |
+| `js/fx.js` | Mascot, confetti, sound |
+| `scripts/update-rules.mjs` | Swiss Aquatics rule‑book tracker (`npm run update-rules`) |
+| `scripts/docker-build.sh` | Reliable container build |
+| `.github/workflows/update-rules.yml` | Weekly rule‑book refresh |
+| `handouts/` | “ÜSI 14” locker‑room poster (Schweizerdeutsch, PNG + print PDF) |
+| `sw.js`, `manifest.webmanifest`, `icons/` | PWA |
 
-Data is stored locally in your browser (localStorage). Sample plays are seeded
-for every situation; your own saved plays are tagged **“yours”**.
+## Quality gates
+- **Headless regression suite**: 82 checks (auth → approvals → playbook →
+  editor → trivia → challenge → i18n → demo mode).
+- **Real‑browser QA** (Playwright + Firefox): 21‑step walkthrough of every
+  persona and view, desktop + 375 px mobile, zero console errors.
 
-## Next steps for production
-- Real Apple/Google OAuth + a backend so the roster and plays sync across devices
-  and only **designated users** can sign in.
-- Coach‑managed team roster / invitations.
-- Video or PDF export of a play.
+## Known limits (v1 prototype scope)
+- Accounts, approvals and saved plays live in the **browser (localStorage)** —
+  per device. Real Apple/Google OAuth + a small backend is the next milestone
+  and makes approvals/rosters sync across devices.
+- Simulated sign‑in; the approval flow is fully functional within one browser.
+- Tactical content (play names, coaching notes, basics text) is English‑first.

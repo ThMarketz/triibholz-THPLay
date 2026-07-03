@@ -164,7 +164,6 @@ const POOL = (() => {
     bracket(WATER.x1, WATER.y0, -1, +1);  // top-right
     bracket(WATER.x0, WATER.y1, +1, -1);  // bottom-left
     bracket(WATER.x1, WATER.y1, -1, -1);  // bottom-right
-    label(svgEl, (EXCZONE.x0 + EXCZONE.x1) / 2, EXCZONE.y1 + 6, 're-entry', '#ff9e9e', 'middle', 4.5);
 
     const pathLayer = svg('g', { id: 'path-layer' });
     const discLayer = svg('g', { id: 'disc-layer' });

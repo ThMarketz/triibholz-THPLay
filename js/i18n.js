@@ -17,7 +17,7 @@ const I18N = (() => {
   const DICT = {
     en: {
       'app.tagline':'Strategies & movement patterns — for the team and for every position.',
-      'auth.note':'Two sign-in methods, as requested. In this prototype both buttons run a simulated sign-in so you can use the app immediately — real Apple & Google connect when we deploy.',
+      'auth.note':'Sign-in is simulated in this preview build — real Apple & Google accounts connect at deployment.',
       'auth.foot':'Designated access only · Coaches & Players',
       'auth.apple':'Sign in with Apple', 'auth.google':'Sign in with Google',
       'setup.welcome':'Welcome', 'setup.sub':'Tell us who you are so we can tailor the playbook.',
@@ -43,7 +43,7 @@ const I18N = (() => {
     },
     de: {
       'app.tagline':'Strategien & Laufwege — fürs Team und für jede Position.',
-      'auth.note':'Zwei Anmeldemethoden, wie gewünscht. In diesem Prototyp führen beide Buttons eine simulierte Anmeldung aus — echtes Apple & Google folgen beim Deployment.',
+      'auth.note':'Die Anmeldung ist in dieser Vorschau simuliert — echte Apple- & Google-Konten folgen beim Deployment.',
       'auth.foot':'Nur für berechtigte Personen · Trainer & Spieler',
       'auth.apple':'Mit Apple anmelden','auth.google':'Mit Google anmelden',
       'setup.welcome':'Willkommen','setup.sub':'Sag uns, wer du bist, damit wir das Playbook anpassen können.',
@@ -69,7 +69,7 @@ const I18N = (() => {
     },
     fr: {
       'app.tagline':'Stratégies & déplacements — pour l’équipe et pour chaque poste.',
-      'auth.note':'Deux méthodes de connexion, comme demandé. Dans ce prototype, les deux boutons simulent la connexion — Apple & Google réels arriveront au déploiement.',
+      'auth.note':'La connexion est simulée dans cette préversion — les comptes Apple & Google réels arriveront au déploiement.',
       'auth.foot':'Accès réservé · Entraîneurs & Joueurs',
       'auth.apple':'Se connecter avec Apple','auth.google':'Se connecter avec Google',
       'setup.welcome':'Bienvenue','setup.sub':'Dis-nous qui tu es pour personnaliser le playbook.',
@@ -95,7 +95,7 @@ const I18N = (() => {
     },
     it: {
       'app.tagline':'Strategie & movimenti — per la squadra e per ogni ruolo.',
-      'auth.note':'Due metodi di accesso, come richiesto. In questo prototipo entrambi i pulsanti simulano l’accesso — Apple e Google reali al rilascio.',
+      'auth.note':'L’accesso è simulato in questa anteprima — gli account Apple e Google reali arriveranno al rilascio.',
       'auth.foot':'Accesso riservato · Allenatori & Giocatori',
       'auth.apple':'Accedi con Apple','auth.google':'Accedi con Google',
       'setup.welcome':'Benvenuto','setup.sub':'Dicci chi sei per personalizzare il playbook.',

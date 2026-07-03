@@ -132,6 +132,10 @@
 
   /* ---------------- enter app ---------------- */
   function enterApp() {
+    // reset per-session view state — logout/login must not leak the previous
+    // user's open scenario, focus or problem/solution mode
+    state.selectedId = null; state.focus = null; state.mode = 'solution';
+    if (state.viewer) { state.viewer.stop(); state.viewer = null; }
     state.scenarios = DATA.load();
     const streak = DATA.touchStreak(state.user.email);
     if (streak>=3) DATA.addBadge(state.user.email,'streak-3');
