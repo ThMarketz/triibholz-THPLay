@@ -119,12 +119,21 @@
   function switchView(view) {
     state.view = view;
     document.querySelectorAll('#main-nav .nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view===view));
-    ['dashboard','playbook','basics','trivia','admin'].forEach(v => $('view-'+v).classList.toggle('active', v===view));
+    ['dashboard','playbook','basics','film','trivia','admin'].forEach(v => $('view-'+v).classList.toggle('active', v===view));
     const inPlaybook = view==='playbook';
     $('situation-tabs').style.display = inPlaybook ? '' : 'none';
     $('phase-toggle').style.display = inPlaybook ? '' : 'none';
     if (view==='dashboard') renderDashboard();
     if (view==='basics') renderBasics();
+    if (view==='film' && typeof FILM!=='undefined') FILM.render($('view-film'), {
+      user: state.user, canEdit: canEdit(), toast,
+      // a tagged video moment becomes a play on the tactics board
+      rebuild: (situation, phase, title, desc) => {
+        const sc = DATA.newScenario(situation, phase);
+        sc.title = title; sc.description = desc;
+        openEditor(sc, true);
+      },
+    });
     if (view==='trivia') renderTrivia();
     if (view==='admin') renderAdmin();
     if (view==='playbook' && !state.selectedId) openFirstOrEmpty();

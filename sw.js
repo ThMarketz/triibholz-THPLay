@@ -1,9 +1,9 @@
 /* Triibholz (THPLAY) service worker — offline app shell + fresh rule books. */
-const CACHE = 'triibholz-v13';
+const CACHE = 'triibholz-v14';
 const ASSETS = [
   './', './index.html',
   './css/styles.css',
-  './js/i18n.js', './js/qr.js', './js/fx.js', './js/pool.js', './js/data.js', './js/animate.js', './js/app.js',
+  './js/i18n.js', './js/qr.js', './js/fx.js', './js/pool.js', './js/data.js', './js/animate.js', './js/film.js', './js/app.js',
   './data/rules.json',
   './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png',
@@ -24,6 +24,8 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  // never intercept third-party requests (YouTube embeds, CDNs, …)
+  if (url.origin !== location.origin) return;
 
   // rule books: network-first so they stay current, fall back to cache offline
   if (url.pathname.endsWith('/data/rules.json')) {
