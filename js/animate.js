@@ -4,7 +4,7 @@
    ============================================================ */
 const ANIM = (() => {
 
-  const BALL_OFF = { x: 7, y: -7 };   // ball offset when held
+  const BALL_OFF = { x: 5.5, y: -5.5 };   // ball offset when held
 
   function discPos(frame, carrier) {
     if (!carrier) return null;
@@ -99,7 +99,7 @@ const ANIM = (() => {
       for (let i=0; i<frames.length-1; i++) {
         const a0 = frames[i].att && frames[i].att[pos], b0 = frames[i+1].att && frames[i+1].att[pos];
         if (!moved(a0, b0) || Math.hypot(b0.x-a0.x, b0.y-a0.y) < 9) continue;   // micro-adjusts stay silent
-        const [a, b] = trim(a0, b0, 7.5, 8.5);
+        const [a, b] = trim(a0, b0, 6, 7);
         layers.pathLayer.appendChild(POOL.svg('path', {
           d:`M${a.x.toFixed(1)} ${a.y.toFixed(1)} L${b.x.toFixed(1)} ${b.y.toFixed(1)}`,
           fill:'none', stroke:'#eafdff', 'stroke-width': focused ? 2.8 : 2.2,
@@ -114,7 +114,7 @@ const ANIM = (() => {
       const a0 = ballPoint(frames[i]), b0 = ballPoint(frames[i+1]);
       if (!moved(a0, b0)) continue;
       passNo++;
-      const [a, b] = trim(a0, b0, 5, 6.5);
+      const [a, b] = trim(a0, b0, 4.5, 5.5);
       const g = POOL.svg('g', { class:'pass-arrow' });
       g.appendChild(POOL.svg('path', {
         d:`M${a.x.toFixed(1)} ${a.y.toFixed(1)} L${b.x.toFixed(1)} ${b.y.toFixed(1)}`,
@@ -165,9 +165,9 @@ const ANIM = (() => {
       if (lastSplash[key] && now - lastSplash[key] < 110) return;
       lastSplash[key] = now;
       lastPts[key] = { x: p.x, y: p.y };
-      spawnSplash(anchor.x, anchor.y, isBall ? 4.2 : 4.6);
+      spawnSplash(anchor.x, anchor.y, isBall ? 3.6 : 3.9);
     }
-    function ballBurst() { if (ballPos) spawnSplash(ballPos.x, ballPos.y, 7); }
+    function ballBurst() { if (ballPos) spawnSplash(ballPos.x, ballPos.y, 6); }
 
     function ensureDisc(key, team, label, small) {
       if (discEls[key]) return discEls[key];

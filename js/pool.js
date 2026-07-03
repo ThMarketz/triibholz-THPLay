@@ -197,13 +197,13 @@ const POOL = (() => {
   /* Build a player disc <g>. team: 'A' white | 'D' black | 'GK' red. small=waiting */
   function disc(team, labelTxt, small) {
     const g = svg('g', { class: 'disc' + (small ? ' wait' : ''), 'data-team': team, 'data-label': labelTxt });
-    const r = small ? 5.2 : 6.6;   // compact discs — the tactics must stay readable
+    const r = small ? 4.2 : 5.2;   // small discs — the tactics own the board
     let fill = '#ffffff', stroke = '#0b1f2c', txt = '#0b1f2c';
     if (team === 'D') { fill = '#11151c'; stroke = '#000'; txt = '#ffffff'; }
     if (team === 'GK') { fill = '#e23b3b'; stroke = '#7a0f0f'; txt = '#ffffff'; }
-    g.appendChild(svg('circle', { r, fill, stroke, 'stroke-width': 1.6, filter: 'url(#discShadow)' }));
-    const t = svg('text', { 'text-anchor': 'middle', y: small ? 2.1 : 2.6, fill: txt,
-      'font-size': small ? 5.8 : 7.4, 'font-weight': 800, 'font-family': 'Helvetica, Arial, sans-serif' });
+    g.appendChild(svg('circle', { r, fill, stroke, 'stroke-width': 1.3, filter: 'url(#discShadow)' }));
+    const t = svg('text', { 'text-anchor': 'middle', y: small ? 1.7 : 2.1, fill: txt,
+      'font-size': small ? 4.8 : 5.9, 'font-weight': 800, 'font-family': 'Helvetica, Arial, sans-serif' });
     t.textContent = labelTxt;
     g.appendChild(t);
     return g;
@@ -211,15 +211,15 @@ const POOL = (() => {
 
   function ball() {
     const g = svg('g', { class: 'ball' });
-    g.appendChild(svg('circle', { r: 3.6, fill: '#ff7a18', stroke: '#9c3d00', 'stroke-width': 1, filter: 'url(#discShadow)' }));
-    g.appendChild(svg('path', { d: 'M-2.9 -1.1 q2.9 -2.1 5.8 0 M-2.9 1.1 q2.9 2.1 5.8 0', stroke: '#fff', 'stroke-width': 0.6, fill: 'none', opacity: .85 }));
+    g.appendChild(svg('circle', { r: 3.0, fill: '#ff7a18', stroke: '#9c3d00', 'stroke-width': 0.9, filter: 'url(#discShadow)' }));
+    g.appendChild(svg('path', { d: 'M-2.4 -0.9 q2.4 -1.8 4.8 0 M-2.4 0.9 q2.4 1.8 4.8 0', stroke: '#fff', 'stroke-width': 0.55, fill: 'none', opacity: .85 }));
     return g;
   }
 
   // stacked slot inside a zone — grid, filling from the right, wrapping downward
   // (narrow corner boxes therefore stack vertically)
   function stackPos(zone, i) {
-    const gap = 12;
+    const gap = 10;
     const perRow = Math.max(1, Math.floor((zone.x1 - zone.x0 - 4) / gap));
     const col = i % perRow, row = Math.floor(i / perRow);
     return { x: (zone.x1 - 8) - col * gap, y: zone.y0 + 10 + row * 14 };
