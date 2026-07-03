@@ -14,16 +14,20 @@ docker compose up -d          # or: bash scripts/docker-build.sh
 No sign‑up needed — the login screen has one‑tap **demo personas** with a
 pre‑seeded team, plays, activity and progress.
 
-## The field (matches the official board)
+## The field (2025 World Aquatics rules)
+- **25 m × 20 m** goal line to goal line — men and women alike.
+- Key match numbers: **4 × 8 min** quarters · **28 s** possession · **18 s** exclusion
+  (ends early on a goal or awarded turnover) · **2 × 1 min** timeouts (possession only) ·
+  penalty from the **5 m line**.
 - **Attack = white**, **defence = black**, **goalkeeper = red**, **ball = orange**.
 - Lines: goal line (white), **2 m red**, **5 m yellow** (penalty), **6 m green**,
   dotted white **centre line**.
 - **Red goal box**: 2 m deep, 1 m beyond each post.
 - **Exclusion / re‑entry**: red corner brackets in **all four corners** against
   the goal lines, inside the 2 m zone — an excluded player waits at a corner of
-  their own defensive end (20 s / possession change / goal).
-- **Official table** + goal judges on top; **flying‑substitution** strip along
-  the bottom. Waiting players (subs, excluded) render as smaller discs and can
+  their own defensive end (18 s / awarded turnover / goal).
+- **Official table** + goal judges on top; **flying‑substitution** areas along
+  the bottom — one half per team (own goal line → centre line). Waiting players (subs, excluded) render as smaller discs and can
   be stacked in the staging zones.
 
 ## Features
@@ -36,8 +40,8 @@ pre‑seeded team, plays, activity and progress.
 | **Dashboards** | Per‑role home: player progress (XP, 🔥 streaks, badges), coach squad + invite card, admin approvals & activity |
 | **Onboarding** | Team code + copy‑link + **QR code** invite; players join by tapping their cap number; first‑run guided tour |
 | **Basics** | Water polo fundamentals, **Players / Coach / Referee responsibilities**, colour legend |
-| **Rule books** | Official **Swiss Aquatics / World Aquatics** rule books auto‑tracked weekly by a GitHub Action (`scripts/update-rules.mjs` → `data/rules.json`) — links + version dates, no copyrighted text reproduced |
-| **Trivia & Challenge** | 15‑question scored quiz with explanations; auto‑generated **play challenges** (“who finishes this play?”); best scores saved |
+| **Rule books** | Official rule books auto‑tracked weekly from **worldaquatics.com** (Competition Regulations + WP 4x4) and **Swiss Aquatics** by a GitHub Action (`scripts/update-rules.mjs` → `data/rules.json`) — links + version dates, no copyrighted text reproduced |
+| **Trivia & Challenge** | 16‑question scored quiz with explanations; auto‑generated **play challenges** (“who finishes this play?”); best scores saved |
 | **Playful layer** | Polo the mascot, confetti celebrations, opt‑in sound (default off), XP/badges tied to real study |
 | **Languages** | **EN / DE / FR / IT**, auto‑detected, flag switcher (tactical play content stays English‑first) |
 | **PWA** | Installable on phones/tablets, fully offline via service worker |
@@ -62,7 +66,7 @@ pre‑seeded team, plays, activity and progress.
 | `js/i18n.js` | EN/DE/FR/IT runtime |
 | `js/qr.js` | Dependency‑free QR encoder (invite codes) |
 | `js/fx.js` | Mascot, confetti, sound |
-| `scripts/update-rules.mjs` | Swiss Aquatics rule‑book tracker (`npm run update-rules`) |
+| `scripts/update-rules.mjs` | World Aquatics + Swiss Aquatics rule‑book tracker (`npm run update-rules`) |
 | `scripts/docker-build.sh` | Reliable container build |
 | `.github/workflows/update-rules.yml` | Weekly rule‑book refresh |
 | `handouts/` | “ÜSI 14” locker‑room poster (Schweizerdeutsch, PNG + print PDF) |

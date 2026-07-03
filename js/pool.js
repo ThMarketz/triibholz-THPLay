@@ -1,10 +1,10 @@
 /* ============================================================
    pool.js — accurate top-down water polo pool + player discs.
-   viewBox 320 x 262. Water x:24..296 y:30..190 (30m x 20m).
+   viewBox 320 x 262. Water x:24..296 y:30..190 (25m x 20m — 2025 rules).
    Left goal = WATER.x0, Right goal = WATER.x1 (we attack RIGHT).
-   Official table = top. Flying substitution = bottom (opposite).
-   Exclusion / re-entry = small boxes in the two BOTTOM corners,
-   behind each goal line, next to the flying-substitution strip.
+   Official table = top. Flying substitution = bottom (opposite),
+   one half per team. Exclusion / re-entry = red brackets in all
+   four corners against the goal lines, inside the 2 m zone.
    Red goal box = 2 m deep (goal line → 2 m) and 1 m beyond each post.
    ============================================================ */
 const POOL = (() => {
@@ -12,7 +12,7 @@ const POOL = (() => {
   const WATER = { x0: 24, y0: 30, x1: 296, y1: 190 };
   WATER.w = WATER.x1 - WATER.x0;   // 272
   WATER.h = WATER.y1 - WATER.y0;   // 160
-  const METERS = 30;
+  const METERS = 25;   // 2025 World Aquatics rules: 25 m for men and women
   const pxPerM = WATER.w / METERS; // ≈ 9.07 px / metre
 
   const fromLeft  = (m) => WATER.x0 + m * pxPerM;
@@ -25,7 +25,9 @@ const POOL = (() => {
   // Exclusion / re-entry: a red right-angle bracket in EACH of the four corners,
   // against the goal line, inside the 2 m zone. An excluded player exits to the
   // re-entry corner at their OWN defensive end.
-  const SUBZONE = { x0: 70, x1: 250, y0: 200, y1: 218, cy: 209 };
+  // one flying-substitution half per team: own goal line → centre line (rule 1.3)
+  const SUB_L   = { x0: 26,  x1: 156, y0: 200, y1: 218, cy: 209 };
+  const SUBZONE = { x0: 164, x1: 294, y0: 200, y1: 218, cy: 209 };  // right half (kept name for compat)
   const CORNERS = [
     { x0: WATER.x0,     x1: fromLeft(2),  y0: WATER.y0,      y1: WATER.y0 + 30 }, // top-left  (+Y, table)
     { x0: fromRight(2), x1: WATER.x1,     y0: WATER.y0,      y1: WATER.y0 + 30 }, // top-right (+Y, table)
@@ -150,8 +152,8 @@ const POOL = (() => {
       svgEl.appendChild(svg('rect', { x: zone.x0, y: zone.y0, width: zone.x1 - zone.x0, height: zone.y1 - zone.y0,
         rx: 3, fill, stroke, 'stroke-width': 1, 'stroke-dasharray': '4 3' }));
     }
-    box(SUBZONE, 'rgba(15,58,47,0.65)', '#3fd08a');
-    label(svgEl, (SUBZONE.x0 + SUBZONE.x1) / 2, SUBZONE.y1 + 9, 'FLYING SUBSTITUTION', '#8fe0bc', 'middle', 5.5);
+    [SUB_L, SUBZONE].forEach(z => box(z, 'rgba(15,58,47,0.65)', '#3fd08a'));
+    label(svgEl, (WATER.x0 + WATER.x1) / 2, SUBZONE.y1 + 9, 'FLYING SUBSTITUTION — ONE HALF PER TEAM', '#8fe0bc', 'middle', 5);
 
     // ---- exclusion / re-entry: red right-angle bracket in each corner ----
     const bracket = (cx, cy, sx, sy) => {
@@ -220,15 +222,15 @@ const POOL = (() => {
   // allow dropping into water OR a staging zone (sub strip / any re-entry corner)
   function clampAnywhere(p) {
     for (const z of CORNERS) if (inBox(z, p)) return { x: clamp(p.x, z.x0 + 3, z.x1 - 3), y: clamp(p.y, z.y0 + 3, z.y1 - 3) };
-    if (inBox(SUBZONE, p)) return { x: clamp(p.x, SUBZONE.x0 + 4, SUBZONE.x1 - 4), y: clamp(p.y, SUBZONE.y0 + 4, SUBZONE.y1 - 4) };
+    for (const z of [SUB_L, SUBZONE]) if (inBox(z, p)) return { x: clamp(p.x, z.x0 + 4, z.x1 - 4), y: clamp(p.y, z.y0 + 4, z.y1 - 4) };
     return clampToWater(p);
   }
   function zoneOf(p) {
     for (const z of CORNERS) if (inBox(z, p)) return 'exc';
-    if (inBox(SUBZONE, p)) return 'sub';
+    if (inBox(SUB_L, p) || inBox(SUBZONE, p)) return 'sub';
     return 'water';
   }
 
-  return { VB, WATER, SUBZONE, EXCZONE, CORNERS, pxPerM, fromLeft, fromRight, svg, render, disc, ball,
+  return { VB, WATER, SUBZONE, SUB_L, EXCZONE, CORNERS, pxPerM, fromLeft, fromRight, svg, render, disc, ball,
            stackPos, eventToVB, clampToWater, clampAnywhere, zoneOf };
 })();

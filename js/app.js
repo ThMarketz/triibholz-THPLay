@@ -326,22 +326,24 @@
       'Play starts with both teams on their own goal lines; the referee releases the ball at mid‑pool and the teams swim for it.',
       'You must get a shot away before your possession time runs out, or the ball turns over.' ] },
     { icon:'7', title:'Team & positions', body:[
-      'Each team has <strong>7 in the water</strong>: 6 field players + 1 goalkeeper (plus subs on the bench).',
+      'Each team has <strong>7 in the water</strong>: 6 field players + 1 goalkeeper. Match roster: up to <strong>14</strong> (12 field + 2 goalkeepers).',
       'In this app we number the field players <strong>1–6</strong> and mark them by team colour.',
       'A common shape: perimeter players (wings, flats, point) around the arc, with a <strong>centre‑forward (“hole set”)</strong> posted at the 2 m line in front of goal.' ],
       legend:true },
     { icon:'⏱', title:'Game structure', body:[
-      'Played in <strong>4 quarters</strong> (8 minutes of effective time each at senior level).',
-      'A <strong>shot‑clock (~30 s)</strong> limits each possession — shoot before it expires.',
-      'Teams change ends each quarter; substitutions happen on the fly through the flying‑substitution area.' ] },
+      'Played in <strong>4 quarters</strong> of 8 minutes actual play (senior level); teams change ends at half‑time.',
+      'A <strong>28‑second possession clock</strong> limits each attack — shoot before it expires.',
+      'Each team has <strong>two 1‑minute timeouts</strong> — callable only while in possession, even straight after a goal.',
+      'Flying substitutions go through your team’s own half of the substitution area (own goal line → centre); World Aquatics events also use a <strong>VAR referee</strong>.' ] },
     { icon:'▦', title:'The pool & its lines', body:[
+      'Field of play: <strong>25 m × 20 m</strong> goal line to goal line — men and women alike (2025 rules).',
       '<strong>Goal line</strong> · <strong>2 m line (red)</strong> — no attacker may sit inside it ahead of the ball.',
-      '<strong>5 m line (yellow)</strong> — penalty‑throw distance. <strong>6 m line (green)</strong> — a free throw from here or beyond may be shot directly.',
+      '<strong>5 m line (yellow)</strong> — penalty throws are taken from anywhere on it. <strong>6 m line (green)</strong> — free throws from outside it may be shot directly; blocking with two hands is only allowed inside your own 6 m area.',
       '<strong>Half‑distance line</strong> at the middle. Excluded players wait and re‑enter from the <strong>exclusion / re‑entry</strong> corner.' ] },
     { icon:'⚠', title:'Fouls & penalties', body:[
       '<strong>Ordinary (minor) fouls</strong> — pushing the ball under, two hands on the ball (field players), impeding a free player — give a <strong>free throw / change of possession</strong>.',
-      '<strong>Major (exclusion) fouls</strong> — holding/sinking an opponent, persistent fouling — send the offender out for <strong>20 seconds</strong> (a “man‑up” for the other team) until a goal, change of possession, or time elapses.',
-      'A major foul inside <strong>5 m</strong> that stops a likely goal is a <strong>penalty shot</strong> from the 5 m line.' ] },
+      '<strong>Major (exclusion) fouls</strong> — holding/sinking an opponent, tactical fouls — send the offender to the re‑entry corner for <strong>18 seconds</strong> (a “man‑up”); they return at the earliest of 18 s served, a goal, or their team being awarded a free throw / goal throw / penalty.',
+      'A major foul inside <strong>5 m</strong> that stops a likely goal is a <strong>penalty shot</strong> from the 5 m line — in the last minute the coach may choose possession instead (clock reset to 28 s).' ] },
     { icon:'✛', title:'The goalkeeper', body:[
       'Wears the <strong>red cap</strong> and defends the goal.',
       'Inside the 5 m area the keeper may <strong>use two hands</strong> and (where depth allows) push off the bottom — things field players can’t do.',
@@ -356,7 +358,7 @@
     source: { name:'Swiss Aquatics', page:'https://www.swiss-aquatics.ch/leistungssport/water-polo/wettkampfbetrieb/downloads-medien/' },
     checkedAt: null,
     documents: [
-      { title:'World Aquatics Water Polo Rules', lang:'EN', category:'International playing rules', url:'https://www.worldaquatics.com/rules/competition-regulations', version:'' },
+      { title:'World Aquatics Competition Regulations (Water Polo = Part Six)', lang:'EN', category:'International rules — primary source', url:'https://www.worldaquatics.com/rules/competition-regulations', version:'' },
       { title:'Swiss Aquatics — Reglement 5.1', lang:'DE', category:'Swiss competition regulation', url:'https://www.swiss-aquatics.ch/leistungssport/water-polo/wettkampfbetrieb/downloads-medien/', version:'' },
     ],
     references: [
@@ -400,9 +402,9 @@
       'Communicate clearly and respect the officials.' ] },
     { icon:'⚖️', title:'Referee', items:[
       'Enforce the rules and keep the game fair and safe.',
-      'Award ordinary fouls, exclusions (20 s) and penalties (from 5 m).',
+      'Award ordinary fouls, exclusions (18 s) and penalties (from the 5 m line).',
       'Manage exclusions and re-entry from the corner.',
-      'Signal decisions clearly and coordinate with the table / timekeepers.',
+      'Signal decisions clearly; coordinate with the table, timekeepers and VAR.',
       'Control the match and both benches; stay impartial.',
       'Protect players from dangerous play.' ] },
   ];
