@@ -85,6 +85,22 @@ await page.screenshot({ path:OUT+'/qa_05_editor.png' });
 await page.click('#ed-save'); await page.waitForTimeout(400);
 ok('saved play in library', (await page.locator('.scn-title', { hasText:'Final QA play' }).count())>=1);
 
+console.log('\n[3c] Draft from words — type the play, board builds live');
+await page.click('#new-scenario-btn'); await page.waitForTimeout(300);
+ok('draft panel open on a new play', await page.locator('#draft-panel[open]').count()===1);
+await page.fill('#ed-title','Written play');
+await page.click('#draft-text');
+await page.keyboard.type('3 has the ball\n3 drives to the middle and 2 lifts to the wing\n3 passes to 2\n2 shoots far corner', { delay: 4 });
+await page.waitForTimeout(700);   // debounce + render
+ok('typing produced 4 steps', (await page.locator('#frame-chips .frame-chip').count())===4);
+ok('feedback shows understood lines', (await page.locator('#draft-feedback .draft-line.ok').count())===4);
+ok('movement arrows drawn from the text', (await page.locator('#editor-pool [marker-end]').count())>=2);
+await page.screenshot({ path:OUT+'/qa_18_draft.png' });
+const draftCards = await page.locator('.scn-card').count();
+await page.click('#ed-save'); await page.waitForTimeout(400);
+ok('written play saved (+1)', (await page.locator('.scn-card').count())===draftCards+1);
+ok('written play opens paused & draggable for fine-tuning', (await page.locator('#pool .disc.editable').count())>=13);
+
 console.log('\n[3b] Help — how to use every function');
 await page.click('#help-btn'); await page.waitForTimeout(250);
 ok('help opens for current view', await page.locator('.help-backdrop:not([hidden])').count()===1);

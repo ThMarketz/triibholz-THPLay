@@ -970,8 +970,39 @@
     $('ed-delete').hidden = isNew;
     buildNotesGrid();
     edit.layers = POOL.render($('editor-pool'));
+    // fresh draft panel per editor session
+    const dt = $('draft-text'); if (dt) dt.value = '';
+    const df = $('draft-feedback'); if (df) df.querySelectorAll('.draft-line').forEach(n=>n.remove());
+    const dp = $('draft-panel'); if (dp) dp.open = isNew;   // invite drafting on new plays
     editorRender();
     $('editor-modal').hidden = false;
+  }
+
+  /* ---- Draft from words: text → frames + assignments, applied live ---- */
+  let draftTimer = null;
+  function applyDraft() {
+    if (!edit.scenario || typeof DRAFT === 'undefined') return;
+    const text = $('draft-text').value;
+    const fb = $('draft-feedback');
+    fb.querySelectorAll('.draft-line').forEach(n=>n.remove());
+    if (!text.trim()) return;
+    const r = DRAFT.parse(text, edit.scenario.situation);
+    edit.scenario.frames = r.frames;
+    Object.keys(r.notes).forEach(p => { edit.scenario.notes[p] = r.notes[p]; });
+    edit.idx = 0;
+    buildNotesGrid();
+    editorRender();
+    r.report.forEach(rep => {
+      const div = document.createElement('div');
+      div.className = 'draft-line ' + (rep.ok ? 'ok' : 'nope');
+      div.innerHTML = `<span class="dl-src">${escapeHtml(rep.text)}</span>` +
+        (rep.parts||[]).map(pt=>`<span class="dl-part ${pt.startsWith('〰')?'miss':''}">${escapeHtml(pt)}</span>`).join('');
+      fb.appendChild(div);
+    });
+    const sum = document.createElement('div');
+    sum.className = 'draft-line sum';
+    sum.textContent = `→ ${r.steps} step${r.steps>1?'s':''} on the board — drag anything to fine-tune, then save.`;
+    fb.appendChild(sum);
   }
   function closeEditor() { $('editor-modal').hidden = true; edit.scenario=null; }
   function buildNotesGrid() {
@@ -1298,6 +1329,10 @@
     $('editor-close').onclick = closeEditor; $('ed-cancel').onclick = closeEditor;
     $('ed-save').onclick = saveScenario; $('ed-saveas').onclick = saveScenarioAs; $('ed-delete').onclick = deleteScenario;
     $('add-frame').onclick = addFrame; $('del-frame').onclick = delFrame;
+    $('draft-text').addEventListener('input', ()=> {
+      clearTimeout(draftTimer);
+      draftTimer = setTimeout(applyDraft, 350);
+    });
     $('add-sub').onclick = ()=>addWaiting('sub'); $('add-exc').onclick = ()=>addWaiting('exc'); $('del-wait').onclick = delWaiting;
     $('ed-situation').onchange = (e)=>{ edit.scenario.situation=e.target.value; edit.scenario.frames=[DATA.defaultFrame(e.target.value)]; edit.idx=0; editorRender(); toast('Formation reset for '+DATA.sit(e.target.value).label); };
     $('ed-phase').onchange = (e)=>{ edit.scenario.phase=e.target.value; };

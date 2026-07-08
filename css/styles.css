@@ -602,3 +602,20 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .scn-card.scn-new{border-style:dashed;color:var(--ink-dim);text-align:center;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px}
 .scn-card.scn-new:hover{border-color:var(--accent);color:var(--accent)}
 .scn-new-plus{font-size:18px;font-weight:800}
+
+/* ========== draft from words ========== */
+.draft-accordion{border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:12px;background:linear-gradient(180deg,#13263a,#0f1c2b)}
+.draft-accordion summary{cursor:pointer;font-size:13.5px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:8px}
+.draft-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+#draft-text{background:var(--bg2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 13px;font-size:13px;line-height:1.6;font-family:inherit;resize:vertical}
+#draft-text:focus{border-color:var(--teal);outline:none}
+.draft-feedback{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto}
+.draft-hint{font-size:11.5px;color:var(--ink-faint);line-height:1.55;background:var(--bg2);border:1px dashed var(--line);border-radius:9px;padding:9px 11px}
+.draft-line{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:7px 10px;font-size:11.5px;display:flex;flex-direction:column;gap:2px}
+.draft-line.ok{border-left:3px solid #39e08a}
+.draft-line.nope{border-left:3px solid #ff9b3d}
+.draft-line.sum{border-left:3px solid var(--teal);color:var(--ink);font-weight:700}
+.dl-src{color:var(--ink);font-weight:600}
+.dl-part{color:var(--ink-dim)}
+.dl-part.miss{color:#ffb057}
+@media (max-width:720px){ .draft-grid{grid-template-columns:1fr} }

@@ -308,6 +308,22 @@
           <input type="text" id="ed-desc" placeholder="One line: the idea of this play" />
         </div>
 
+        <details class="draft-accordion" id="draft-panel">
+          <summary>✍️ Draft from words — write the play, watch it appear <button class="help-chip" data-help="editor" title="How drafting works">？</button></summary>
+          <div class="draft-grid">
+            <textarea id="draft-text" rows="6" spellcheck="false" placeholder="3 has the ball
+3 drives to the middle and 2 lifts to the wing
+3 passes to 2
+6 posts up at 2m
+2 shoots far corner"></textarea>
+            <div class="draft-feedback" id="draft-feedback">
+              <div class="draft-hint">Each line becomes one <strong>step</strong>. Use player numbers 1–6 (or “hole”, “point”, GK) with verbs like
+              <em>drives to the wing · passes to 2 · posts up · screens for 4 · shoots far corner</em>.
+              What the board understood appears here — then drag anything to fine-tune.</div>
+            </div>
+          </div>
+        </details>
+
         <div class="editor-pool-wrap">
           <svg id="editor-pool" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet"></svg>
         </div>
@@ -354,6 +370,7 @@
 
   <script src="js/i18n.js"></script>
   <script src="js/help.js"></script>
+  <script src="js/draft.js"></script>
   <script src="js/qr.js"></script>
   <script src="js/fx.js"></script>
   <script src="js/pool.js"></script>

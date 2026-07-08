@@ -40,7 +40,8 @@ const HELP = (() => {
 
     editor: { icon:'✏️', title:'Editor — record a movement from scratch', steps:[
       'Press the green <strong>＋ New play</strong> button (top of the play list, left side) or the dashed <strong>＋ Create a new play</strong> card at the end of the list. Pick the <strong>situation</strong> and <strong>phase</strong>.',
-      'Drag players and the ball into the <strong>starting</strong> spots.',
+      'Fastest way: open <strong>✍️ Draft from words</strong> and simply WRITE the play — one line per step, e.g. <em>“3 drives to the middle and 2 lifts to the wing”, “3 passes to 2”, “2 shoots far corner”</em>. The board builds it as you type, shows what it understood, and fills each player’s assignment.',
+      'Or drag players and the ball into the <strong>starting</strong> spots by hand.',
       'Press <strong>+ Capture step</strong>, then drag everyone to where they move <em>next</em>. Repeat — each capture records one step of the movement.',
       'Set the <strong>ball carrier</strong> per step; add waiting players with <strong>+ Sub / + Excluded</strong>.',
       'Optionally write per-position assignments, then <strong>Save scenario</strong> — or <strong>Save as new ⑂</strong> to keep the original untouched.',

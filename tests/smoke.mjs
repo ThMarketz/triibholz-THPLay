@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -162,6 +162,37 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
   ok('save-as-new from the paused board (+1)', DATA.load().length===cnt2+1);
   ok('adjusted title marked', /adjusted/i.test(q('#scenario-title').textContent));
   ok('new play opens paused & draggable again', qa('#pool .disc.editable').length>=13);
+
+  console.log('\n[6d] Draft from words — write the play, the board builds it');
+  {
+    const { DRAFT } = window.__T;
+    const sample = '3 has the ball\n3 drives to the middle and 2 lifts to the wing\n3 passes to 2\n6 posts up at 2m\n2 shoots far corner';
+    const r = DRAFT.parse(sample, '6v6');
+    ok('5 lines → '+r.steps+' steps (≥4)', r.steps>=4);
+    ok('ball starts with 3', r.frames[0].ball.carrier==='A3');
+    ok('pass hands the ball to 2', r.frames.some(f=>f.ball && f.ball.carrier==='A2'));
+    const lastBall = r.frames[r.frames.length-1].ball;
+    ok('shot: ball flies into the goal', lastBall.carrier===null && lastBall.x>=290);
+    ok('movement actually moves 3 (point → middle)', r.frames[1].att['3'].x > r.frames[0].att['3'].x);
+    ok('assignments filled for 3, 2 and 6', !!r.notes['3'] && !!r.notes['2'] && !!r.notes['6']);
+    ok('every sample line understood', r.report.every(l=>l.ok));
+    const bad = DRAFT.parse('the seagull applauds loudly', '6v6');
+    ok('nonsense line flagged, not silently dropped', bad.report[0].ok===false);
+
+    // UI wiring: type in the editor → debounced live build
+    q('#new-scenario-btn').click(); await wait(25);
+    ok('draft panel present & open on a new play', !!q('#draft-panel') && q('#draft-panel').open===true);
+    const dt = q('#draft-text');
+    dt.value = '3 has the ball\n3 passes to 6\n6 shoots near corner';
+    dt.dispatchEvent(new window.Event('input')); await wait(500);
+    ok('typing rebuilt the steps (3 frame chips)', qa('#frame-chips .frame-chip').length===3);
+    ok('understood lines listed in feedback', qa('#draft-feedback .draft-line.ok').length===3);
+    ok('assignment grid picked up the text', qa('#notes-grid input').some(i=>i.value.includes('Receive the ball')));
+    q('#ed-title').value='Drafted play'; q('#ed-title').dispatchEvent(new window.Event('input'));
+    const beforeDraft = DATA.load().length;
+    q('#ed-save').click(); await wait(40);
+    ok('drafted play saves (+1)', DATA.load().length===beforeDraft+1);
+  }
 
   console.log('\n[7] Basics + i18n');
   q('.nav-btn[data-view="basics"]').click(); await wait(25);
