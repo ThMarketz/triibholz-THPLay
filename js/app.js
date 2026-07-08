@@ -214,7 +214,7 @@
       html += `<div class="dash-grid">
         ${card('accent', `<span class="dc-k">Squad</span><span class="dc-v big">${users.filter(x=>x.role==='player'&&x.status==='approved').length}</span><span class="dc-note">approved players</span>`)}
         ${card('', `<span class="dc-k">Plays</span><span class="dc-v big">${scn.length}</span><button class="btn-primary sm" data-go="playbook">Open playbook</button>`)}
-        ${card('', `<span class="dc-k">You can</span><span class="dc-v">Record &amp; adjust</span><span class="dc-note">build movement, capture steps, edit anytime</span>`)}
+        ${card('', `<span class="dc-k">You can</span><span class="dc-v">Record &amp; adjust</span><span class="dc-note">pause any play and drag players — or build one from scratch</span><button class="btn-primary sm" data-newplay>＋ New play</button>`)}
       </div>
       <h3 class="dash-h3">Recent changes</h3>
       <div class="dash-list">${acts.filter(a=>a.type==='play').slice(0,6).map(activityRow).join('')||'<div class="muted">No edits yet — open the Playbook and press “+ New”.</div>'}</div>`;
@@ -232,6 +232,7 @@
     }
     v.querySelectorAll('[data-go]').forEach(b=> b.onclick=()=>switchView(b.dataset.go));
     v.querySelectorAll('[data-challenge]').forEach(b=> b.onclick=()=>runChallenge());
+    v.querySelectorAll('[data-newplay]').forEach(b=> b.onclick=()=>{ switchView('playbook'); openEditor(DATA.newScenario(state.situation, state.phase), true); });
     v.querySelectorAll('[data-open]').forEach(b=> b.onclick=()=>{ const s=state.scenarios.find(x=>x.id===b.dataset.open); if(s){ state.situation=s.situation; state.phase=s.phase; switchView('playbook'); openScenario(s.id);} });
   }
   function greeting(){ return 'Welcome'; }
@@ -666,6 +667,13 @@
       card.onclick = () => openScenario(scn.id);
       list.appendChild(card);
     });
+    if (canEdit()) {
+      const plus = document.createElement('button');
+      plus.className = 'scn-card scn-new';
+      plus.innerHTML = '<span class="scn-new-plus">＋</span> Create a new play';
+      plus.onclick = () => openEditor(DATA.newScenario(state.situation, state.phase), true);
+      list.appendChild(plus);
+    }
   }
 
   function openFirstOrEmpty() {
@@ -674,7 +682,7 @@
     state.selectedId = null;
     if (state.viewer) { state.viewer.stop(); state.viewer = null; }
     $('controls').hidden = true; $('pool-empty').hidden = false;
-    adjust.on = false; $('adjust-bar').hidden = true; $('adjust-btn').hidden = true; $('adjust-btn').classList.remove('active');
+    resetAdjust();
     $('mode-toggle').hidden = true; $('problem-overlay').hidden = true;
     $('scenario-title').textContent = 'Select a scenario';
     $('scenario-desc').textContent = ''; $('scenario-desc').style.display = '';
@@ -687,16 +695,12 @@
     if (!scn) return;
     state.selectedId = id;
     $('pool-empty').hidden = true; $('controls').hidden = false;
-    adjust.on = false; $('adjust-bar').hidden = true; $('adjust-btn').classList.remove('active');
+    resetAdjust();
     $('scenario-title').textContent = scn.title || 'Untitled play';
     $('scenario-desc').textContent = scn.description || '';
     $('edit-btn').hidden = !canEdit();
-    $('adjust-btn').hidden = !canEdit();
-    state.renderer = new ANIM.Renderer($('pool'));
     state.focus = (state.viewMode==='me') ? defaultFocus() : null;
-    state.viewer = new ANIM.Player(state.renderer, scn, onViewerFrame);
-    state.viewer.setOnState(playing => { $('play-btn').textContent = playing ? '❚❚' : '▶'; $('play-btn').classList.toggle('playing', playing); });
-    state.viewer.setFocus(state.focus);
+    buildViewer(0, false);
     syncFocusUI();
     // Problem→Solution: players start in "problem" mode, staff in "solution"
     $('mode-toggle').hidden = false;
@@ -704,9 +708,33 @@
     state.scenarioDesc = scn.description || '';
     applyMode();
     refreshTabs(); renderLibrary();
+    // pause-to-move: an open play IS paused, so coaches can drag right away
+    enterPausedEdit();
+  }
+
+  let wasPlaying = false;
+  function onPlayState(playing) {
+    $('play-btn').textContent = playing ? '❚❚' : '▶';
+    $('play-btn').classList.toggle('playing', playing);
+    const was = wasPlaying; wasPlaying = playing;
+    // only a real playing→paused transition re-opens the drag surface
+    if (!playing && was) setTimeout(() => { if (state.viewer && !state.viewer.playing) enterPausedEdit(); }, 0);
+  }
+  function buildViewer(t0, andPlay) {
+    const scn = state.scenarios.find(s=>s.id===state.selectedId);
+    if (!scn) return;
+    wasPlaying = false;
+    state.renderer = new ANIM.Renderer($('pool'));
+    state.viewer = new ANIM.Player(state.renderer, scn, onViewerFrame);
+    state.viewer.setOnState(onPlayState);
+    state.viewer.setFocus(state.focus);
+    if (t0) state.viewer.seek(t0);
+    if (andPlay) state.viewer.play();
   }
 
   function setMode(mode, autoplay) {
+    if (adjust.dirty) { toast('Save or cancel your changes first'); return; }
+    if (adjust.live) exitPausedEditToViewer(0, false);
     state.mode = mode;
     applyMode();
     if (mode==='solution' && autoplay && state.viewer) state.viewer.play();
@@ -777,35 +805,61 @@
   }
 
   /* ======================================================
-     ADJUST MODE — drag players & ball directly on the open play
+     PAUSE-TO-MOVE — whenever a play is PAUSED, coaches can drag
+     players & the ball right on the board. The save bar appears
+     automatically after the first change. (No mode to find.)
      ====================================================== */
-  const adjust = { on:false, scn:null, idx:0, layers:null, ballEl:null, undo:[], gesture:false };
+  const adjust = { live:false, dirty:false, scn:null, idx:0, layers:null, ballEl:null, undo:[], gesture:false };
 
-  function enterAdjust() {
-    const scn = state.scenarios.find(s=>s.id===state.selectedId);
-    if (!scn || !canEdit()) return;
-    if (state.viewer) state.viewer.stop();
-    adjust.on = true;
-    adjust.scn = DATA.clone(scn);
+  function canPausedEdit() {
+    return canEdit() && state.view==='playbook' && state.mode==='solution'
+      && !!state.selectedId && $('editor-modal').hidden;
+  }
+  function stepT() {
+    const seg = Math.max(1, adjust.scn.frames.length - 1);
+    return adjust.idx / seg;
+  }
+  function updateAdjustBar() {
+    $('adjust-bar').hidden = !adjust.dirty;
+    const hint = $('pool-drag-hint');
+    if (hint) hint.hidden = !(adjust.live && !adjust.dirty);
+    updateUndoBtn();
+  }
+  function markDirty() {
+    if (!adjust.dirty) { adjust.dirty = true; updateAdjustBar(); }
+  }
+  function resetAdjust() {
+    adjust.live = false; adjust.dirty = false; adjust.scn = null; adjust.ballEl = null;
     adjust.undo = []; adjust.gesture = false;
-    adjust.idx = Math.min(state.viewer ? state.viewer.currentStep() : 0, adjust.scn.frames.length-1);
-    $('controls').hidden = true;
-    $('problem-overlay').hidden = true;
-    $('adjust-bar').hidden = false;
-    $('adjust-btn').classList.add('active');
-    renderAdjustBoard();
-  }
-  function exitAdjust(openId) {
-    adjust.on = false; adjust.scn = null; adjust.ballEl = null;
     $('adjust-bar').hidden = true;
-    $('adjust-btn').classList.remove('active');
-    if (openId !== false) openScenario(openId || state.selectedId);
+    const hint = $('pool-drag-hint'); if (hint) hint.hidden = true;
   }
+
+  function enterPausedEdit() {
+    if (adjust.live || !canPausedEdit()) return;
+    const scn = state.scenarios.find(s=>s.id===state.selectedId);
+    if (!scn) return;
+    if (!adjust.dirty) {                     // clean entry → fresh working copy
+      adjust.scn = DATA.clone(scn);
+      adjust.undo = []; adjust.gesture = false;
+      adjust.idx = Math.min(state.viewer ? state.viewer.currentStep() : 0, adjust.scn.frames.length - 1);
+    }
+    adjust.live = true;
+    renderAdjustBoard();
+    updateAdjustBar();
+  }
+  // clean exits only — back to the animated viewer (optionally playing)
+  function exitPausedEditToViewer(t, andPlay) {
+    adjust.live = false; adjust.ballEl = null;
+    const hint = $('pool-drag-hint'); if (hint) hint.hidden = true;
+    buildViewer(t == null ? stepT() : t, andPlay);
+  }
+
   function renderAdjustBoard() {
     const f = adjust.scn.frames[adjust.idx];
     adjust.layers = POOL.render($('pool'));
-    ANIM.drawTactics(adjust.layers, adjust.scn, null);
-    const refresh = () => ANIM.drawTactics(adjust.layers, adjust.scn, null);
+    const refresh = () => ANIM.drawTactics(adjust.layers, adjust.scn, state.focus);
+    refresh();
     // one undo snapshot per drag gesture (a gesture = pointerdown → pointerup)
     const snapshot = () => {
       if (adjust.gesture) return;
@@ -813,6 +867,7 @@
       adjust.undo.push(JSON.parse(JSON.stringify(adjust.scn.frames)));
       if (adjust.undo.length > 25) adjust.undo.shift();
       window.addEventListener('pointerup', () => { adjust.gesture = false; }, { once:true });
+      markDirty();
       updateUndoBtn();
     };
 
@@ -844,7 +899,10 @@
       placeAdjustBall(f);
       refresh();
     });
-    $('adj-step').textContent = `Step ${adjust.idx+1} / ${adjust.scn.frames.length}`;
+    // keep the normal transport in sync
+    const total = adjust.scn.frames.length;
+    $('frame-label').textContent = `Step ${adjust.idx+1} / ${total}`;
+    $('scrub').value = Math.round(stepT() * 1000);
     updateUndoBtn();
   }
   function placeAdjustBall(f) {
@@ -854,16 +912,21 @@
   }
   function updateUndoBtn() { const b = $('adj-undo'); if (b) b.disabled = adjust.undo.length === 0; }
   function adjustUndo() {
-    if (!adjust.on || !adjust.undo.length) return;
+    if (!adjust.live || !adjust.undo.length) return;
     adjust.scn.frames = adjust.undo.pop();
     adjust.gesture = false;
     renderAdjustBoard();
     toast('Last drag undone ↩');
   }
   function adjustStep(d) {
-    if (!adjust.on) return;
+    if (!adjust.live) return;
     adjust.idx = Math.max(0, Math.min(adjust.scn.frames.length-1, adjust.idx + d));
     renderAdjustBoard();
+  }
+  function adjustCancel() {
+    resetAdjust();
+    openScenario(state.selectedId);
+    toast('Changes discarded');
   }
   function adjustSave(asNew) {
     const sc = adjust.scn;
@@ -881,8 +944,9 @@
     DATA.save(state.scenarios);
     DATA.logActivity('play', `${state.user.name} adjusted “${sc.title}” on the board`, state.user.name);
     const id = sc.id;
+    resetAdjust();
     renderLibrary();
-    exitAdjust(id);
+    openScenario(id);
     toast(asNew ? 'Saved as a new movement ⑂' : 'Changes saved ✓');
   }
 
@@ -1168,13 +1232,33 @@
 
     document.querySelectorAll('#phase-toggle .phase-btn').forEach(b=> b.onclick=()=>{ state.phase=b.dataset.phase; refreshTabs(); renderLibrary(); openFirstOrEmpty(); });
 
-    $('play-btn').onclick = ()=> state.viewer && state.viewer.toggle();
-    $('step-fwd').onclick = ()=> state.viewer && state.viewer.stepFwd();
-    $('step-back').onclick = ()=> state.viewer && state.viewer.stepBack();
-    $('scrub').oninput = (e)=> state.viewer && state.viewer.seek(e.target.value/1000);
-    $('view-team').onclick = ()=>{ state.viewMode='team'; state.focus=null; if(state.viewer)state.viewer.setFocus(null); syncFocusUI(); const s=state.scenarios.find(x=>x.id===state.selectedId); if(s)renderAssignments(s); };
-    $('view-me').onclick = ()=>{ state.viewMode='me'; state.focus=defaultFocus()||(state.user.position||'1'); if(state.viewer)state.viewer.setFocus(state.focus); syncFocusUI(); const s=state.scenarios.find(x=>x.id===state.selectedId); if(s)renderAssignments(s); };
-    $('focus-pos').onchange = (e)=>{ state.focus=e.target.value||null; state.viewMode=state.focus?'me':'team'; if(state.viewer)state.viewer.setFocus(state.focus); syncFocusUI(); const s=state.scenarios.find(x=>x.id===state.selectedId); if(s)renderAssignments(s); };
+    $('play-btn').onclick = ()=> {
+      if (adjust.live) {
+        if (adjust.dirty) { toast('Save or cancel your changes first'); return; }
+        exitPausedEditToViewer(stepT(), true);   // resume from the step on screen
+        return;
+      }
+      state.viewer && state.viewer.toggle();
+    };
+    $('step-fwd').onclick  = ()=> adjust.live ? adjustStep(1)  : (state.viewer && state.viewer.stepFwd());
+    $('step-back').onclick = ()=> adjust.live ? adjustStep(-1) : (state.viewer && state.viewer.stepBack());
+    $('scrub').oninput = (e)=> {
+      if (adjust.live) {
+        if (adjust.dirty) { e.target.value = Math.round(stepT()*1000); return; }
+        adjust.live = false;
+        const hint = $('pool-drag-hint'); if (hint) hint.hidden = true;
+        buildViewer(e.target.value/1000, false);
+        return;
+      }
+      state.viewer && state.viewer.seek(e.target.value/1000);
+    };
+    $('scrub').onchange = ()=> {   // released the slider while paused → draggable again
+      if (!adjust.live && state.viewer && !state.viewer.playing) enterPausedEdit();
+    };
+    const afterFocusChange = ()=>{ if(state.viewer)state.viewer.setFocus(state.focus); if(adjust.live)renderAdjustBoard(); syncFocusUI(); const s=state.scenarios.find(x=>x.id===state.selectedId); if(s)renderAssignments(s); };
+    $('view-team').onclick = ()=>{ state.viewMode='team'; state.focus=null; afterFocusChange(); };
+    $('view-me').onclick = ()=>{ state.viewMode='me'; state.focus=defaultFocus()||(state.user.position||'1'); afterFocusChange(); };
+    $('focus-pos').onchange = (e)=>{ state.focus=e.target.value||null; state.viewMode=state.focus?'me':'team'; afterFocusChange(); };
 
     document.querySelectorAll('#mode-toggle .mode-btn').forEach(b=> b.onclick=()=>setMode(b.dataset.mode, false));
     $('reveal-btn').onclick = ()=>{ setMode('solution', true); onStudied(); };
@@ -1187,28 +1271,25 @@
 
     // "How to use" — the ？ in the top bar explains the CURRENT view; small
     // [data-help] chips sit next to each feature
-    $('help-btn').onclick = ()=> { if (typeof HELP!=='undefined') HELP.forView(adjust.on ? 'adjust' : state.view); };
+    $('help-btn').onclick = ()=> { if (typeof HELP==='undefined') return; if (adjust.live) HELP.show('adjust'); else HELP.forView(state.view); };
     document.addEventListener('click', e => {
       const chip = e.target.closest && e.target.closest('[data-help]');
       if (chip && typeof HELP!=='undefined') { e.preventDefault(); HELP.show(chip.dataset.help); }
     });
     // keyboard shortcuts in the playbook: Space = play/pause, ←/→ = step
     document.addEventListener('keydown', e => {
-      if (!$('app-screen').classList.contains('active') || state.view!=='playbook' || adjust.on) return;
+      if (!$('app-screen').classList.contains('active') || state.view!=='playbook') return;
       if (!$('editor-modal').hidden || (typeof HELP!=='undefined' && document.querySelector('.help-backdrop:not([hidden])'))) return;
       const tag = (e.target && e.target.tagName || '').toLowerCase();
       if (tag==='input' || tag==='textarea' || tag==='select') return;
-      if (!state.viewer) return;
-      if (e.key===' ')            { e.preventDefault(); state.viewer.toggle(); }
-      else if (e.key==='ArrowRight'){ e.preventDefault(); state.viewer.stepFwd(); }
-      else if (e.key==='ArrowLeft') { e.preventDefault(); state.viewer.stepBack(); }
+      if (!state.viewer && !adjust.live) return;
+      if (e.key===' ')            { e.preventDefault(); $('play-btn').click(); }
+      else if (e.key==='ArrowRight'){ e.preventDefault(); $('step-fwd').click(); }
+      else if (e.key==='ArrowLeft') { e.preventDefault(); $('step-back').click(); }
     });
 
-    $('adjust-btn').onclick = ()=> { if (adjust.on) exitAdjust(); else enterAdjust(); };
     $('adj-undo').onclick = ()=> adjustUndo();
-    $('adj-prev').onclick = ()=> adjustStep(-1);
-    $('adj-next').onclick = ()=> adjustStep(1);
-    $('adj-cancel').onclick = ()=> exitAdjust();
+    $('adj-cancel').onclick = ()=> adjustCancel();
     $('adj-save').onclick = ()=> adjustSave(false);
     $('adj-save-new').onclick = ()=> adjustSave(true);
 

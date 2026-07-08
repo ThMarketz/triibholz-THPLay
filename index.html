@@ -181,7 +181,7 @@
       <aside class="sidebar">
         <div class="sidebar-head">
           <h3 id="library-title">Scenarios</h3>
-          <button class="btn-new" id="new-scenario-btn" title="Create a scenario" data-i18n="lib.new">+ New</button>
+          <button class="btn-new" id="new-scenario-btn" title="Create a new play from scratch" data-i18n="lib.new">＋ New play</button>
         </div>
         <div class="sidebar-sub" id="library-sub">Pick a situation above</div>
         <div class="scenario-list" id="scenario-list"><!-- scenarios injected --></div>
@@ -200,7 +200,6 @@
               <button class="mode-btn" data-mode="problem" data-i18n="mode.problem">Problem</button>
               <button class="mode-btn active" data-mode="solution" data-i18n="mode.solution">Solution</button>
             </span>
-            <button class="btn-ghost" id="adjust-btn" hidden title="Drag players & ball directly on this play">✋ Adjust</button>
             <button class="btn-ghost" id="edit-btn" hidden>Edit</button>
           </div>
         </div>
@@ -213,6 +212,7 @@
               <span>Choose one from the left, or press “+ New” to build a movement pattern.</span>
             </div>
           </div>
+          <div class="pool-drag-hint" id="pool-drag-hint" hidden>✋ Paused — drag players &amp; the ball to adjust</div>
           <div class="problem-overlay" id="problem-overlay" hidden>
             <div class="problem-card">
               <span class="problem-kicker">Problem</span>
@@ -223,17 +223,14 @@
           </div>
         </div>
 
-        <!-- adjust mode toolbar -->
+        <!-- appears automatically once a paused play has been changed -->
         <div class="controls adjust-bar" id="adjust-bar" hidden>
           <div class="ctl-row">
-            <button class="ctl-btn" id="adj-prev" title="Previous step">⏮</button>
-            <span class="frame-label" id="adj-step">Step 1</span>
-            <button class="ctl-btn" id="adj-next" title="Next step">⏭</button>
             <button class="ctl-btn" id="adj-undo" title="Undo last drag">↩</button>
-            <span class="adj-hint">Drag players &amp; ball — arrows follow. Each step is one keyframe.</span>
-            <button class="help-chip" data-help="adjust" title="How to adjust a play">？</button>
+            <span class="adj-hint">✋ You changed this play — keep it?</span>
+            <button class="help-chip" data-help="adjust" title="How adjusting works">？</button>
             <div class="spacer"></div>
-            <button class="btn-ghost sm" id="adj-cancel">Cancel</button>
+            <button class="btn-ghost sm" id="adj-cancel">Discard</button>
             <button class="btn-ghost sm" id="adj-save-new">Save as new ⑂</button>
             <button class="btn-primary sm" id="adj-save">Save changes</button>
           </div>

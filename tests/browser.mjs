@@ -53,13 +53,16 @@ await page.screenshot({ path:OUT+'/qa_04_problem.png' });
 await page.click('#reveal-btn'); await page.waitForTimeout(400);
 ok('solution revealed', await page.locator('#problem-overlay[hidden]').count()===1);
 
-console.log('\n[2b] Adjust mode — drag directly on the play');
-await page.click('#adjust-btn'); await page.waitForTimeout(400);
-ok('adjust surface active', await page.locator('#adjust-bar:not([hidden])').count()===1);
+console.log('\n[2b] Pause-to-move — drag directly on the paused play');
+await page.click('#play-btn'); await page.waitForTimeout(500);      // pause → draggable
+ok('players draggable when paused', (await page.locator('#pool .disc.editable').count())>=13);
+ok('drag hint visible', await page.locator('#pool-drag-hint:not([hidden])').count()===1);
+ok('save bar hidden before changes', await page.locator('#adjust-bar[hidden]').count()===1);
 const disc = page.locator('#pool .disc.editable').first();
 const tBefore = await disc.getAttribute('transform');
 await dragBy(page, disc, 62, 38);
 ok('disc dragged on the main pool', (await disc.getAttribute('transform')) !== tBefore);
+ok('save bar appears after the first change', await page.locator('#adjust-bar:not([hidden])').count()===1);
 const ballLoc = page.locator('#pool .ball.editable');
 const bBefore = await ballLoc.getAttribute('transform');
 await dragBy(page, ballLoc, -45, 22);
@@ -70,7 +73,7 @@ await page.screenshot({ path:OUT+'/qa_14_adjust.png' });
 const cardsBefore = await page.locator('.scn-card').count();
 await page.click('#adj-save-new'); await page.waitForTimeout(500);
 ok('adjusted play saved as new (+1)', (await page.locator('.scn-card').count())===cardsBefore+1);
-ok('back in playback view', await page.locator('#controls:not([hidden])').count()===1);
+ok('new play opens paused & draggable', (await page.locator('#pool .disc.editable').count())>=13);
 
 console.log('\n[3] Coach — editor create & save');
 await page.click('#new-scenario-btn'); await page.waitForTimeout(400);

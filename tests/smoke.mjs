@@ -91,6 +91,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
   ok('6v5 excluded disc waits', qa('#pool .disc.wait').length>=1);
   qa('.sit-tab').find(t=>t.textContent.includes('6 on 6')).click(); await wait(20);
   ok('6v6 shows 2 subs', qa('#pool .disc.wait').length===2);
+  ok('dashed “Create a new play” card in the list', !!q('.scn-card.scn-new'));
   q('#new-scenario-btn').click(); await wait(20);
   ok('editor open + field drawn', q('#editor-modal').hidden===false && qa('#editor-pool rect').length>5);
   ok('situation preset', q('#ed-situation').value==='6v6');
@@ -116,7 +117,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
   ok('ripple layers present', !!q('#pool .ripples-a') && !!q('#pool .ripples-b'));
   await wait(500);   // reveal auto-plays → wakes spawn
   ok('swim splashes during playback', qa('#pool .splash').length>0);
-  q('#play-btn').click(); await wait(20);
+  q('#play-btn').click(); await wait(40);   // pause → paused-edit re-enters
 
   console.log('\n[6a2] Keyboard shortcuts + Help system');
   {
@@ -130,10 +131,10 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
   }
   ok('8 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===8);
   q('#help-btn').click(); await wait(15);
-  ok('topbar ？ opens help for current view', !!q('.help-backdrop:not([hidden])') &&
-     /Playbook/i.test(q('#help-title').textContent));
+  ok('topbar ？ is context-aware (paused board → Adjust guide)', !!q('.help-backdrop:not([hidden])') &&
+     /Adjust/i.test(q('#help-title').textContent));
   window.__T.HELP.show('adjust'); await wait(10);
-  ok('adjust help = grab, move, save', /grab a player/i.test(q('#help-title').textContent) &&
+  ok('adjust help = pause, drag, save', /pause the play/i.test(q('#help-title').textContent) &&
      /Save as new/i.test(q('#help-body').innerHTML));
   window.__T.HELP.hide(); await wait(10);
   ok('help closes', q('.help-backdrop').hidden===true);
@@ -148,20 +149,19 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
      DATA.load().some(x=>x.title==='Top pick — slip to the hole'));
   ok('variant opened', /variant/i.test(q('#scenario-title').textContent));
 
-  console.log('\n[6c] Adjust mode — drag-in-place surface');
-  ok('adjust button visible', q('#adjust-btn').hidden===false);
-  q('#adjust-btn').click(); await wait(30);
-  ok('adjust bar shown', q('#adjust-bar').hidden===false);
-  ok('draggable discs on main pool', qa('#pool .disc.editable').length>=13);
+  console.log('\n[6c] Pause-to-move — a paused play is simply draggable');
+  ok('players draggable right after opening', qa('#pool .disc.editable').length>=13);
   ok('ball draggable', !!q('#pool .ball.editable'));
+  ok('drag hint visible', q('#pool-drag-hint').hidden===false);
+  ok('save bar hidden while unchanged', q('#adjust-bar').hidden===true);
   ok('undo button present & idle', !!q('#adj-undo') && q('#adj-undo').disabled===true);
-  q('#adj-next').click(); await wait(15);
-  ok('step nav works', /Step 2/.test(q('#adj-step').textContent));
+  q('#step-fwd').click(); await wait(20);
+  ok('⏭ steps the paused board', /Step 2/.test(q('#frame-label').textContent));
   const cnt2 = DATA.load().length;
   q('#adj-save-new').click(); await wait(40);
-  ok('adjusted play saved as new (+1)', DATA.load().length===cnt2+1);
-  ok('back in viewer', q('#adjust-bar').hidden===true && q('#controls').hidden===false);
+  ok('save-as-new from the paused board (+1)', DATA.load().length===cnt2+1);
   ok('adjusted title marked', /adjusted/i.test(q('#scenario-title').textContent));
+  ok('new play opens paused & draggable again', qa('#pool .disc.editable').length>=13);
 
   console.log('\n[7] Basics + i18n');
   q('.nav-btn[data-view="basics"]').click(); await wait(25);

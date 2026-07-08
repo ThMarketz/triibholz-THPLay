@@ -24,22 +24,22 @@ const HELP = (() => {
       '<strong>Problem / Solution</strong>: freeze the setup as a question, then <strong>Reveal solution ▶</strong> to see the answer animate.',
     ], tips:[
       'Keyboard: <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> step back/forward.',
-      'Coaches: use <strong>✋ Adjust</strong> to move players right here, or <strong>Edit</strong> for the full editor.',
+      'Coaches: <strong>paused = draggable</strong> — just grab a player and move him; a save bar appears. <strong>Edit</strong> opens the full editor.',
     ]},
 
-    adjust: { icon:'✋', title:'Adjust — grab a player, move him, save it', steps:[
-      'Open a play and press <strong>✋ Adjust</strong> (next to Edit).',
+    adjust: { icon:'✋', title:'Adjust — pause the play, then just drag', steps:[
+      'Open a play — it starts <strong>paused</strong>, and paused means <strong>draggable</strong>. (Playing? Press <strong>⏸</strong> or <kbd>Space</kbd> first.)',
       '<strong>Press and hold a player disc, drag it</strong> to the new spot, release. The movement arrow follows immediately. The <strong>ball</strong> drags the same way.',
-      'Use <strong>⏮ ⏭</strong> in the yellow bar to switch steps — every step is one keyframe, so dragging at step 2 changes where the player swims <em>to</em>.',
-      'Made a mess? <strong>↩ Undo</strong> reverts your last drag (up to 25).',
-      'Finish with <strong>Save changes</strong> (overwrites this play) or <strong>Save as new ⑂</strong> (keeps the original and saves your version as a variant).',
+      'Use <strong>⏮ ⏭</strong> to switch steps — every step is one keyframe, so dragging at step 2 changes where the player swims <em>to</em>.',
+      'After your first change a bar appears: <strong>↩ Undo</strong> a drag, <strong>Discard</strong>, <strong>Save changes</strong> (overwrites) or <strong>Save as new ⑂</strong> (keeps the original, saves a variant).',
+      'Press <strong>▶</strong> any time (after saving or discarding) to watch the movement again.',
     ], tips:[
       'Sample plays are never lost — saving over a sample makes it your own copy.',
       'Waiting players (subs, excluded) can be dragged into the staging zones too.',
     ]},
 
     editor: { icon:'✏️', title:'Editor — record a movement from scratch', steps:[
-      'Press <strong>+ New</strong> (or <strong>Edit</strong> on an open play). Pick the <strong>situation</strong> and <strong>phase</strong>.',
+      'Press the green <strong>＋ New play</strong> button (top of the play list, left side) or the dashed <strong>＋ Create a new play</strong> card at the end of the list. Pick the <strong>situation</strong> and <strong>phase</strong>.',
       'Drag players and the ball into the <strong>starting</strong> spots.',
       'Press <strong>+ Capture step</strong>, then drag everyone to where they move <em>next</em>. Repeat — each capture records one step of the movement.',
       'Set the <strong>ball carrier</strong> per step; add waiting players with <strong>+ Sub / + Excluded</strong>.',
