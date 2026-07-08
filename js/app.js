@@ -128,9 +128,10 @@
     if (view==='film' && typeof FILM!=='undefined') FILM.render($('view-film'), {
       user: state.user, canEdit: canEdit(), toast,
       // a tagged video moment becomes a play on the tactics board
-      rebuild: (situation, phase, title, desc) => {
+      rebuild: (situation, phase, title, desc, frame) => {
         const sc = DATA.newScenario(situation, phase);
         sc.title = title; sc.description = desc;
+        if (frame) sc.frames = [DATA.clone(frame)];   // staged positions from the Film Room
         openEditor(sc, true);
       },
     });
@@ -263,7 +264,8 @@
       // pick 2 distractors deterministically
       const opts = [carrier, distractors[0], distractors[1]].filter(Boolean);
       while (opts.length<3 && inPlay.length) { const extra=inPlay.find(p=>!opts.includes(p)); if(!extra)break; opts.push(extra); }
-      const options = opts.sort((a,b)=> (Number(a)-Number(b)));
+      for (let k=opts.length-1;k>0;k--){ const j=Math.floor(Math.random()*(k+1)); [opts[k],opts[j]]=[opts[j],opts[k]]; }
+      const options = opts;
       qs.push({ title:s.title, situation:s.situation, correct:carrier, options });
       if (qs.length>=5) break;
     }
@@ -505,10 +507,14 @@
     const qs = trivia.set.questions;
     const c = $('trivia-card'); const item = qs[trivia.i];
     trivia.answered = false;
+    // shuffle the displayed order every time — the correct answer must never
+    // live in a fixed position (players were learning "always the first one")
+    const order = item.a.map((_,i)=>i);
+    for (let i=order.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [order[i],order[j]]=[order[j],order[i]]; }
     c.innerHTML = `<div class="trivia-q">
       <div class="trivia-prog">${trivia.set.icon} ${escapeHtml(trivia.set.label)} · Question ${trivia.i+1} / ${qs.length} · Score ${trivia.score}</div>
       <h2>${escapeHtml(item.q)}</h2>
-      <div class="trivia-opts">${item.a.map((opt,idx)=>`<button class="trivia-opt" data-idx="${idx}">${escapeHtml(opt)}</button>`).join('')}</div>
+      <div class="trivia-opts">${order.map(idx=>`<button class="trivia-opt" data-idx="${idx}">${escapeHtml(item.a[idx])}</button>`).join('')}</div>
       <div class="trivia-why" id="trivia-why" hidden></div>
       <button class="btn-primary" id="trivia-next" hidden>${trivia.i===qs.length-1?'See result':'Next'}</button>
     </div>`;
@@ -519,8 +525,9 @@
     if (trivia.answered) return; trivia.answered = true;
     const correct = idx===item.correct;
     if (correct) trivia.score++;
-    document.querySelectorAll('.trivia-opt').forEach((b,i)=>{
-      b.classList.add(i===item.correct?'right':(i===idx?'wrong':'mute'));
+    document.querySelectorAll('.trivia-opt').forEach(b=>{
+      const bi = parseInt(b.dataset.idx,10);
+      b.classList.add(bi===item.correct?'right':(bi===idx?'wrong':'mute'));
       b.disabled = true;
     });
     const why = $('trivia-why'); why.hidden=false;
@@ -665,6 +672,7 @@
     state.selectedId = null;
     if (state.viewer) { state.viewer.stop(); state.viewer = null; }
     $('controls').hidden = true; $('pool-empty').hidden = false;
+    adjust.on = false; $('adjust-bar').hidden = true; $('adjust-btn').hidden = true; $('adjust-btn').classList.remove('active');
     $('mode-toggle').hidden = true; $('problem-overlay').hidden = true;
     $('scenario-title').textContent = 'Select a scenario';
     $('scenario-desc').textContent = ''; $('scenario-desc').style.display = '';
@@ -677,9 +685,11 @@
     if (!scn) return;
     state.selectedId = id;
     $('pool-empty').hidden = true; $('controls').hidden = false;
+    adjust.on = false; $('adjust-bar').hidden = true; $('adjust-btn').classList.remove('active');
     $('scenario-title').textContent = scn.title || 'Untitled play';
     $('scenario-desc').textContent = scn.description || '';
     $('edit-btn').hidden = !canEdit();
+    $('adjust-btn').hidden = !canEdit();
     state.renderer = new ANIM.Renderer($('pool'));
     state.focus = (state.viewMode==='me') ? defaultFocus() : null;
     state.viewer = new ANIM.Player(state.renderer, scn, onViewerFrame);
@@ -762,6 +772,95 @@
     if (state.viewer) state.viewer.setFocus(state.focus);
     syncFocusUI();
     const scn = state.scenarios.find(s=>s.id===state.selectedId); if (scn) renderAssignments(scn);
+  }
+
+  /* ======================================================
+     ADJUST MODE — drag players & ball directly on the open play
+     ====================================================== */
+  const adjust = { on:false, scn:null, idx:0, layers:null, ballEl:null };
+
+  function enterAdjust() {
+    const scn = state.scenarios.find(s=>s.id===state.selectedId);
+    if (!scn || !canEdit()) return;
+    if (state.viewer) state.viewer.stop();
+    adjust.on = true;
+    adjust.scn = DATA.clone(scn);
+    adjust.idx = Math.min(state.viewer ? state.viewer.currentStep() : 0, adjust.scn.frames.length-1);
+    $('controls').hidden = true;
+    $('problem-overlay').hidden = true;
+    $('adjust-bar').hidden = false;
+    $('adjust-btn').classList.add('active');
+    renderAdjustBoard();
+  }
+  function exitAdjust(openId) {
+    adjust.on = false; adjust.scn = null; adjust.ballEl = null;
+    $('adjust-bar').hidden = true;
+    $('adjust-btn').classList.remove('active');
+    if (openId !== false) openScenario(openId || state.selectedId);
+  }
+  function renderAdjustBoard() {
+    const f = adjust.scn.frames[adjust.idx];
+    adjust.layers = POOL.render($('pool'));
+    ANIM.drawTactics(adjust.layers, adjust.scn, null);
+    const refresh = () => ANIM.drawTactics(adjust.layers, adjust.scn, null);
+
+    const mkDisc = (team, label, pt, setter, small, anywhere) => {
+      const g = POOL.disc(team, label, small);
+      g.classList.add('editable');
+      g.setAttribute('transform', `translate(${pt.x},${pt.y})`);
+      adjust.layers.discLayer.appendChild(g);
+      makeDraggable(g, $('pool'), np => {
+        setter(np);
+        g.setAttribute('transform', `translate(${np.x},${np.y})`);
+        if (!small && f.ball.carrier === team + label) placeAdjustBall(f);
+        refresh();
+      }, anywhere);
+    };
+    Object.keys(f.att).forEach(p => mkDisc('A', p, f.att[p], np => f.att[p] = np));
+    Object.keys(f.def).forEach(p => mkDisc('D', p, f.def[p], np => f.def[p] = np));
+    if (f.gk) mkDisc('GK', 'GK', f.gk, np => f.gk = np);
+    (f.extra||[]).forEach((e, i) => mkDisc(e.team, e.label, e, np => { f.extra[i].x = np.x; f.extra[i].y = np.y; }, true, true));
+
+    adjust.ballEl = POOL.ball();
+    adjust.ballEl.classList.add('editable');
+    placeAdjustBall(f);
+    adjust.layers.discLayer.appendChild(adjust.ballEl);
+    makeDraggable(adjust.ballEl, $('pool'), np => {
+      f.ball = { carrier: null, x: np.x, y: np.y };
+      placeAdjustBall(f);
+      refresh();
+    });
+    $('adj-step').textContent = `Step ${adjust.idx+1} / ${adjust.scn.frames.length}`;
+  }
+  function placeAdjustBall(f) {
+    if (!adjust.ballEl) return;
+    const p = ANIM.ballPoint(f);
+    adjust.ballEl.setAttribute('transform', `translate(${p.x},${p.y})`);
+  }
+  function adjustStep(d) {
+    if (!adjust.on) return;
+    adjust.idx = Math.max(0, Math.min(adjust.scn.frames.length-1, adjust.idx + d));
+    renderAdjustBoard();
+  }
+  function adjustSave(asNew) {
+    const sc = adjust.scn;
+    sc.builtIn = false;
+    if (asNew) {
+      sc.id = 'usr-' + Math.abs(hash('adj' + sc.title + (typeof performance!=='undefined'?performance.now():Math.random())));
+      sc.title = (sc.title || 'Play') + ' — adjusted';
+      sc.author = state.user.name || 'You';
+      state.scenarios.push(sc);
+    } else {
+      sc.author = sc.author === 'Playbook (sample)' ? (state.user.name || 'You') : sc.author;
+      const i = state.scenarios.findIndex(x => x.id === sc.id);
+      if (i >= 0) state.scenarios[i] = sc; else state.scenarios.push(sc);
+    }
+    DATA.save(state.scenarios);
+    DATA.logActivity('play', `${state.user.name} adjusted “${sc.title}” on the board`, state.user.name);
+    const id = sc.id;
+    renderLibrary();
+    exitAdjust(id);
+    toast(asNew ? 'Saved as a new movement ⑂' : 'Changes saved ✓');
   }
 
   /* ======================================================
@@ -1062,6 +1161,13 @@
       if (on) FX.sound('whistle');
       toast(on ? 'Sound on' : 'Sound off');
     };
+
+    $('adjust-btn').onclick = ()=> { if (adjust.on) exitAdjust(); else enterAdjust(); };
+    $('adj-prev').onclick = ()=> adjustStep(-1);
+    $('adj-next').onclick = ()=> adjustStep(1);
+    $('adj-cancel').onclick = ()=> exitAdjust();
+    $('adj-save').onclick = ()=> adjustSave(false);
+    $('adj-save-new').onclick = ()=> adjustSave(true);
 
     $('new-scenario-btn').onclick = ()=> { if(canEdit()) openEditor(DATA.newScenario(state.situation, state.phase), true); };
     $('edit-btn').onclick = ()=>{ const s=state.scenarios.find(x=>x.id===state.selectedId); if(s&&canEdit()) openEditor(s,false); };

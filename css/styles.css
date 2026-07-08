@@ -571,3 +571,12 @@ em{color:var(--ink-faint);font-style:italic}
   .topbar-left{flex:1 1 auto}
   .main-nav{min-width:0}
 }
+
+/* ========== in-place Adjust mode ========== */
+#adjust-btn.active{background:#3a3417;border-color:#ffd874;color:#ffd874}
+.adjust-bar{border-color:#ffd874}
+.adjust-bar .ctl-row{align-items:center}
+.adj-hint{font-size:11.5px;color:var(--ink-faint)}
+.adjust-bar .spacer{flex:1}
+.adjust-bar .btn-primary.sm,.adjust-bar .btn-ghost.sm{margin-top:0}
+#film-board{width:250px;height:auto;background:#091420;border-radius:9px;touch-action:none}

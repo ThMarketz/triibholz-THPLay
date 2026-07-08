@@ -1,0 +1,7 @@
+{
+  "name": "triibholz-tests",
+  "private": true,
+  "type": "module",
+  "scripts": { "smoke": "node smoke.mjs", "browser": "node browser.mjs" },
+  "dependencies": { "jsdom": "^24.0.0", "playwright": "^1.61.0" }
+}

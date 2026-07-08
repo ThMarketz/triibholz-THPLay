@@ -1,4 +1,4 @@
-# Triibholz · THPLAY — v1.0.0
+# Triibholz · THPLAY — v1.6.0
 
 **Triibholz** (code **THPLAY**) is a water polo tactics trainer. Coaches build
 possession scenarios and movement patterns; every player (positions **1–6** +
@@ -33,7 +33,7 @@ pre‑seeded team, plays, activity and progress.
 ## Features
 | Area | What you get |
 |------|--------------|
-| **Playbook** | Scenario library per situation & phase (offense/defense), animated playback + step‑by‑step, scrubbing, **Team vs My‑position** focus view, per‑position assignments |
+| **Playbook** | Scenario library per situation & phase, animated playback + step‑by‑step, scrubbing, **Team vs My‑position** focus, per‑position assignments, **✋ Adjust mode** (drag players & ball directly on the open play, then save / save‑as‑new) |
 | **Problem → Solution** | Freeze any play as a *problem* (assignments masked), then **Reveal solution ▶** animates the answer — players default to problem mode |
 | **Editor** (coach/trainer/admin) | Drag players & ball, **capture steps** to record movement, add **waiting subs / excluded players**, per‑position notes; replay & re‑edit anytime |
 | **Roles & approval** | Super Admin / Coach / Trainer / Player; new sign‑ins wait for **Super Admin approval** (console with queue, role management, live activity feed) |
@@ -41,9 +41,10 @@ pre‑seeded team, plays, activity and progress.
 | **Onboarding** | Team code + copy‑link + **QR code** invite; players join by tapping their cap number; first‑run guided tour |
 | **Basics** | Water polo fundamentals, **Players / Coach / Referee responsibilities**, colour legend |
 | **Rule books** | Official rule books auto‑tracked weekly from **worldaquatics.com** (Competition Regulations + WP 4x4) and **Swiss Aquatics** by a GitHub Action (`scripts/update-rules.mjs` → `data/rules.json`) — links + version dates, no copyrighted text reproduced |
-| **Trivia & Challenge** | 16‑question scored quiz with explanations; auto‑generated **play challenges** (“who finishes this play?”); best scores saved |
+| **Trivia & Challenge** | Two scored quizzes (**Rules & basics** 16 Q · **History, legends & stories** 23 Q) with shuffled answers & explanations; auto‑generated **play challenges**; per‑set best scores |
 | **Playful layer** | Polo the mascot, confetti celebrations, opt‑in sound (default off), XP/badges tied to real study |
 | **Languages** | **EN / DE / FR / IT**, auto‑detected, flag switcher (tactical play content stays English‑first) |
+| **Film Room** | Match analysis from **YouTube links or uploaded videos**: timestamped tagging, ✔right/✘wrong verdicts, goal‑mouth shot chart, **draggable situation board** (stage what you saw; saved with the moment), rule‑based insights, and **“Board ⚡”** to turn any moment into an editable play |
 | **PWA** | Installable on phones/tablets, fully offline via service worker |
 
 ## Run / deploy
@@ -72,11 +73,17 @@ pre‑seeded team, plays, activity and progress.
 | `handouts/` | “ÜSI 14” locker‑room poster (Schweizerdeutsch, PNG + print PDF) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA |
 
-## Quality gates
-- **Headless regression suite**: 82 checks (auth → approvals → playbook →
-  editor → trivia → challenge → i18n → demo mode).
-- **Real‑browser QA** (Playwright + Firefox): 21‑step walkthrough of every
-  persona and view, desktop + 375 px mobile, zero console errors.
+## Quality gates (in-repo: `tests/`)
+```bash
+cd tests && npm install          # once
+node smoke.mjs                   # headless regression suite (jsdom)
+node browser.mjs                 # real-Firefox walkthrough incl. drag tests (app on :8088)
+```
+- **Headless suite**: 71 checks — auth → approvals → shuffled trivia (both sets)
+  → playbook/editor → Problem→Solution → Adjust mode → Basics/i18n → Film Room
+  (board, tagging, staged-frame rebuild) → approval gate → challenge → demo.
+- **Real-browser QA**: 33 steps in Firefox with real mouse drags (Adjust mode,
+  film board), live YouTube embed, desktop + 375 px mobile, zero console errors.
 
 ## Known limits (v1 prototype scope)
 - Accounts, approvals and saved plays live in the **browser (localStorage)** —

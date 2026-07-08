@@ -198,6 +198,7 @@
               <button class="mode-btn" data-mode="problem" data-i18n="mode.problem">Problem</button>
               <button class="mode-btn active" data-mode="solution" data-i18n="mode.solution">Solution</button>
             </span>
+            <button class="btn-ghost" id="adjust-btn" hidden title="Drag players & ball directly on this play">✋ Adjust</button>
             <button class="btn-ghost" id="edit-btn" hidden>Edit</button>
           </div>
         </div>
@@ -217,6 +218,20 @@
               <span class="problem-hint">Players & ball are in their starting spots — no movement shown yet.</span>
               <button class="btn-primary reveal-btn" id="reveal-btn" data-i18n="mode.reveal">Reveal solution ▶</button>
             </div>
+          </div>
+        </div>
+
+        <!-- adjust mode toolbar -->
+        <div class="controls adjust-bar" id="adjust-bar" hidden>
+          <div class="ctl-row">
+            <button class="ctl-btn" id="adj-prev" title="Previous step">⏮</button>
+            <span class="frame-label" id="adj-step">Step 1</span>
+            <button class="ctl-btn" id="adj-next" title="Next step">⏭</button>
+            <span class="adj-hint">Drag players &amp; ball — arrows follow. Each step is one keyframe.</span>
+            <div class="spacer"></div>
+            <button class="btn-ghost sm" id="adj-cancel">Cancel</button>
+            <button class="btn-ghost sm" id="adj-save-new">Save as new ⑂</button>
+            <button class="btn-primary sm" id="adj-save">Save changes</button>
           </div>
         </div>
 

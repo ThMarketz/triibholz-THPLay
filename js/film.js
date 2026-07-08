@@ -287,8 +287,9 @@ const FILM = (() => {
       </div>
       <div class="film-tagbar2">
         <div class="film-pick-block"><span class="ef-label">Where did the shot go?</span>${goalGrid(s, true)}</div>
-        <div class="film-pick-block"><span class="ef-label">Shot origin (tap the pool)</span>
-          <svg id="film-mini-pool" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet"></svg></div>
+        <div class="film-pick-block"><span class="ef-label">Stage the situation — drag players &amp; ball to match the video</span>
+          <svg id="film-board" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet"></svg>
+          <span class="ef-hint">The ball’s position = shot origin. Saved with the moment; “Board ⚡” opens it in the editor.</span></div>
         <div class="film-pick-block grow">
           <span class="ef-label">What would have stopped it / note</span>
           <input type="text" id="film-counter" placeholder="Counter-measure (e.g. front the hole, earlier slide from 4…)" />
@@ -352,11 +353,42 @@ const FILM = (() => {
       const phase = T.against ? 'defense' : 'offense';
       const title = `${s.title} ${fmt(e.t)} — ${T.label.replace(/^[^\s]+\s/,'')}`;
       const desc = [e.note, e.counter && ('Fix: ' + e.counter)].filter(Boolean).join(' · ') || 'Rebuilt from video analysis.';
-      ctx.rebuild(mapToBoard(e.situation), phase, title, desc);
+      ctx.rebuild(mapToBoard(e.situation), phase, title, desc, e.frame || null);
     });
   }
 
-  let verdict = null;
+  let verdict = null, boardFrame = null;
+  function dragOn(el, svgEl, onMove, anywhere) {
+    let live = false;
+    const clampFn = anywhere ? POOL.clampAnywhere : POOL.clampToWater;
+    const move = ev => { if (!live) return; const p = clampFn(POOL.eventToVB(svgEl, ev)); onMove({ x:+p.x.toFixed(1), y:+p.y.toFixed(1) }); };
+    const up = () => { live = false; window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    el.addEventListener('pointerdown', ev => { live = true; ev.preventDefault(); ev.stopPropagation(); window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); });
+    el.style.cursor = 'grab';
+  }
+  // stage the situation: a small board with draggable players + ball
+  function buildBoard(main, sit) {
+    const svg = main.querySelector('#film-board'); if (!svg) return;
+    boardFrame = DATA.defaultFrame(mapToBoard(sit));
+    const bp = ANIM.ballPoint(boardFrame);
+    boardFrame.ball = { carrier: null, x: bp.x, y: bp.y };
+    const layers = POOL.render(svg);
+    const mk = (team, label, pt, setter) => {
+      const g = POOL.disc(team, label);
+      g.classList.add('editable');
+      g.setAttribute('transform', `translate(${pt.x},${pt.y})`);
+      layers.discLayer.appendChild(g);
+      dragOn(g, svg, np => { setter(np); g.setAttribute('transform', `translate(${np.x},${np.y})`); });
+    };
+    Object.keys(boardFrame.att).forEach(pn => mk('A', pn, boardFrame.att[pn], np => boardFrame.att[pn] = np));
+    Object.keys(boardFrame.def).forEach(pn => mk('D', pn, boardFrame.def[pn], np => boardFrame.def[pn] = np));
+    if (boardFrame.gk) mk('GK', 'GK', boardFrame.gk, np => boardFrame.gk = np);
+    const ball = POOL.ball(); ball.classList.add('editable');
+    ball.setAttribute('transform', `translate(${boardFrame.ball.x},${boardFrame.ball.y})`);
+    layers.discLayer.appendChild(ball);
+    dragOn(ball, svg, np => { boardFrame.ball = { carrier:null, x:np.x, y:np.y }; ball.setAttribute('transform', `translate(${np.x},${np.y})`); });
+  }
+
   function wireTagging(main, s) {
     verdict = null; pickZone = ''; pickOrigin = null;
     main.querySelector('#film-mark').onclick = () => {
@@ -372,18 +404,11 @@ const FILM = (() => {
       pickZone = (pickZone === b.dataset.z) ? '' : b.dataset.z;
       main.querySelectorAll('#film-zone-pick .gz').forEach(x=>x.classList.toggle('sel', x.dataset.z===pickZone));
     });
-    // origin picker on a mini pool
+    // situation board: draggable players + ball, follows the situation select
     try {
-      const mini = main.querySelector('#film-mini-pool');
-      const layers = POOL.render(mini);
-      let dot = null;
-      mini.addEventListener('pointerdown', ev => {
-        const p = POOL.clampToWater(POOL.eventToVB(mini, ev));
-        pickOrigin = { x: +p.x.toFixed(1), y: +p.y.toFixed(1) };
-        if (dot) dot.remove();
-        dot = POOL.svg('circle', { cx:p.x, cy:p.y, r:5, fill:'#ffb057', stroke:'#7a3a00', 'stroke-width':1.2 });
-        layers.pathLayer.appendChild(dot);
-      });
+      buildBoard(main, main.querySelector('#film-sit').value);
+      main.querySelector('#film-sit').addEventListener('change', () =>
+        buildBoard(main, main.querySelector('#film-sit').value));
     } catch (e) {}
 
     main.querySelector('#film-add').onclick = () => {
@@ -395,7 +420,8 @@ const FILM = (() => {
         situation: main.querySelector('#film-sit').value,
         pos: main.querySelector('#film-pos').value,
         zone: typeOf(type).shot ? pickZone : '',
-        origin: typeOf(type).shot ? pickOrigin : null,
+        origin: (typeOf(type).shot && boardFrame) ? { x: boardFrame.ball.x, y: boardFrame.ball.y } : null,
+        frame: boardFrame ? JSON.parse(JSON.stringify(boardFrame)) : null,
         verdict, counter: main.querySelector('#film-counter').value.trim(),
         note: main.querySelector('#film-note').value.trim(),
       });
