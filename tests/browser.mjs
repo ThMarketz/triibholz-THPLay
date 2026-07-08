@@ -64,6 +64,8 @@ const ballLoc = page.locator('#pool .ball.editable');
 const bBefore = await ballLoc.getAttribute('transform');
 await dragBy(page, ballLoc, -45, 22);
 ok('ball dragged too', (await ballLoc.getAttribute('transform')) !== bBefore);
+await page.click('#adj-undo'); await page.waitForTimeout(250);
+ok('↩ Undo reverts the last drag', (await page.locator('#pool .ball.editable').getAttribute('transform')) === bBefore);
 await page.screenshot({ path:OUT+'/qa_14_adjust.png' });
 const cardsBefore = await page.locator('.scn-card').count();
 await page.click('#adj-save-new'); await page.waitForTimeout(500);
@@ -79,6 +81,16 @@ await page.click('#add-sub'); await page.click('#add-exc'); await page.waitForTi
 await page.screenshot({ path:OUT+'/qa_05_editor.png' });
 await page.click('#ed-save'); await page.waitForTimeout(400);
 ok('saved play in library', (await page.locator('.scn-title', { hasText:'Final QA play' }).count())>=1);
+
+console.log('\n[3b] Help — how to use every function');
+await page.click('#help-btn'); await page.waitForTimeout(250);
+ok('help opens for current view', await page.locator('.help-backdrop:not([hidden])').count()===1);
+await page.screenshot({ path:OUT+'/qa_15_help.png' });
+await page.click('#help-x'); await page.waitForTimeout(150);
+await page.click('[data-help="playbook"]'); await page.waitForTimeout(200);
+ok('contextual ？ chip opens topic', await page.locator('.help-backdrop:not([hidden])').count()===1);
+await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+ok('Esc closes help', await page.locator('.help-backdrop[hidden]').count()===1);
 
 console.log('\n[4] Basics & Trivia');
 await page.click('.nav-btn[data-view="basics"]'); await page.waitForTimeout(500);

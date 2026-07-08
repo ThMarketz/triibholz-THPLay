@@ -1,9 +1,9 @@
 /* Triibholz (THPLAY) service worker — offline app shell + fresh rule books. */
-const CACHE = 'triibholz-v15';
+const CACHE = 'triibholz-v16';
 const ASSETS = [
   './', './index.html',
   './css/styles.css',
-  './js/i18n.js', './js/qr.js', './js/fx.js', './js/pool.js', './js/data.js', './js/animate.js', './js/film.js', './js/app.js',
+  './js/i18n.js', './js/help.js', './js/qr.js', './js/fx.js', './js/pool.js', './js/data.js', './js/animate.js', './js/film.js', './js/app.js',
   './data/rules.json',
   './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png',

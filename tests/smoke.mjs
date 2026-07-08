@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -118,6 +118,27 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
   ok('swim splashes during playback', qa('#pool .splash').length>0);
   q('#play-btn').click(); await wait(20);
 
+  console.log('\n[6a2] Keyboard shortcuts + Help system');
+  {
+    const kb = (key)=>document.body.dispatchEvent(new window.KeyboardEvent('keydown',{key,bubbles:true}));
+    const lbl = q('#frame-label').textContent;
+    kb(' '); await wait(30);
+    ok('Space toggles playback', q('#play-btn').textContent==='❚❚');
+    kb(' '); await wait(20);
+    kb('ArrowRight'); await wait(20);
+    ok('ArrowRight steps forward', q('#frame-label').textContent!==lbl);
+  }
+  ok('8 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===8);
+  q('#help-btn').click(); await wait(15);
+  ok('topbar ？ opens help for current view', !!q('.help-backdrop:not([hidden])') &&
+     /Playbook/i.test(q('#help-title').textContent));
+  window.__T.HELP.show('adjust'); await wait(10);
+  ok('adjust help = grab, move, save', /grab a player/i.test(q('#help-title').textContent) &&
+     /Save as new/i.test(q('#help-body').innerHTML));
+  window.__T.HELP.hide(); await wait(10);
+  ok('help closes', q('.help-backdrop').hidden===true);
+  ok('contextual ？ chips present', qa('[data-help]').length>=3);
+
   console.log('\n[6b] Save-as-variant from the editor');
   const cnt1 = DATA.load().length;
   q('#edit-btn').click(); await wait(25);
@@ -133,6 +154,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
   ok('adjust bar shown', q('#adjust-bar').hidden===false);
   ok('draggable discs on main pool', qa('#pool .disc.editable').length>=13);
   ok('ball draggable', !!q('#pool .ball.editable'));
+  ok('undo button present & idle', !!q('#adj-undo') && q('#adj-undo').disabled===true);
   q('#adj-next').click(); await wait(15);
   ok('step nav works', /Step 2/.test(q('#adj-step').textContent));
   const cnt2 = DATA.load().length;

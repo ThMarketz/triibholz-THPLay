@@ -144,6 +144,7 @@
           <button class="phase-btn active" data-phase="offense" data-i18n="phase.offense">Offense</button>
           <button class="phase-btn" data-phase="defense" data-i18n="phase.defense">Defense</button>
         </span>
+        <button class="icon-btn" id="help-btn" title="How to use this page">？</button>
         <button class="icon-btn" id="sound-toggle" title="Sound effects">🔇</button>
         <div class="lang-switch" id="lang-switch-top"></div>
         <div class="user-pill" id="user-pill" title="Account">
@@ -194,6 +195,7 @@
             <p id="scenario-desc" class="scenario-desc"></p>
           </div>
           <div class="stage-head-actions">
+            <button class="help-chip" data-help="playbook" title="How to use the playbook">？</button>
             <span class="mode-toggle" id="mode-toggle" hidden>
               <button class="mode-btn" data-mode="problem" data-i18n="mode.problem">Problem</button>
               <button class="mode-btn active" data-mode="solution" data-i18n="mode.solution">Solution</button>
@@ -227,7 +229,9 @@
             <button class="ctl-btn" id="adj-prev" title="Previous step">⏮</button>
             <span class="frame-label" id="adj-step">Step 1</span>
             <button class="ctl-btn" id="adj-next" title="Next step">⏭</button>
+            <button class="ctl-btn" id="adj-undo" title="Undo last drag">↩</button>
             <span class="adj-hint">Drag players &amp; ball — arrows follow. Each step is one keyframe.</span>
+            <button class="help-chip" data-help="adjust" title="How to adjust a play">？</button>
             <div class="spacer"></div>
             <button class="btn-ghost sm" id="adj-cancel">Cancel</button>
             <button class="btn-ghost sm" id="adj-save-new">Save as new ⑂</button>
@@ -280,6 +284,8 @@
     <div class="modal">
       <div class="modal-head">
         <h3 id="editor-title">New scenario</h3>
+        <span class="spacer"></span>
+        <button class="help-chip" data-help="editor" title="How to record a movement">？</button>
         <button class="modal-x" id="editor-close">✕</button>
       </div>
       <div class="modal-body">
@@ -350,6 +356,7 @@
   <div id="toast" class="toast" hidden></div>
 
   <script src="js/i18n.js"></script>
+  <script src="js/help.js"></script>
   <script src="js/qr.js"></script>
   <script src="js/fx.js"></script>
   <script src="js/pool.js"></script>

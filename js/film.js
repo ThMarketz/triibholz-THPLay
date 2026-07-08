@@ -216,7 +216,7 @@ const FILM = (() => {
 
     container.innerHTML = `<div class="film-wrap">
       <div class="dash-head with-mascot">${(typeof FX!=='undefined')?FX.mascot(38):''}
-        <div><h1>Film Room</h1>
+        <div><h1>Film Room <button class="help-chip" data-help="film" title="How the Film Room works">？</button></h1>
         <p class="dash-sub">Watch the match, tag the moments, see what was right and wrong — then rebuild it on the board.</p></div></div>
 
       <div class="film-cols">

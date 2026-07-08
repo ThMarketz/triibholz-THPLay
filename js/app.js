@@ -181,7 +181,8 @@
     const mascot = (typeof FX!=='undefined') ? FX.mascot(40) : '';
     let html = `<div class="dash-wrap"><div class="dash-head with-mascot">${mascot}
       <div><h1>${greeting()}, ${escapeHtml(u.name.split(' ')[0])}</h1>
-      <p class="dash-sub">${roleL(u.role)}${u.position?` · Position ${u.position}`:''}</p></div></div>`;
+      <p class="dash-sub">${roleL(u.role)}${u.position?` · Position ${u.position}`:''}</p></div>
+      <button class="help-chip" data-help="dashboard" title="How to use the dashboard">？</button></div>`;
 
     if (u.role === 'player') {
       const total = scn.length;
@@ -431,7 +432,8 @@
     const T = (typeof I18N!=='undefined') ? I18N.t : (k=>k);
     v.innerHTML = `<div class="dash-wrap">
       <div class="dash-head"><h1>${T('basics.title')}</h1>
-        <p class="dash-sub">${T('basics.sub')}</p></div>
+        <p class="dash-sub">${T('basics.sub')}</p>
+        <button class="help-chip" data-help="basics" title="How to use Basics">？</button></div>
       <div id="rules-mount"></div>
       <div class="basics-grid">
         ${BASICS.map(c=>`<div class="basics-card">
@@ -482,7 +484,7 @@
     const sets = triviaSets();
     v.innerHTML = `<div class="trivia-wrap"><div class="trivia-card" id="trivia-card">
       <div class="trivia-intro">
-        <span class="dc-k">Knowledge check</span>
+        <span class="dc-k">Knowledge check <button class="help-chip" data-help="trivia" title="How trivia works">？</button></span>
         <h1>${(typeof I18N!=='undefined')?I18N.t('trivia.title'):'Water Polo Trivia'}</h1>
         <p class="dash-sub">Pick a quiz — your best score for each is saved to your profile.</p>
         <div class="trivia-sets">
@@ -570,7 +572,7 @@
     const roleOpts = (cur) => DATA.ROLES.map(r=>`<option value="${r}"${r===cur?' selected':''}>${DATA.roleLabel(r)}</option>`).join('');
 
     v.innerHTML = `<div class="admin-wrap">
-      <div class="admin-head"><h1>Super Admin</h1><p class="dash-sub">Approve logins, manage roles, and watch what’s happening.</p></div>
+      <div class="admin-head"><h1>Super Admin <button class="help-chip" data-help="admin" title="How the console works">？</button></h1><p class="dash-sub">Approve logins, manage roles, and watch what’s happening.</p></div>
 
       <section class="admin-sec">
         <h3>Approval queue ${pend.length?`<span class="pill-count">${pend.length}</span>`:''}</h3>
@@ -777,7 +779,7 @@
   /* ======================================================
      ADJUST MODE — drag players & ball directly on the open play
      ====================================================== */
-  const adjust = { on:false, scn:null, idx:0, layers:null, ballEl:null };
+  const adjust = { on:false, scn:null, idx:0, layers:null, ballEl:null, undo:[], gesture:false };
 
   function enterAdjust() {
     const scn = state.scenarios.find(s=>s.id===state.selectedId);
@@ -785,6 +787,7 @@
     if (state.viewer) state.viewer.stop();
     adjust.on = true;
     adjust.scn = DATA.clone(scn);
+    adjust.undo = []; adjust.gesture = false;
     adjust.idx = Math.min(state.viewer ? state.viewer.currentStep() : 0, adjust.scn.frames.length-1);
     $('controls').hidden = true;
     $('problem-overlay').hidden = true;
@@ -803,6 +806,15 @@
     adjust.layers = POOL.render($('pool'));
     ANIM.drawTactics(adjust.layers, adjust.scn, null);
     const refresh = () => ANIM.drawTactics(adjust.layers, adjust.scn, null);
+    // one undo snapshot per drag gesture (a gesture = pointerdown → pointerup)
+    const snapshot = () => {
+      if (adjust.gesture) return;
+      adjust.gesture = true;
+      adjust.undo.push(JSON.parse(JSON.stringify(adjust.scn.frames)));
+      if (adjust.undo.length > 25) adjust.undo.shift();
+      window.addEventListener('pointerup', () => { adjust.gesture = false; }, { once:true });
+      updateUndoBtn();
+    };
 
     const mkDisc = (team, label, pt, setter, small, anywhere) => {
       const g = POOL.disc(team, label, small);
@@ -810,6 +822,7 @@
       g.setAttribute('transform', `translate(${pt.x},${pt.y})`);
       adjust.layers.discLayer.appendChild(g);
       makeDraggable(g, $('pool'), np => {
+        snapshot();
         setter(np);
         g.setAttribute('transform', `translate(${np.x},${np.y})`);
         if (!small && f.ball.carrier === team + label) placeAdjustBall(f);
@@ -826,16 +839,26 @@
     placeAdjustBall(f);
     adjust.layers.discLayer.appendChild(adjust.ballEl);
     makeDraggable(adjust.ballEl, $('pool'), np => {
+      snapshot();
       f.ball = { carrier: null, x: np.x, y: np.y };
       placeAdjustBall(f);
       refresh();
     });
     $('adj-step').textContent = `Step ${adjust.idx+1} / ${adjust.scn.frames.length}`;
+    updateUndoBtn();
   }
   function placeAdjustBall(f) {
     if (!adjust.ballEl) return;
     const p = ANIM.ballPoint(f);
     adjust.ballEl.setAttribute('transform', `translate(${p.x},${p.y})`);
+  }
+  function updateUndoBtn() { const b = $('adj-undo'); if (b) b.disabled = adjust.undo.length === 0; }
+  function adjustUndo() {
+    if (!adjust.on || !adjust.undo.length) return;
+    adjust.scn.frames = adjust.undo.pop();
+    adjust.gesture = false;
+    renderAdjustBoard();
+    toast('Last drag undone ↩');
   }
   function adjustStep(d) {
     if (!adjust.on) return;
@@ -1162,7 +1185,27 @@
       toast(on ? 'Sound on' : 'Sound off');
     };
 
+    // "How to use" — the ？ in the top bar explains the CURRENT view; small
+    // [data-help] chips sit next to each feature
+    $('help-btn').onclick = ()=> { if (typeof HELP!=='undefined') HELP.forView(adjust.on ? 'adjust' : state.view); };
+    document.addEventListener('click', e => {
+      const chip = e.target.closest && e.target.closest('[data-help]');
+      if (chip && typeof HELP!=='undefined') { e.preventDefault(); HELP.show(chip.dataset.help); }
+    });
+    // keyboard shortcuts in the playbook: Space = play/pause, ←/→ = step
+    document.addEventListener('keydown', e => {
+      if (!$('app-screen').classList.contains('active') || state.view!=='playbook' || adjust.on) return;
+      if (!$('editor-modal').hidden || (typeof HELP!=='undefined' && document.querySelector('.help-backdrop:not([hidden])'))) return;
+      const tag = (e.target && e.target.tagName || '').toLowerCase();
+      if (tag==='input' || tag==='textarea' || tag==='select') return;
+      if (!state.viewer) return;
+      if (e.key===' ')            { e.preventDefault(); state.viewer.toggle(); }
+      else if (e.key==='ArrowRight'){ e.preventDefault(); state.viewer.stepFwd(); }
+      else if (e.key==='ArrowLeft') { e.preventDefault(); state.viewer.stepBack(); }
+    });
+
     $('adjust-btn').onclick = ()=> { if (adjust.on) exitAdjust(); else enterAdjust(); };
+    $('adj-undo').onclick = ()=> adjustUndo();
     $('adj-prev').onclick = ()=> adjustStep(-1);
     $('adj-next').onclick = ()=> adjustStep(1);
     $('adj-cancel').onclick = ()=> exitAdjust();
@@ -1207,6 +1250,8 @@
   }
 
   function boot() {
+    if (boot._done) return;   // guard double DOMContentLoaded (harness/edge cases)
+    boot._done = true;
     if (typeof I18N!=='undefined') {
       I18N.init();
       I18N.onChange(()=>{
