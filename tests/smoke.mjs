@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -129,7 +129,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     kb('ArrowRight'); await wait(20);
     ok('ArrowRight steps forward', q('#frame-label').textContent!==lbl);
   }
-  ok('9 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===9);
+  ok('10 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===10);
   q('#help-btn').click(); await wait(15);
   ok('topbar ？ is context-aware (paused board → Adjust guide)', !!q('.help-backdrop:not([hidden])') &&
      /Adjust/i.test(q('#help-title').textContent));
@@ -238,6 +238,56 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     const beforeAud = DATA.load().length;
     q('#adj-save-new').click(); await wait(40);
     ok('audible saved as a new movement (+1)', DATA.load().length===beforeAud+1);
+  }
+
+  console.log('\n[6f] Solutions Lab — ask a question, get a worked answer');
+  {
+    const { SOLVER } = window.__T;
+    ok('16 curated problems', SOLVER.PROBLEMS.length===16);
+    ok('every problem has answer + rules + buildable board', SOLVER.PROBLEMS.every(p=>{
+      const b = SOLVER.board(p.id); return p.answer.length && p.rules.length && b && b.frames.length>=1;
+    }));
+    // the coach's exact question routes to the 1-on-GK answer
+    const res = SOLVER.ask('I swim alone to the goalie who comes out at 5 m, what should I do? can the goalie make a foul on me?');
+    ok('best match is "alone on the keeper"', res.length>0 && res[0].problem.id==='alone-vs-gk-out');
+    const gk = SOLVER.byId['alone-vs-gk-out'];
+    ok('answer covers the lob/shoot-early idea', gk.answer.join(' ').match(/lob|early|open/i));
+    ok('rules answer the "can the keeper foul me" question', gk.rules.some(r=>/foul/i.test(r.q)) && gk.rules.some(r=>/penalty/i.test(r.a)));
+    ['double team at 2m','2 on 1 fast break','how to defend the counter','man up 6 on 5','penalty shot'].forEach(t=>{
+      ok('phrasing routes: "'+t+'"', SOLVER.ask(t).length>0);
+    });
+
+    // UI: nav → search → answer + animated board → save into playbook
+    ok('Solutions nav label localised (not a raw key)', /Solutions/.test(q('.nav-btn[data-view="solutions"]').textContent) && !/nav\./.test(q('.nav-btn[data-view="solutions"]').textContent));
+    q('.nav-btn[data-view="solutions"]').click(); await wait(20);
+    ok('solutions view active + cards listed', q('#view-solutions').classList.contains('active') && qa('.sol-card').length===16);
+    q('#sol-search').value = 'alone at the keeper who comes out to 5m can he foul me';
+    q('#sol-go').click(); await wait(30);
+    ok('answer panel shows steps + rules', qa('#sol-detail .sol-steps li').length>=3 && qa('#sol-detail .sol-rule').length>=2);
+    ok('solution board animates with discs', qa('#sol-pool .disc').length>=1);
+    ok('opened the keeper problem', /keeper/i.test(q('#sol-detail h2').textContent));
+    const beforeSol = DATA.load().length;
+    q('#sol-save').click(); await wait(40);
+    ok('save-as-play drops it into the playbook (+1)', DATA.load().length===beforeSol+1);
+    ok('landed in playbook with the play open', q('#view-playbook').classList.contains('active') && /solution/i.test(q('#scenario-title').textContent));
+  }
+
+  console.log('\n[6g] Film auto-analysis — motion scan (pure)');
+  {
+    // synthetic frames: a bright block that jumps at frame 20 → a motion spike there
+    const W=16,H=9, N=40; const frames=[];
+    for (let i=0;i<N;i++){ const f=new Float32Array(W*H);
+      const on = (i>=20 && i<=23);                 // a burst of motion mid-clip
+      const shift = on ? (i%2?5:0) : 0;
+      for (let y=0;y<H;y++) for (let x=0;x<W;x++) f[y*W+x] = ((x+shift)%W<4)?200:20;
+      frames.push(f);
+    }
+    const res = FILM.motionScan(frames);
+    ok('timeline covers every frame', res.timeline.length===N);
+    ok('found at least one peak', res.peaks.length>=1);
+    ok('the peak sits in the busy window (frames 20–23)', res.peaks.some(p=>p.i>=19 && p.i<=24));
+    ok('a still clip yields no false peaks', (()=>{ const flat=Array.from({length:12},()=>new Float32Array(9).fill(50));
+      const r=FILM.motionScan(flat); return r.peaks.length<=3 && r.max===0; })());
   }
 
   console.log('\n[7] Basics + i18n');

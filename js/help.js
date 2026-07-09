@@ -47,6 +47,16 @@ const HELP = (() => {
       'Optionally write per-position assignments, then <strong>Save scenario</strong> — or <strong>Save as new ⑂</strong> to keep the original untouched.',
     ], tips:[ 'The arrows preview live while you drag, so you always see the whiteboard your players will see.' ]},
 
+    solutions: { icon:'💡', title:'Solutions Lab — ask a question, get a worked answer', steps:[
+      'Type a situation in your own words — e.g. <em>“I swim alone at the keeper who comes out to 5 m — what do I do, can they foul me?”</em> — and press <strong>Solve</strong>.',
+      'The best-matching solution opens on the right: <strong>What to do</strong> (the tactical steps), <strong>The rules</strong> (including fouls &amp; penalties), and an <strong>animated board</strong> that plays the movement with arrows.',
+      'No question yet? Browse the cards, or tap an example chip to see how it works.',
+      'Press <strong>▶ Replay</strong> to watch the board again, or <strong>Save as a play</strong> to drop the solution straight into your Playbook and adjust it there.',
+    ], tips:[
+      'It understands plain phrasing — “2 on 1 break”, “double team at 2 m”, “draw a kick-out”, “defend the counter” all find the right answer.',
+      'Every answer’s rules follow the current World Aquatics laws (5 m penalty, 18 s exclusion, keeper limits).',
+    ]},
+
     commands: { icon:'⚡', title:'Commands (audibles) — call a play, the board runs it', steps:[
       'A <strong>command</strong> is a ready-made tactical move. Instead of dragging, you press one button and the board executes it — like calling a play from the bench.',
       'Two places to use them. In the <strong>editor</strong>, open <strong>⚡ Commands (audibles)</strong> to build a play from calls — each command adds its movement step and fills the assignments. Chain a few (e.g. <em>Feed the Hole → Pick &amp; Roll</em>).',
@@ -87,7 +97,7 @@ const HELP = (() => {
     ]},
   };
 
-  const VIEW_TOPIC = { dashboard:'dashboard', playbook:'playbook', basics:'basics', film:'film', trivia:'trivia', admin:'admin' };
+  const VIEW_TOPIC = { dashboard:'dashboard', playbook:'playbook', basics:'basics', film:'film', solutions:'solutions', trivia:'trivia', admin:'admin' };
 
   let modal = null;
   function ensureModal() {

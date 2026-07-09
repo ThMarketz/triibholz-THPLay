@@ -125,6 +125,28 @@ const audCards = await page.locator('.scn-card').count();
 await page.click('#adj-save-new'); await page.waitForTimeout(400);
 ok('audible saved as a new movement (+1)', (await page.locator('.scn-card').count())===audCards+1);
 
+console.log('\n[3e] Solutions Lab — ask a question, get a worked answer');
+await page.click('.nav-btn[data-view="solutions"]'); await page.waitForTimeout(300);
+ok('solutions view + 16 cards', (await page.locator('.sol-card').count())===16);
+await page.fill('#sol-search','I swim alone at the goalie who comes out to 5m, can he foul me?');
+await page.click('#sol-go'); await page.waitForTimeout(400);
+ok('answer shows tactical steps', (await page.locator('#sol-detail .sol-steps li').count())>=3);
+ok('answer shows the rules (fouls/penalty)', (await page.locator('#sol-detail .sol-rule').count())>=2);
+ok('best answer is the keeper case', /keeper/i.test(await page.locator('#sol-detail h2').textContent()));
+ok('solution board rendered players', (await page.locator('#sol-pool .disc').count())>=1);
+await page.screenshot({ path:OUT+'/qa_21_solutions.png' });
+const solBefore = await page.evaluate(()=> (JSON.parse(localStorage.getItem('thplay.scenarios.v1')||'{}').scenarios||[]).length);
+await page.click('#sol-save'); await page.waitForTimeout(400);
+const solAfter = await page.evaluate(()=> (JSON.parse(localStorage.getItem('thplay.scenarios.v1')||'{}').scenarios||[]).length);
+ok('solution saved to storage (+1)', solAfter===solBefore+1);
+ok('landed in playbook with the play open', await page.locator('#view-playbook.active').count()===1 && /solution/i.test(await page.locator('#scenario-title').textContent()));
+// film auto-analyse control shows for an uploaded file (use the real upload flow)
+await page.click('.nav-btn[data-view="film"]'); await page.waitForTimeout(400);
+await page.setInputFiles('#film-upload', { name:'clip.mp4', mimeType:'video/mp4', buffer: Buffer.from('0000001c66747970', 'hex') });
+await page.waitForTimeout(500);
+ok('🔎 Auto-analyse control present for uploaded video', await page.locator('#film-scan').count()===1);
+await page.click('.nav-btn[data-view="playbook"]'); await page.waitForTimeout(250);   // [3b] expects the playbook stage
+
 console.log('\n[3b] Help — how to use every function');
 await page.click('#help-btn'); await page.waitForTimeout(250);
 ok('help opens for current view', await page.locator('.help-backdrop:not([hidden])').count()===1);
@@ -148,6 +170,7 @@ await page.screenshot({ path:OUT+'/qa_07_trivia.png' });
 
 console.log('\n[4b] Film Room — video, board, timeline, charts');
 await page.click('.nav-btn[data-view="film"]'); await page.waitForTimeout(1200);
+await page.click('.film-item:has-text("Sample match")'); await page.waitForTimeout(600);   // [3e] seeded another session first
 ok('film view + seed match', await page.locator('.film-item').count()>=1);
 ok('video frame present', await page.locator('#film-player .film-frame').count()===1);
 ok('coach sees tag bar', await page.locator('.film-tagbar').count()===1);

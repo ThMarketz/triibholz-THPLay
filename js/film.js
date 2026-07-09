@@ -207,6 +207,100 @@ const FILM = (() => {
     </div>`;
   }
 
+  /* ---------------- motion auto-analysis (uploaded files) ----------------
+     Real, offline analysis: sample frames from the video, measure
+     inter-frame motion, surface the busy moments + a coarse heatmap.
+     Honest scope: this finds ACTIVITY, not players/ball — full CV
+     tracking is a cloud milestone. YouTube embeds can't be pixel-read
+     (cross-origin), so this is for uploaded files only. */
+  function motionScan(frames, opts) {
+    opts = opts || {};
+    const n = frames.length;
+    const len = n && frames[0] ? frames[0].length : 0;
+    const heat = new Array(len).fill(0);
+    const timeline = []; let prev = null, max = 0;
+    for (let i = 0; i < n; i++) {
+      const f = frames[i]; let m = 0;
+      if (prev && f) { for (let j = 0; j < len; j++) { const d = Math.abs(f[j] - prev[j]); m += d; heat[j] += d; } m = len ? m / len : 0; }
+      timeline.push({ i, frac: n > 1 ? i / (n - 1) : 0, motion: m });
+      if (m > max) max = m; prev = f;
+    }
+    timeline.forEach(t => t.norm = max ? t.motion / max : 0);
+    const vals = timeline.slice(1).map(t => t.motion);
+    const mean = vals.reduce((a, b) => a + b, 0) / (vals.length || 1);
+    const sd = Math.sqrt(vals.reduce((a, b) => a + (b - mean) * (b - mean), 0) / (vals.length || 1));
+    const thr = mean + (opts.k != null ? opts.k : 0.8) * sd;
+    const peaks = [];
+    for (let i = 1; i < n - 1; i++) {
+      const m = timeline[i].motion;
+      // a peak must have real motion, clear the threshold, and top its neighbours
+      if (max > 0 && m > 0 && m >= thr && m >= timeline[i - 1].motion && m >= timeline[i + 1].motion) peaks.push({ i, frac: timeline[i].frac, motion: m });
+    }
+    if (!peaks.length && n > 2 && max > 0) {   // give the coach something to jump to — but only if the clip actually moves
+      timeline.slice(1).sort((a, b) => b.motion - a.motion).slice(0, 3)
+        .forEach(t => peaks.push({ i: t.i, frac: t.frac, motion: t.motion }));
+      peaks.sort((a, b) => a.i - b.i);
+    }
+    return { timeline, peaks, mean, sd, max, heat };
+  }
+  function seekVideo(video, t) {
+    return new Promise(res => {
+      let done = false; const fin = () => { if (done) return; done = true; video.removeEventListener('seeked', fin); res(); };
+      video.addEventListener('seeked', fin);
+      try { video.currentTime = t; } catch (e) { fin(); }
+      setTimeout(fin, 1500);   // guard against a 'seeked' that never fires
+    });
+  }
+  async function scanVideo(video, N) {
+    N = N || 36; const W = 48, H = 27;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    const dur = video.duration;
+    if (!dur || !isFinite(dur)) throw new Error('no-duration');
+    const times = [], frames = [];
+    for (let i = 0; i < N; i++) times.push((i / (N - 1)) * Math.max(0, dur - 0.05));
+    for (const t of times) {
+      await seekVideo(video, t);
+      g.drawImage(video, 0, 0, W, H);
+      let img; try { img = g.getImageData(0, 0, W, H); } catch (e) { throw new Error('tainted'); }
+      const gray = new Float32Array(W * H);
+      for (let p = 0, q = 0; p < img.data.length; p += 4, q++) gray[q] = img.data[p] * 0.3 + img.data[p + 1] * 0.59 + img.data[p + 2] * 0.11;
+      frames.push(gray);
+    }
+    const res = motionScan(frames);
+    res.times = times; res.duration = dur; res.W = W; res.H = H;
+    return res;
+  }
+  function renderAuto(res) {
+    const out = root && root.querySelector('#film-auto-out'); if (!out) return;
+    const bars = res.timeline.map(t =>
+      `<span class="fa-bar" style="height:${Math.round(5 + t.norm * 34)}px" title="${fmt(res.times[t.i])} · ${Math.round(t.norm * 100)}%"></span>`).join('');
+    const chips = res.peaks.map(p =>
+      `<button class="fa-chip" data-fa-t="${res.times[p.i].toFixed(1)}">▶ ${fmt(res.times[p.i])}</button>`).join('');
+    out.innerHTML = `<div class="fa-timeline" title="Motion across the match">${bars}</div>
+      <div class="fa-peaks"><span class="ef-label">Busy moments (${res.peaks.length}) — tap to jump &amp; pre-fill the timestamp</span>
+      <div class="fa-chips">${chips}</div></div>`;
+    out.querySelectorAll('[data-fa-t]').forEach(b => b.onclick = () => {
+      const t = parseFloat(b.dataset.faT);
+      const ti = root.querySelector('#film-t'); if (ti) ti.value = fmt(t);
+      seekTo(t);
+    });
+  }
+  async function runAutoAnalyse(btn) {
+    const v = root && root.querySelector('#film-video');
+    const out = root && root.querySelector('#film-auto-out');
+    if (!v || !v.src) { ctx.toast('Re-attach the uploaded video first'); return; }
+    btn.disabled = true; if (out) out.innerHTML = '<div class="muted">Scanning the footage for motion… ⏳</div>';
+    try {
+      if (v.readyState < 1) await new Promise(r => { v.addEventListener('loadedmetadata', r, { once: true }); setTimeout(r, 4000); });
+      const res = await scanVideo(v, 36);
+      renderAuto(res);
+      ctx.toast(`Found ${res.peaks.length} busy moment${res.peaks.length !== 1 ? 's' : ''}`);
+    } catch (e) {
+      if (out) out.innerHTML = `<div class="muted">Couldn’t analyse the pixels${/tainted/.test(e.message) ? ' — a cross-origin (YouTube) video can’t be scanned; use an uploaded file' : (/duration/.test(e.message) ? ' — the video didn’t report a duration yet, try again in a second' : '')}.</div>`;
+    } finally { btn.disabled = false; }
+  }
+
   /* ---------------- render ---------------- */
   function render(container, context) {
     ctx = context; root = container;
@@ -298,6 +392,13 @@ const FILM = (() => {
         </div>
       </div>` : ''}
 
+      ${canEdit && s.source.kind==='file' ? `<div class="film-auto" id="film-auto">
+        <div class="fa-head"><strong>🔎 Auto-analyse <span class="fa-beta">beta</span></strong>
+          <button class="btn-ghost sm" id="film-scan">Scan the footage</button>
+          <span class="fa-note">Reads the uploaded video and finds the busy moments by motion, so you can jump straight to them. (Full player &amp; ball tracking is a cloud feature.)</span></div>
+        <div id="film-auto-out"></div>
+      </div>` : ''}
+
       <div class="film-grid2">
         <div class="film-panel">
           <h3>Timeline <span class="rightbar-hint">(tap to jump)</span></h3>
@@ -342,6 +443,9 @@ const FILM = (() => {
     } catch (e) {}
 
     if (canEdit) wireTagging(main, s);
+
+    const scanBtn = main.querySelector('#film-scan');
+    if (scanBtn) scanBtn.onclick = () => runAutoAnalyse(scanBtn);
 
     main.querySelectorAll('[data-seek]').forEach(b => b.onclick = () => seekTo(parseFloat(b.dataset.seek)));
     main.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
@@ -432,5 +536,5 @@ const FILM = (() => {
     };
   }
 
-  return { render, load, parseSource, ZONE_HINTS, _insights: insights };
+  return { render, load, parseSource, ZONE_HINTS, _insights: insights, motionScan };
 })();

@@ -119,7 +119,7 @@
   function switchView(view) {
     state.view = view;
     document.querySelectorAll('#main-nav .nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view===view));
-    ['dashboard','playbook','basics','film','trivia','admin'].forEach(v => $('view-'+v).classList.toggle('active', v===view));
+    ['dashboard','playbook','basics','film','solutions','trivia','admin'].forEach(v => $('view-'+v).classList.toggle('active', v===view));
     const inPlaybook = view==='playbook';
     $('situation-tabs').style.display = inPlaybook ? '' : 'none';
     $('phase-toggle').style.display = inPlaybook ? '' : 'none';
@@ -135,6 +135,7 @@
         openEditor(sc, true);
       },
     });
+    if (view==='solutions') renderSolutions();
     if (view==='trivia') renderTrivia();
     if (view==='admin') renderAdmin();
     if (view==='playbook' && !state.selectedId) openFirstOrEmpty();
@@ -804,6 +805,122 @@
     if (state.viewer) state.viewer.setFocus(state.focus);
     syncFocusUI();
     const scn = state.scenarios.find(s=>s.id===state.selectedId); if (scn) renderAssignments(scn);
+  }
+
+  /* ======================================================
+     SOLUTIONS LAB — ask a tactical question, get a worked
+     solution: what to do + the rules + an animated board.
+     ====================================================== */
+  const sol = { openId:null, player:null };
+  function renderSolutions() {
+    const c = $('view-solutions');
+    if (typeof SOLVER==='undefined') { c.innerHTML = '<div class="muted">Solutions unavailable.</div>'; return; }
+    c.innerHTML = `<div class="sol-wrap">
+      <div class="dash-head with-mascot">${(typeof FX!=='undefined')?FX.mascot(38):''}
+        <div><h1>Solutions Lab <button class="help-chip" data-help="solutions" title="How Solutions work">？</button></h1>
+        <p class="dash-sub">Ask a situation in your own words — get what to do, the rules, and a play on the board.</p></div></div>
+      <div class="sol-ask">
+        <input type="text" id="sol-search" placeholder="e.g. I swim alone at the keeper who comes out to 5 m — what do I do, can they foul me?" />
+        <button class="btn-primary sm" id="sol-go">Solve</button>
+      </div>
+      <div class="sol-ex">Try:
+        ${['Alone on the keeper who comes out','2-on-1 fast break','They double-team our hole','How do I draw a kick-out','Defend the counter-attack']
+          .map(x=>`<button class="sol-chip" data-sol-ex="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join('')}
+      </div>
+      <div class="sol-body">
+        <div class="sol-results" id="sol-results"></div>
+        <div class="sol-detail" id="sol-detail"><div class="sol-empty">Pick a question on the left, or ask your own above.</div></div>
+      </div>
+    </div>`;
+    $('sol-go').onclick = () => runSolve($('sol-search').value);
+    $('sol-search').addEventListener('keydown', e => { if (e.key==='Enter') runSolve($('sol-search').value); });
+    c.querySelectorAll('[data-sol-ex]').forEach(b => b.onclick = () => { $('sol-search').value = b.dataset.solEx; runSolve(b.dataset.solEx); });
+    listSolutions(SOLVER.PROBLEMS.map(p=>({problem:p})));   // default: show all
+    if (sol.openId) openSolution(sol.openId);
+  }
+  function runSolve(text) {
+    const res = (text && text.trim()) ? SOLVER.ask(text) : SOLVER.PROBLEMS.map(p=>({problem:p}));
+    const wrap = $('sol-results');
+    if (!res.length) {
+      wrap.innerHTML = `<div class="sol-none">No exact match — here’s the closest ideas.</div>`;
+      listSolutions(SOLVER.PROBLEMS.slice(0,5).map(p=>({problem:p})), true);
+      return;
+    }
+    listSolutions(res);
+    openSolution(res[0].problem.id);   // jump straight to the best answer
+  }
+  function listSolutions(items, append) {
+    const wrap = $('sol-results');
+    if (!append) wrap.innerHTML = '';
+    items.forEach(({problem:p}) => {
+      const b = document.createElement('button');
+      b.className = 'sol-card' + (sol.openId===p.id?' active':'');
+      b.dataset.sol = p.id;
+      b.innerHTML = `<span class="sol-card-tag ${p.phase}">${p.phase}</span>
+        <span class="sol-card-title">${escapeHtml(p.title)}</span>
+        <span class="sol-card-q">${escapeHtml(p.q)}</span>`;
+      b.onclick = () => openSolution(p.id);
+      wrap.appendChild(b);
+    });
+  }
+  function openSolution(id) {
+    const p = SOLVER.byId[id]; if (!p) return;
+    sol.openId = id;
+    document.querySelectorAll('.sol-card').forEach(c => c.classList.toggle('active', c.dataset.sol===id));
+    const b = SOLVER.board(id);
+    $('sol-detail').innerHTML = `
+      <div class="sol-head"><span class="sol-card-tag ${p.phase}">${p.phase}</span><h2>${escapeHtml(p.title)}</h2></div>
+      <p class="sol-q">“${escapeHtml(p.q)}”</p>
+      <div class="sol-cols">
+        <div class="sol-board-wrap">
+          <svg id="sol-pool" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet" aria-label="Solution board"></svg>
+          <div class="sol-board-btns">
+            <button class="btn-ghost sm" id="sol-replay">▶ Replay</button>
+            <button class="btn-primary sm" id="sol-save">Save as a play</button>
+          </div>
+        </div>
+        <div class="sol-text">
+          <h3>What to do</h3>
+          <ul class="sol-steps">${p.answer.map(a=>`<li>${escapeHtml(a)}</li>`).join('')}</ul>
+          <h3>The rules</h3>
+          <div class="sol-rules">${p.rules.map(r=>`<div class="sol-rule"><strong>${escapeHtml(r.q)}</strong><span>${escapeHtml(r.a)}</span></div>`).join('')}</div>
+        </div>
+      </div>`;
+    $('sol-replay').onclick = () => playSolutionBoard(id);
+    $('sol-save').onclick = () => saveSolutionAsPlay(id);
+    playSolutionBoard(id);
+  }
+  function playSolutionBoard(id) {
+    const b = SOLVER.board(id); if (!b) return;
+    if (sol.player) { try { sol.player.stop(); } catch(e){} }
+    const scn = { id:'sol-'+id, title:SOLVER.byId[id].title, situation:b.situation, phase:b.phase, frames:b.frames, notes:b.notes };
+    const renderer = new ANIM.Renderer($('sol-pool'));
+    sol.player = new ANIM.Player(renderer, scn, ()=>{});
+    sol.player.setPaths(true);
+    sol.player.seek(0);
+    sol.player.play();
+  }
+  function saveSolutionAsPlay(id) {
+    const p = SOLVER.byId[id]; const b = SOLVER.board(id); if (!b) return;
+    if (!canEdit()) { toast('Coaches & trainers can save plays'); return; }
+    const scn = {
+      id: 'usr-' + Math.abs(hash('sol'+id+(state.user.email||''))),
+      title: p.title + ' — solution', description: p.q,
+      situation: b.situation, phase: b.phase,
+      frames: DATA.clone(b.frames), notes: DATA.clone(b.notes||{}),
+      author: state.user.name || 'You', builtIn: false,
+    };
+    const existing = state.scenarios.findIndex(x=>x.id===scn.id);
+    if (existing>=0) state.scenarios[existing]=scn; else state.scenarios.push(scn);
+    DATA.save(state.scenarios);
+    DATA.logActivity('play', `${state.user.name} saved solution “${scn.title}”`, state.user.name);
+    // jump the playbook to this play's situation/phase so it shows in the list
+    state.situation = scn.situation; state.phase = scn.phase;
+    switchView('playbook');
+    document.querySelectorAll('#main-nav .nav-btn').forEach(x=>x.classList.toggle('active', x.dataset.view==='playbook'));
+    refreshTabs(); renderLibrary();
+    openScenario(scn.id);
+    toast('Saved to your playbook ✓');
   }
 
   /* ======================================================
