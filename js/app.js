@@ -138,6 +138,7 @@
     if (view==='trivia') renderTrivia();
     if (view==='admin') renderAdmin();
     if (view==='playbook' && !state.selectedId) openFirstOrEmpty();
+    if (typeof updateAudibleBtn==='function') updateAudibleBtn();
   }
 
   /* ---------------- enter app ---------------- */
@@ -757,6 +758,7 @@
         : `${sd.label} — we have the ball. How do we score from here?`;
     }
     if (scn) renderAssignments(scn);
+    updateAudibleBtn();
   }
   function defaultFocus() {
     if (state.user.role==='player' && state.user.position) return state.user.position;
@@ -847,6 +849,7 @@
     adjust.live = true;
     renderAdjustBoard();
     updateAdjustBar();
+    updateAudibleBtn();
   }
   // clean exits only — back to the animated viewer (optionally playing)
   function exitPausedEditToViewer(t, andPlay) {
@@ -974,6 +977,9 @@
     const dt = $('draft-text'); if (dt) dt.value = '';
     const df = $('draft-feedback'); if (df) df.querySelectorAll('.draft-line').forEach(n=>n.remove());
     const dp = $('draft-panel'); if (dp) dp.open = isNew;   // invite drafting on new plays
+    buildCommandGroups('cmd-groups', applyCommandToEditor);
+    const cp = $('cmd-panel'); if (cp) cp.open = false;
+    const ct = $('cmd-target'); if (ct) ct.value = 'team';
     editorRender();
     $('editor-modal').hidden = false;
   }
@@ -1004,6 +1010,80 @@
     sum.textContent = `→ ${r.steps} step${r.steps>1?'s':''} on the board — drag anything to fine-tune, then save.`;
     fb.appendChild(sum);
   }
+  /* ---- Tactical commands (audibles): call a play, board runs it ---- */
+  const SIDE_LABEL = { offense:'Offense', defense:'Defense', transition:'Transition / special' };
+  function buildCommandGroups(containerId, onPick) {
+    const wrap = $(containerId); if (!wrap || typeof COMMANDS==='undefined') return;
+    wrap.innerHTML = '';
+    COMMANDS.SIDES.forEach(side => {
+      const cmds = COMMANDS.list.filter(c=>c.side===side); if (!cmds.length) return;
+      const grp = document.createElement('div'); grp.className = 'cmd-group cmd-'+side;
+      grp.innerHTML = `<div class="cmd-group-h">${SIDE_LABEL[side]}</div>`;
+      const row = document.createElement('div'); row.className='cmd-btns';
+      cmds.forEach(c => {
+        const b = document.createElement('button');
+        b.className = 'cmd-btn'; b.type='button';
+        b.dataset.cmd = c.id;
+        b.title = c.cue;
+        b.innerHTML = `<span class="cmd-ic">${c.icon||'▸'}</span><span class="cmd-name">${escapeHtml(c.name)}</span><span class="cmd-scope">${c.scope}</span>`;
+        b.onclick = () => onPick(c.id);
+        row.appendChild(b);
+      });
+      grp.appendChild(row); wrap.appendChild(grp);
+    });
+  }
+  // apply a command inside the EDITOR — append its steps + merge assignments
+  function applyCommandToEditor(id) {
+    if (!edit.scenario || typeof COMMANDS==='undefined') return;
+    const target = $('cmd-target').value || 'team';
+    const r = COMMANDS.apply(edit.scenario, id, { target });
+    if (!r) { toast('That command needs a player who isn’t in this situation'); return; }
+    edit.scenario.frames.push(...r.steps);
+    Object.keys(r.notes).forEach(p => {
+      edit.scenario.notes[p] = edit.scenario.notes[p]
+        ? edit.scenario.notes[p] + ' ' + r.notes[p] : r.notes[p];
+    });
+    edit.idx = edit.scenario.frames.length - 1;
+    buildNotesGrid(); editorRender();
+    toast(`${r.cmd.icon} ${r.cmd.name} added — ${r.steps.length} step${r.steps.length>1?'s':''}`);
+  }
+  // apply a command LIVE on the stage (paused board) — the "audible" button
+  function applyAudible(id) {
+    const scn = state.scenarios.find(s=>s.id===state.selectedId);
+    if (!scn || typeof COMMANDS==='undefined') return;
+    if (!canPausedEdit()) { toast('Open a play first to call an audible'); return; }
+    if (state.viewer) state.viewer.stop();    // freeze the animation before we edit
+    enterPausedEdit();                        // ensure the paused working copy exists
+    if (!adjust.scn) return;
+    const target = $('as-target').value || 'team';
+    const r = COMMANDS.apply(adjust.scn, id, { target });
+    if (!r) { toast('That command needs a player who isn’t in this situation'); return; }
+    adjust.undo.push(JSON.parse(JSON.stringify(adjust.scn.frames)));   // one undo step
+    if (adjust.undo.length > 25) adjust.undo.shift();
+    adjust.scn.frames.push(...r.steps);
+    adjust.scn.notes = adjust.scn.notes || {};
+    Object.keys(r.notes).forEach(p => {
+      adjust.scn.notes[p] = adjust.scn.notes[p] ? adjust.scn.notes[p] + ' ' + r.notes[p] : r.notes[p];
+    });
+    adjust.idx = adjust.scn.frames.length - 1;
+    markDirty();
+    renderAdjustBoard();
+    closeAudible();
+    toast(`${r.cmd.icon} ${r.cmd.name} — drag to tweak, then Save as new ⑂`);
+  }
+  function openAudible() {
+    if (!canPausedEdit()) return;
+    buildCommandGroups('as-groups', applyAudible);
+    $('as-target').value = state.focus || 'team';
+    $('audible-sheet').hidden = false;
+  }
+  function closeAudible() { const s=$('audible-sheet'); if (s) s.hidden = true; }
+  function updateAudibleBtn() {
+    const b = $('audible-btn'); if (!b) return;
+    b.hidden = !canPausedEdit();
+    if (b.hidden) closeAudible();
+  }
+
   function closeEditor() { $('editor-modal').hidden = true; edit.scenario=null; }
   function buildNotesGrid() {
     const g = $('notes-grid'); g.innerHTML='';
@@ -1318,6 +1398,9 @@
       else if (e.key==='ArrowRight'){ e.preventDefault(); $('step-fwd').click(); }
       else if (e.key==='ArrowLeft') { e.preventDefault(); $('step-back').click(); }
     });
+
+    $('audible-btn').onclick = ()=> { if ($('audible-sheet').hidden) openAudible(); else closeAudible(); };
+    $('as-close').onclick = ()=> closeAudible();
 
     $('adj-undo').onclick = ()=> adjustUndo();
     $('adj-cancel').onclick = ()=> adjustCancel();

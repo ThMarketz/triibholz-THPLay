@@ -213,6 +213,25 @@
             </div>
           </div>
           <div class="pool-drag-hint" id="pool-drag-hint" hidden>✋ Paused — drag players &amp; the ball to adjust</div>
+          <button class="audible-btn" id="audible-btn" hidden title="Call a tactical command">⚡ Audible</button>
+          <div class="audible-sheet" id="audible-sheet" hidden>
+            <div class="as-head">
+              <strong>⚡ Call a command</strong>
+              <select id="as-target" class="focus-select">
+                <option value="team">Whole team</option>
+                <option value="1">Player 1</option>
+                <option value="2">Player 2</option>
+                <option value="3">Player 3</option>
+                <option value="4">Player 4</option>
+                <option value="5">Player 5</option>
+                <option value="6">Player 6</option>
+                <option value="GK">Goalkeeper</option>
+              </select>
+              <button class="as-x" id="as-close" title="Close">✕</button>
+            </div>
+            <div class="cmd-groups" id="as-groups"></div>
+            <p class="as-foot">The board pauses and runs the call — drag to tweak, then <strong>Save as new ⑂</strong>.</p>
+          </div>
           <div class="problem-overlay" id="problem-overlay" hidden>
             <div class="problem-card">
               <span class="problem-kicker">Problem</span>
@@ -324,6 +343,27 @@
           </div>
         </details>
 
+        <details class="draft-accordion cmd-accordion" id="cmd-panel">
+          <summary>⚡ Commands (audibles) — call a play, the board runs it <button class="help-chip" data-help="commands" title="How commands work">？</button></summary>
+          <div class="cmd-body">
+            <div class="cmd-target-row">
+              <label for="cmd-target">Apply to</label>
+              <select id="cmd-target" class="focus-select">
+                <option value="team">Whole team</option>
+                <option value="1">Player 1</option>
+                <option value="2">Player 2</option>
+                <option value="3">Player 3</option>
+                <option value="4">Player 4</option>
+                <option value="5">Player 5</option>
+                <option value="6">Player 6</option>
+                <option value="GK">Goalkeeper</option>
+              </select>
+              <span class="cmd-target-note">Team-wide moves affect the whole unit; single-player calls use this pick.</span>
+            </div>
+            <div class="cmd-groups" id="cmd-groups"></div>
+          </div>
+        </details>
+
         <div class="editor-pool-wrap">
           <svg id="editor-pool" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet"></svg>
         </div>
@@ -371,6 +411,7 @@
   <script src="js/i18n.js"></script>
   <script src="js/help.js"></script>
   <script src="js/draft.js"></script>
+  <script src="js/commands.js"></script>
   <script src="js/qr.js"></script>
   <script src="js/fx.js"></script>
   <script src="js/pool.js"></script>

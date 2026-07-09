@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -129,7 +129,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     kb('ArrowRight'); await wait(20);
     ok('ArrowRight steps forward', q('#frame-label').textContent!==lbl);
   }
-  ok('8 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===8);
+  ok('9 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===9);
   q('#help-btn').click(); await wait(15);
   ok('topbar ？ is context-aware (paused board → Adjust guide)', !!q('.help-backdrop:not([hidden])') &&
      /Adjust/i.test(q('#help-title').textContent));
@@ -192,6 +192,52 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     const beforeDraft = DATA.load().length;
     q('#ed-save').click(); await wait(40);
     ok('drafted play saves (+1)', DATA.load().length===beforeDraft+1);
+  }
+
+  console.log('\n[6e] Tactical commands (audibles) — call a play, board runs it');
+  {
+    const { COMMANDS } = window.__T;
+    ok('20 commands defined', COMMANDS.list.length===20);
+    ok('both sides covered', COMMANDS.list.some(c=>c.side==='offense') && COMMANDS.list.some(c=>c.side==='defense'));
+    ok('every command has id/name/cue/build', COMMANDS.list.every(c=>c.id&&c.name&&c.cue&&typeof c.build==='function'));
+    // the classics the coach asked for exist
+    ['pick-roll','double-hole','goalie-out','collapse','tactical-foul'].forEach(id=>
+      ok('command present: '+id, !!COMMANDS.byId[id]));
+    // pure-transform behaviour on a 6v6
+    const scn = { situation:'6v6', frames:[DATA.defaultFrame('6v6')] };
+    const before = scn.frames[0];
+    const gk0 = before.gk.x;
+    ok('goalie-out brings the keeper off the line', COMMANDS.apply(scn,'goalie-out',{target:'team'}).steps[0].gk.x < gk0);
+    ok('tactical-foul note names an ordinary foul', /foul/i.test(Object.values(COMMANDS.apply(scn,'tactical-foul',{target:'team'}).notes).join(' ')));
+    ok('double-hole sandwiches with 2 defenders', (()=>{ const hp=before.att[Object.keys(before.att).sort((a,b)=>before.att[b].x-before.att[a].x)[0]];
+      const d=COMMANDS.apply(scn,'double-hole',{target:'team'}).steps[0].def;
+      return Object.keys(d).filter(k=>Math.hypot(d[k].x-hp.x,d[k].y-hp.y)<14).length===2; })());
+    ok('pick & roll makes 2 steps + roller holds the ball', (()=>{ const r=COMMANDS.apply(scn,'pick-roll',{target:'team'}); return r.steps.length===2 && /^A\d/.test(r.steps[1].ball.carrier); })());
+    ok('every command builds without throwing across situations', DATA.SITUATIONS.every(sit=>
+      COMMANDS.list.every(c=>{ try{ COMMANDS.apply({situation:sit.id,frames:[DATA.defaultFrame(sit.id)]}, c.id, {target:'team'}); return true; }catch(e){ return false; } })));
+
+    // UI wiring: editor palette adds a step + fills assignments
+    q('#new-scenario-btn').click(); await wait(25);
+    ok('command palette present & grouped', qa('#cmd-groups .cmd-group').length===3 && qa('#cmd-groups .cmd-btn').length===20);
+    const framesBefore = q('#frame-chips').children.length;
+    qa('#cmd-groups .cmd-btn').find(b=>b.dataset.cmd==='set-hole').click(); await wait(20);
+    ok('editor command added a step', q('#frame-chips').children.length>framesBefore);
+    ok('command filled an assignment', qa('#notes-grid input').some(i=>/2m|post|seal/i.test(i.value)));
+    q('#ed-title').value='Audible play'; q('#ed-title').dispatchEvent(new window.Event('input'));
+    const beforeCmd = DATA.load().length;
+    q('#ed-save').click(); await wait(40);
+    ok('command-built play saves (+1)', DATA.load().length===beforeCmd+1);
+
+    // stage audible: open a play, flash a call, it becomes a dirty paused edit
+    qa('.scn-card').find(c=>c.textContent.includes('slip to the hole')).click(); await wait(20);
+    ok('⚡ Audible button visible on an open play', q('#audible-btn').hidden===false);
+    q('#audible-btn').click(); await wait(10);
+    ok('audible sheet opens with 20 calls', q('#audible-sheet').hidden===false && qa('#as-groups .cmd-btn').length===20);
+    qa('#as-groups .cmd-btn').find(b=>b.dataset.cmd==='collapse').click(); await wait(20);
+    ok('audible marks the board dirty (save bar shows)', q('#adjust-bar').hidden===false);
+    const beforeAud = DATA.load().length;
+    q('#adj-save-new').click(); await wait(40);
+    ok('audible saved as a new movement (+1)', DATA.load().length===beforeAud+1);
   }
 
   console.log('\n[7] Basics + i18n');

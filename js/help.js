@@ -47,6 +47,17 @@ const HELP = (() => {
       'Optionally write per-position assignments, then <strong>Save scenario</strong> — or <strong>Save as new ⑂</strong> to keep the original untouched.',
     ], tips:[ 'The arrows preview live while you drag, so you always see the whiteboard your players will see.' ]},
 
+    commands: { icon:'⚡', title:'Commands (audibles) — call a play, the board runs it', steps:[
+      'A <strong>command</strong> is a ready-made tactical move. Instead of dragging, you press one button and the board executes it — like calling a play from the bench.',
+      'Two places to use them. In the <strong>editor</strong>, open <strong>⚡ Commands (audibles)</strong> to build a play from calls — each command adds its movement step and fills the assignments. Chain a few (e.g. <em>Feed the Hole → Pick &amp; Roll</em>).',
+      'On the board, the <strong>⚡ Audible</strong> button (bottom-right of the pool) flashes a call onto the play you’re watching — the board pauses, runs the move, and you can drag to tweak then <strong>Save as new ⑂</strong>.',
+      'Choose <strong>Apply to</strong> first: <strong>Whole team</strong> for unit moves (collapse, press, counter), or a single <strong>player / GK</strong> for individual calls (front the hole, tactical foul, wing iso).',
+      'Offense calls move the white attackers; defense calls move the black defenders and the keeper. Everything you add is still fully draggable afterwards.',
+    ], tips:[
+      'The classics are all there: <strong>Pick &amp; Roll</strong>, <strong>Double-team the Hole</strong>, <strong>Goalie Out Front</strong>, <strong>Collapse</strong> (everyone between the two attackers) and the <strong>Ordinary Foul</strong> to stop an attack.',
+      'A command that needs a player who isn’t in the current situation is skipped with a note — pick a valid target and try again.',
+    ]},
+
     film: { icon:'🎬', title:'Film Room — analyse a real match', steps:[
       'Add a match: paste a <strong>YouTube link</strong> or <strong>Upload video</strong> (stored on this device).',
       'Watch. At an interesting moment press <strong>⏱ Mark moment</strong> — the timestamp fills in (or type it as m:ss).',

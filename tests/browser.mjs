@@ -101,6 +101,30 @@ await page.click('#ed-save'); await page.waitForTimeout(400);
 ok('written play saved (+1)', (await page.locator('.scn-card').count())===draftCards+1);
 ok('written play opens paused & draggable for fine-tuning', (await page.locator('#pool .disc.editable').count())>=13);
 
+console.log('\n[3d] Tactical commands — editor palette + stage audible');
+await page.click('#new-scenario-btn'); await page.waitForTimeout(300);
+await page.fill('#ed-title','Commanded play');
+await page.click('#cmd-panel > summary'); await page.waitForTimeout(150);
+ok('command palette shows 20 calls in 3 groups', (await page.locator('#cmd-groups .cmd-btn').count())===20 && (await page.locator('#cmd-groups .cmd-group').count())===3);
+const stepsBefore = await page.locator('#frame-chips .frame-chip').count();
+await page.click('#cmd-groups .cmd-btn[data-cmd="pick-roll"]'); await page.waitForTimeout(200);
+ok('Pick & Roll added movement steps', (await page.locator('#frame-chips .frame-chip').count()) > stepsBefore);
+ok('command drew arrows on the editor board', (await page.locator('#editor-pool [marker-end]').count())>=1);
+await page.screenshot({ path:OUT+'/qa_19_commands.png' });
+await page.click('#ed-save'); await page.waitForTimeout(400);
+// stage audible on an existing play
+await page.click('.scn-card:has-text("slip to the hole")'); await page.waitForTimeout(300);
+ok('⚡ Audible button visible on the board', await page.locator('#audible-btn:not([hidden])').count()===1);
+await page.click('#audible-btn'); await page.waitForTimeout(150);
+ok('audible sheet opens', await page.locator('#audible-sheet:not([hidden])').count()===1);
+await page.selectOption('#as-target','team');
+await page.click('#as-groups .cmd-btn[data-cmd="double-hole"]'); await page.waitForTimeout(250);
+ok('audible marked the play dirty (save bar)', await page.locator('#adjust-bar:not([hidden])').count()===1);
+await page.screenshot({ path:OUT+'/qa_20_audible.png' });
+const audCards = await page.locator('.scn-card').count();
+await page.click('#adj-save-new'); await page.waitForTimeout(400);
+ok('audible saved as a new movement (+1)', (await page.locator('.scn-card').count())===audCards+1);
+
 console.log('\n[3b] Help — how to use every function');
 await page.click('#help-btn'); await page.waitForTimeout(250);
 ok('help opens for current view', await page.locator('.help-backdrop:not([hidden])').count()===1);

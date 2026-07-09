@@ -619,3 +619,36 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .dl-part{color:var(--ink-dim)}
 .dl-part.miss{color:#ffb057}
 @media (max-width:720px){ .draft-grid{grid-template-columns:1fr} }
+
+/* ========== tactical commands (audibles) ========== */
+.cmd-accordion{background:linear-gradient(180deg,#13233a,#0f1a2b)}
+.cmd-body{margin-top:12px;display:flex;flex-direction:column;gap:12px}
+.cmd-target-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.cmd-target-row label{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);font-weight:700}
+.cmd-target-note{font-size:11px;color:var(--ink-faint);flex:1 1 180px}
+.cmd-groups{display:flex;flex-direction:column;gap:12px}
+.cmd-group-h{font-size:11px;text-transform:uppercase;letter-spacing:.8px;font-weight:800;margin-bottom:7px;color:var(--ink-dim)}
+.cmd-group.cmd-offense .cmd-group-h{color:#bfe7ff}
+.cmd-group.cmd-defense .cmd-group-h{color:#ffc9c9}
+.cmd-group.cmd-transition .cmd-group-h{color:#ffe08a}
+.cmd-btns{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.cmd-btn{display:flex;align-items:center;gap:8px;text-align:left;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:9px 11px;color:var(--ink);transition:border-color .12s,transform .06s,background .12s}
+.cmd-btn:hover{border-color:var(--teal);background:#13293c}
+.cmd-btn:active{transform:scale(.97)}
+.cmd-group.cmd-offense .cmd-btn{border-left:3px solid #4aa3e0}
+.cmd-group.cmd-defense .cmd-btn{border-left:3px solid #e05a5a}
+.cmd-group.cmd-transition .cmd-btn{border-left:3px solid #e0b83a}
+.cmd-ic{font-size:16px;line-height:1}
+.cmd-name{flex:1;font-size:12.5px;font-weight:700;line-height:1.25}
+.cmd-scope{font-size:8.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);background:var(--panel2);border-radius:5px;padding:2px 5px;font-weight:700}
+
+/* stage audible button + sheet */
+.audible-btn{position:absolute;right:14px;bottom:14px;z-index:6;background:linear-gradient(180deg,var(--teal),var(--teal-d));color:#fff;border:none;border-radius:11px;padding:9px 14px;font-weight:800;font-size:13.5px;box-shadow:0 8px 20px rgba(14,124,134,.45)}
+.audible-btn:active{transform:scale(.97)}
+.audible-sheet{position:absolute;right:14px;bottom:60px;z-index:7;width:min(360px,88%);max-height:70%;overflow-y:auto;background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:14px}
+.as-head{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+.as-head strong{font-size:14px;flex:1}
+.as-x{background:transparent;border:none;color:var(--ink-faint);font-size:16px;padding:2px 5px;border-radius:6px}
+.as-x:hover{color:var(--red)}
+.as-foot{margin:11px 2px 0;font-size:11px;color:var(--ink-faint);line-height:1.5}
+@media (max-width:720px){ .audible-sheet{left:14px;right:14px;width:auto} }
