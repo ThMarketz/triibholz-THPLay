@@ -342,6 +342,46 @@ const FILM = (() => {
       if (cx >= 0 && cx < gx && cy >= 0 && cy < gy) heat[cy * gx + cx]++; };
     Object.values(frame.att).forEach(add); Object.values(frame.def).forEach(add); add(frame.gk);
   }
+  // shared scanner: samples the footage and returns a board frame (+ heat/meta).
+  // Tier 1 = sparse across the whole clip (last-frame snapshot); Tier 2 = a DENSE
+  // short passage from the current time so frame-to-frame tracking is valid.
+  async function scanPositions(v, hardened) {
+    const Wc = vCalibW || 320, Hc = vCalibH || 180;
+    const cv = document.createElement('canvas'); cv.width = Wc; cv.height = Hc;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    const dur = v.duration; if (!dur || !isFinite(dur)) throw new Error('no-duration');
+    const gx = 16, gy = 13; const heat = new Array(gx * gy).fill(0);
+    const winSec = Math.min(2.5, dur);
+    const start = hardened ? Math.min(v.currentTime || 0, Math.max(0, dur - winSec)) : 0;
+    const span = hardened ? winSec : Math.max(0, dur - 0.05);
+    const N = hardened ? 24 : 18;
+    const perFrame = []; let last = null;
+    for (let i = 0; i < N; i++) {
+      await seekVideo(v, start + (i / (N - 1)) * span);
+      g.drawImage(v, 0, 0, Wc, Hc);
+      let img; try { img = g.getImageData(0, 0, Wc, Hc); } catch (e) { throw new Error('tainted'); }
+      const det = hardened ? TRACK.detectCC(img.data, Wc, Hc, { step: 2, minArea: 3 })
+                           : VISION.detect(img.data, Wc, Hc, { step: 2 });
+      perFrame.push(det);
+      accHeat(VISION.toBoardFrame(det, vHomography).frame, heat, gx, gy);
+      if (!hardened) last = VISION.toBoardFrame(det, vHomography).frame;
+    }
+    let seen, meta;
+    if (hardened && typeof TRACK !== 'undefined') {
+      const con = TRACK.consolidate(perFrame, { minHits: 2, maxAge: 4, gate: Math.max(Wc, Hc) / 8 });
+      last = VISION.toBoardFrame(con, vHomography).frame;
+      seen = con.white.length + con.dark.length;
+      meta = `Tier 2 · ${seen} stable player${seen === 1 ? '' : 's'} tracked over ${winSec.toFixed(1)}s from ${fmt(start)} · occlusion-bridged`;
+    } else {
+      seen = Object.keys(last.att).length + Object.keys(last.def).length;
+      meta = `Tier 1 · ${seen} caps in the final frame`;
+    }
+    return { frame: last, heat, gx, gy, meta, start, players: seen };
+  }
+  function scanErr(e) {
+    return /tainted/.test(e.message) ? ' — a cross-origin (YouTube) video can’t be scanned; use an uploaded file'
+      : (/duration/.test(e.message) ? ' — the video didn’t report a duration yet, try again in a second' : '');
+  }
   async function trackPositions(btn) {
     const v = root && root.querySelector('#film-video');
     const out = root && root.querySelector('#film-track-out');
@@ -350,46 +390,67 @@ const FILM = (() => {
     const hardened = !!(root.querySelector('#film-hardened') && root.querySelector('#film-hardened').checked && typeof TRACK !== 'undefined');
     btn.disabled = true; if (out) out.innerHTML = '<div class="muted">Reading positions from the footage… ⏳</div>';
     try {
-      const Wc = vCalibW || 320, Hc = vCalibH || 180;
-      const cv = document.createElement('canvas'); cv.width = Wc; cv.height = Hc;
-      const g = cv.getContext('2d', { willReadFrequently: true });
-      const dur = v.duration; if (!dur || !isFinite(dur)) throw new Error('no-duration');
-      const gx = 16, gy = 13; const heat = new Array(gx * gy).fill(0);
-
-      // sampling plan: Tier 1 = sparse across the whole clip (a snapshot of the
-      // last frame); Tier 2 = a DENSE short passage so the tracker is valid.
-      const winSec = Math.min(2.5, dur);
-      const start = hardened ? Math.min(v.currentTime || 0, Math.max(0, dur - winSec)) : 0;
-      const span = hardened ? winSec : Math.max(0, dur - 0.05);
-      const N = hardened ? 24 : 18;
-      const perFrame = [];
-      let last = null;
-      for (let i = 0; i < N; i++) {
-        await seekVideo(v, start + (i / (N - 1)) * span);
-        g.drawImage(v, 0, 0, Wc, Hc);
-        let img; try { img = g.getImageData(0, 0, Wc, Hc); } catch (e) { throw new Error('tainted'); }
-        const det = hardened ? TRACK.detectCC(img.data, Wc, Hc, { step: 2, minArea: 3 })
-                             : VISION.detect(img.data, Wc, Hc, { step: 2 });
-        perFrame.push(det);
-        accHeat(VISION.toBoardFrame(det, vHomography).frame, heat, gx, gy);
-        if (!hardened) last = VISION.toBoardFrame(det, vHomography).frame;
-      }
-
-      let seen, meta;
-      if (hardened) {
-        const con = TRACK.consolidate(perFrame, { minHits: 2, maxAge: 4, gate: Math.max(Wc, Hc) / 8 });
-        last = VISION.toBoardFrame(con, vHomography).frame;
-        seen = con.white.length + con.dark.length;
-        meta = `Tier 2 · ${seen} stable player${seen === 1 ? '' : 's'} tracked over ${winSec.toFixed(1)}s from ${fmt(start)} · occlusion-bridged`;
-      } else {
-        seen = Object.keys(last.att).length + Object.keys(last.def).length;
-        meta = `Tier 1 · ${seen} caps in the final frame`;
-      }
-      renderTrack(last, heat, gx, gy, meta);
+      const r = await scanPositions(v, hardened);
+      renderTrack(r.frame, r.heat, r.gx, r.gy, r.meta);
       ctx.toast('Positions mapped onto the board');
     } catch (e) {
-      if (out) out.innerHTML = `<div class="muted">Couldn’t read positions${/tainted/.test(e.message) ? ' — a cross-origin (YouTube) video can’t be scanned; use an uploaded file' : (/duration/.test(e.message) ? ' — the video didn’t report a duration yet, try again in a second' : '')}.</div>`;
+      if (out) out.innerHTML = `<div class="muted">Couldn’t read positions${scanErr(e)}.</div>`;
     } finally { btn.disabled = false; }
+  }
+
+  /* ---- Tier 3 Phase 0: run analysis (on-device now, cloud later) → review ---- */
+  function sitFromFrame(frame) {
+    const n = Math.max(Object.keys(frame.att).length, Object.keys(frame.def).length);
+    return n >= 6 ? '6v6' : n === 5 ? '6v5' : n === 4 ? '5v4' : n >= 3 ? '4v3' : n === 2 ? '3v2' : '2v1';
+  }
+  function updateCloudStatus() {
+    const chip = root && root.querySelector('#cloud-status'); if (!chip || typeof ANALYSIS === 'undefined') return;
+    const st = ANALYSIS.status();
+    chip.textContent = st.mode === 'cloud' ? `☁️ Cloud: ${st.endpoint.replace(/^https?:\/\//, '').split('/')[0]}` : '● On-device (offline)';
+    chip.className = 'cloud-status ' + st.mode;
+  }
+  async function runCloudAnalysis(btn) {
+    const v = root && root.querySelector('#film-video');
+    const out = root && root.querySelector('#cloud-out');
+    if (typeof ANALYSIS === 'undefined') return;
+    if (!vHomography) { ctx.toast('Calibrate the pool first (Position tracking)'); return; }
+    if (!v || !v.src) { ctx.toast('Re-attach the uploaded video first'); return; }
+    btn.disabled = true; if (out) out.innerHTML = '<div class="muted">Analysing… ⏳</div>';
+    try {
+      const job = { videoRef: cur.id, calibration: { H: vHomography }, fps: 0, meta: { title: cur.title } };
+      // offline: the on-device engine produces a positions Result; cloud: POST the job.
+      const local = async () => { const r = await scanPositions(v, true); return ANALYSIS.resultFromBoardFrame(r.frame, v.currentTime || 0); };
+      const result = await ANALYSIS.submit(job, { local });
+      renderReview(result);
+    } catch (e) {
+      const msg = /cloud-http|cloud-error|Failed to fetch|NetworkError/.test(e.message)
+        ? 'the cloud endpoint didn’t respond — check the URL, or clear it to use the on-device engine'
+        : ('couldn’t analyse' + scanErr(e));
+      if (out) out.innerHTML = `<div class="muted">Analysis failed — ${msg}.</div>`;
+    } finally { btn.disabled = false; }
+  }
+  function renderReview(result) {
+    const out = root && root.querySelector('#cloud-out'); if (!out) return;
+    const model = ANALYSIS.buildReview(result);
+    if (!model.items.length) { out.innerHTML = '<div class="muted">No formation or events detected in this passage.</div>'; return; }
+    out.innerHTML = `<div class="ef-label">Auto-detected (${esc(model.engine)}) — confirm what’s right</div>
+      <div class="rev-list">${model.items.map(it => `<div class="rev-item" data-id="${it.id}">
+        <span class="rev-main"><strong>${esc(it.label)}</strong><span class="muted">confidence ${Math.round(it.conf * 100)}%</span></span>
+        <span class="rev-actions">
+          <button class="btn-primary sm" data-confirm="${it.id}">Confirm → play</button>
+          <button class="btn-ghost sm" data-reject="${it.id}">Dismiss</button>
+        </span></div>`).join('')}</div>
+      <p class="fa-note">Confirming opens the play in the editor to fine-tune and save. Your confirmations are what a cloud model would learn from.</p>`;
+    out.querySelectorAll('[data-confirm]').forEach(b => b.onclick = () => {
+      const it = model.items.find(x => x.id === b.dataset.confirm); if (!it || !it.frame) { ctx.toast('Nothing to open for this item'); return; }
+      ANALYSIS.setItemState(model, it.id, 'confirmed');
+      ctx.rebuild(sitFromFrame(it.frame), 'offense', `${cur.title} — ${it.label}`, 'From video analysis (confirmed). Fine-tune and save.', it.frame);
+    });
+    out.querySelectorAll('[data-reject]').forEach(b => b.onclick = () => {
+      ANALYSIS.setItemState(model, b.dataset.reject, 'rejected');
+      const row = out.querySelector(`.rev-item[data-id="${b.dataset.reject}"]`); if (row) row.remove();
+      if (!out.querySelector('.rev-item')) out.innerHTML = '<div class="muted">All items reviewed.</div>';
+    });
   }
   function renderTrack(frame, heat, gx, gy, meta) {
     const out = root && root.querySelector('#film-track-out'); if (!out) return;
@@ -529,6 +590,14 @@ const FILM = (() => {
           <label class="fa-check" title="Tier 2: connected-component detection + multi-object tracking — rejects splash, bridges occlusion, steadier positions"><input type="checkbox" id="film-hardened" checked> Hardened <span class="fa-beta">Tier&nbsp;2</span></label>
           <span class="fa-note">Reads the caps (white / dark / red&nbsp;keeper) and the orange ball and maps them onto your board. Calibrate once by clicking the four corners of the field of play. <strong>Hardened</strong> tracks a short passage from the current time and bridges occlusion. Offline &amp; private.</span></div>
         <div id="film-track-out"></div>
+      </div>
+      <div class="film-auto" id="film-cloud">
+        <div class="fa-head"><strong>☁️ Cloud analysis <span class="fa-beta">Tier 3</span></strong>
+          <button class="btn-ghost sm" id="cloud-run">Run analysis</button>
+          <span class="cloud-status" id="cloud-status">● On-device (offline)</span>
+          <span class="fa-note">Auto-tag the match, then confirm what’s right — the same workflow whether it runs on-device (now) or in the cloud (when a pipeline is live). Calibrate first under Position tracking.</span></div>
+        <div class="cloud-cfg"><input type="text" id="cloud-endpoint" placeholder="Cloud endpoint URL (optional — blank = on-device)" /><button class="btn-ghost sm" id="cloud-save">Save endpoint</button></div>
+        <div id="cloud-out"></div>
       </div>` : ''}
 
       <div class="film-grid2">
@@ -582,6 +651,14 @@ const FILM = (() => {
     if (calBtn) calBtn.onclick = () => startCalibrate();
     const posBtn = main.querySelector('#film-scanpos');
     if (posBtn) { posBtn.disabled = !vHomography; posBtn.onclick = () => trackPositions(posBtn); }
+    if (main.querySelector('#film-cloud') && typeof ANALYSIS !== 'undefined') {
+      const ep = main.querySelector('#cloud-endpoint'); if (ep) ep.value = ANALYSIS.getEndpoint();
+      updateCloudStatus();
+      const saveBtn = main.querySelector('#cloud-save');
+      if (saveBtn) saveBtn.onclick = () => { ANALYSIS.setEndpoint((ep.value || '').trim()); updateCloudStatus(); ctx.toast(ANALYSIS.getEndpoint() ? 'Cloud endpoint saved' : 'Using the on-device engine'); };
+      const runBtn = main.querySelector('#cloud-run');
+      if (runBtn) runBtn.onclick = () => runCloudAnalysis(runBtn);
+    }
 
     main.querySelectorAll('[data-seek]').forEach(b => b.onclick = () => seekTo(parseFloat(b.dataset.seek)));
     main.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {

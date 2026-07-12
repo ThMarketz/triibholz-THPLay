@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -356,6 +356,40 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     fill(5,40,6,41,245,248,250);   // speckle
     const det=TRACK.detectCC(data,FW,FH,{step:1,minArea:4});
     ok('detectCC: 2 white / keeper / ball, speckle dropped', det.white.length===2 && det.keeper.length===1 && det.ball.length===1);
+  }
+
+  console.log('\n[6j] Tier 3 Phase 0 — analysis contract + swappable submit + review');
+  {
+    const { ANALYSIS } = window.__T;
+    const frame={att:{1:{x:230,y:80},2:{x:250,y:120}},def:{1:{x:270,y:100}},gk:{x:292,y:110},ball:{carrier:null,x:250,y:110},extra:[]};
+    // the board-frame adapter yields a valid Result
+    const res=ANALYSIS.resultFromBoardFrame(frame, 12.5);
+    ok('resultFromBoardFrame is a valid Result', ANALYSIS.validateResult(res).ok && res.engine==='on-device' && res.frames.length===1);
+    // validator rejects a genuinely broken result
+    ok('validateResult catches a broken result', ANALYSIS.validateResult({version:1,tracks:[{cls:'zzz',path:5}],events:[{t:'x',type:'nope',conf:9}],frames:[{boardFrame:{}}]}).ok===false);
+    // normalize is lenient: fills defaults, clamps confidence
+    const n=ANALYSIS.normalizeResult({events:[{type:'shot',conf:2}]});
+    ok('normalizeResult fills defaults + clamps conf', n.version===1 && n.tracks.length===0 && n.events[0].conf===1);
+    // submit routes to the on-device engine when no endpoint is set
+    let localUsed=false;
+    const job={videoRef:'v1',calibration:{H:[1,0,0,0,1,0,0,0,1]},fps:25,meta:{}};
+    const out=await ANALYSIS.submit(job,{ local: async()=>{ localUsed=true; return res; } });
+    ok('submit uses the on-device engine offline', localUsed && ANALYSIS.validateResult(out).ok);
+    // submit rejects a non-result and a cloud {error}
+    let threw=false; try{ await ANALYSIS.submit(job,{transport:async()=>'<html>500</html>'}); }catch(e){ threw=/invalid-result/.test(e.message); }
+    ok('submit rejects a non-result response', threw);
+    let cloudErr=false; try{ await ANALYSIS.submit(job,{transport:async()=>({error:'gpu-oom'})}); }catch(e){ cloudErr=/cloud-error/.test(e.message); }
+    ok('submit surfaces a cloud {error}', cloudErr);
+    // endpoint config toggles the mode
+    ANALYSIS.setEndpoint('https://api.example/analyse');
+    ok('endpoint set → cloud mode', ANALYSIS.status().mode==='cloud');
+    ANALYSIS.setEndpoint('');
+    ok('endpoint cleared → offline mode', ANALYSIS.status().mode==='offline');
+    // human-in-the-loop review model
+    const rev=ANALYSIS.buildReview(res);
+    ok('review has a confirmable item with a frame', rev.items.length===1 && rev.items[0].state==='pending' && !!rev.items[0].frame);
+    ANALYSIS.setItemState(rev, rev.items[0].id, 'confirmed');
+    ok('confirming updates the counts', rev.counts.confirmed===1 && rev.counts.pending===0);
   }
 
   console.log('\n[7] Basics + i18n');
