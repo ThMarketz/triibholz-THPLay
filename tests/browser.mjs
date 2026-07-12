@@ -145,6 +145,18 @@ await page.click('.nav-btn[data-view="film"]'); await page.waitForTimeout(400);
 await page.setInputFiles('#film-upload', { name:'clip.mp4', mimeType:'video/mp4', buffer: Buffer.from('0000001c66747970', 'hex') });
 await page.waitForTimeout(500);
 ok('🔎 Auto-analyse control present for uploaded video', await page.locator('#film-scan').count()===1);
+// Tier 1 position tracking — calibrate the pool by clicking 4 corners
+ok('📍 Position-tracking controls present', await page.locator('#film-calibrate').count()===1 && await page.locator('#film-scanpos').count()===1);
+ok('Track button starts disabled (needs calibration)', await page.locator('#film-scanpos').isDisabled());
+await page.click('#film-calibrate'); await page.waitForTimeout(200);
+ok('calibration canvas appears', await page.locator('#cal-canvas').count()===1);
+const cal = await page.locator('#cal-canvas').boundingBox();
+const corners = [[0.1,0.15],[0.9,0.15],[0.9,0.9],[0.1,0.9]];
+for (const [fx,fy] of corners){ await page.mouse.click(cal.x+cal.width*fx, cal.y+cal.height*fy); await page.waitForTimeout(80); }
+ok('calibration completes → Track enabled', /Calibrated/i.test(await page.locator('#cal-hint').innerText()) && !(await page.locator('#film-scanpos').isDisabled()));
+await page.screenshot({ path:OUT+'/qa_22_calibrate.png' });
+await page.click('#film-scanpos'); await page.waitForTimeout(700);
+ok('Track positions produces a result panel (board or graceful note)', (await page.locator('#film-track-out').innerText()).trim().length>0);
 await page.click('.nav-btn[data-view="playbook"]'); await page.waitForTimeout(250);   // [3b] expects the playbook stage
 
 console.log('\n[3b] Help — how to use every function');

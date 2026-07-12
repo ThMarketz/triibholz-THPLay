@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -288,6 +288,33 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('the peak sits in the busy window (frames 20–23)', res.peaks.some(p=>p.i>=19 && p.i<=24));
     ok('a still clip yields no false peaks', (()=>{ const flat=Array.from({length:12},()=>new Float32Array(9).fill(50));
       const r=FILM.motionScan(flat); return r.peaks.length<=3 && r.max===0; })());
+  }
+
+  console.log('\n[6h] Tier 1 vision — colour + homography → board positions');
+  {
+    const { VISION } = window.__T;
+    ok('cap/ball classification', VISION.classifyCap(245,248,250)==='white' && VISION.classifyCap(22,26,30)==='dark'
+      && VISION.classifyCap(220,40,40)==='keeper' && VISION.classifyCap(255,130,30)==='ball');
+    ok('blue water is ignored (null)', VISION.classifyCap(30,90,140)===null && VISION.classifyCap(20,120,130)===null);
+    // homography maps calibration corners onto the board exactly
+    const src=[{x:0,y:0},{x:200,y:0},{x:200,y:100},{x:0,y:100}];
+    const H=VISION.solveHomography(src, VISION.boardCorners());
+    ok('homography solves', !!H);
+    const tl=VISION.project(H,0,0), br=VISION.project(H,200,100), mid=VISION.project(H,100,50);
+    ok('corners land on the board rect', Math.abs(tl.x-VISION.BOARD.x0)<0.5 && Math.abs(br.y-VISION.BOARD.y1)<0.5);
+    ok('centre maps to the board centre', Math.abs(mid.x-160)<1 && Math.abs(mid.y-110)<1);
+    // detect on a synthetic frame → blobs → board frame
+    const W=80,Hh=45; const data=new Uint8ClampedArray(W*Hh*4);
+    const fill=(x0,y0,x1,y1,r,g,b)=>{ for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){const i=(y*W+x)*4; data[i]=r;data[i+1]=g;data[i+2]=b;data[i+3]=255;} };
+    fill(0,0,W,Hh, 30,90,140);                 // blue water
+    fill(6,6,12,12,245,248,250); fill(60,8,66,14,245,248,250);   // 2 white caps
+    fill(20,26,26,32,22,26,30);  fill(50,30,56,36,22,26,30);     // 2 dark caps
+    fill(70,20,75,25,220,40,40); fill(38,20,41,23,255,130,30);   // keeper + ball
+    const det=VISION.detect(data,W,Hh,{step:1});
+    ok('detects 2 white / 2 dark / keeper / ball', det.white.length===2 && det.dark.length===2 && det.keeper.length===1 && det.ball.length===1);
+    const bf=VISION.toBoardFrame(det, H);
+    ok('assembles a board frame (att/def/gk/ball)', Object.keys(bf.frame.att).length===2 && Object.keys(bf.frame.def).length===2 && !!bf.frame.gk && bf.frame.ball.x!=null);
+    ok('positions land inside the board water', Object.values(bf.frame.att).every(p=>p.x>=VISION.BOARD.x0-1 && p.x<=VISION.BOARD.x1+1));
   }
 
   console.log('\n[7] Basics + i18n');

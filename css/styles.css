@@ -701,3 +701,13 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .fa-chips{display:flex;flex-wrap:wrap;gap:7px}
 .fa-chip{background:var(--bg2);border:1px solid var(--teal-d);color:var(--ink);border-radius:8px;padding:5px 11px;font-size:12px;font-weight:700}
 .fa-chip:hover{background:#13293c;border-color:var(--teal)}
+
+/* ========== Tier 1 position tracking ========== */
+.cal-wrap{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+#cal-canvas{width:100%;max-width:520px;border:1px solid var(--teal);border-radius:10px;cursor:crosshair;background:#08131b;aspect-ratio:16/9}
+.cal-hint{font-size:12.5px;color:var(--ink);background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px 11px;max-width:520px}
+.track-grid{display:grid;grid-template-columns:minmax(240px,1fr) 220px;gap:16px;margin-top:12px;align-items:start}
+.track-boardcol #film-track-board{width:100%;height:auto;display:block;background:var(--bg2);border:1px solid var(--line-soft);border-radius:10px}
+.track-side{display:flex;flex-direction:column;gap:9px}
+.track-readout{font-size:12.5px;color:var(--ink-dim);background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:10px 12px;line-height:1.6}
+@media (max-width:720px){ .track-grid{grid-template-columns:1fr} }

@@ -113,6 +113,8 @@ const FILM = (() => {
   let yt = null, ytHostId = 0, fileUrl = null;
   let pickOrigin = null;      // {x,y} being edited
   let pickZone = '';
+  // Tier 1 position tracking (per uploaded video)
+  let vHomography = null, vCorners = [], vCalibW = 0, vCalibH = 0;
 
   function currentTime() {
     try { if (yt && yt.getCurrentTime) return yt.getCurrentTime(); } catch (e) {}
@@ -301,6 +303,106 @@ const FILM = (() => {
     } finally { btn.disabled = false; }
   }
 
+  /* ---------------- Tier 1 position tracking ----------------
+     Calibrate the pool once (4 corners → homography), then read
+     cap + ball colours per frame and project them onto the board. */
+  function startCalibrate() {
+    const v = root && root.querySelector('#film-video');
+    const out = root && root.querySelector('#film-track-out');
+    if (!v || !out) { ctx.toast('Re-attach the uploaded video first'); return; }
+    const Wc = 320, Hc = 180; vCalibW = Wc; vCalibH = Hc; vCorners = [];
+    out.innerHTML = `<div class="cal-wrap"><canvas id="cal-canvas" width="${Wc}" height="${Hc}"></canvas>
+      <div class="cal-hint" id="cal-hint">Click corner 1 of 4: <strong>top-left</strong> of the field of play</div></div>`;
+    const cv = out.querySelector('#cal-canvas');
+    const g = cv.getContext('2d');
+    try { g.drawImage(v, 0, 0, Wc, Hc); } catch (e) {}
+    const labels = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
+    cv.onclick = ev => {
+      if (vCorners.length >= 4) return;
+      const r = cv.getBoundingClientRect();
+      const x = r.width ? (ev.clientX - r.left) * (Wc / r.width) : ev.offsetX;
+      const y = r.height ? (ev.clientY - r.top) * (Hc / r.height) : ev.offsetY;
+      vCorners.push({ x, y });
+      try { g.fillStyle = '#1fc0d4'; g.strokeStyle = '#08131b'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 4.5, 0, 7); g.fill(); g.stroke(); } catch (e) {}
+      const hint = out.querySelector('#cal-hint');
+      if (vCorners.length < 4) {
+        hint.innerHTML = `Click corner ${vCorners.length + 1} of 4: <strong>${labels[vCorners.length]}</strong> of the field of play`;
+      } else {
+        vHomography = VISION.solveHomography(vCorners, VISION.boardCorners());
+        const posBtn = root.querySelector('#film-scanpos');
+        if (vHomography) { hint.innerHTML = '✓ Calibrated — now press <strong>“Track positions”</strong>.'; if (posBtn) posBtn.disabled = false; }
+        else hint.textContent = 'Calibration failed — pick four distinct corners and retry.';
+      }
+    };
+  }
+
+  function accHeat(frame, heat, gx, gy) {
+    const B = VISION.BOARD, cw = (B.x1 - B.x0) / gx, ch = (B.y1 - B.y0) / gy;
+    const add = p => { if (!p) return; const cx = Math.floor((p.x - B.x0) / cw), cy = Math.floor((p.y - B.y0) / ch);
+      if (cx >= 0 && cx < gx && cy >= 0 && cy < gy) heat[cy * gx + cx]++; };
+    Object.values(frame.att).forEach(add); Object.values(frame.def).forEach(add); add(frame.gk);
+  }
+  async function trackPositions(btn) {
+    const v = root && root.querySelector('#film-video');
+    const out = root && root.querySelector('#film-track-out');
+    if (!vHomography) { ctx.toast('Calibrate the pool first'); return; }
+    if (!v || !v.src) { ctx.toast('Re-attach the uploaded video first'); return; }
+    btn.disabled = true; if (out) out.innerHTML = '<div class="muted">Reading positions from the footage… ⏳</div>';
+    try {
+      const Wc = vCalibW || 320, Hc = vCalibH || 180;
+      const cv = document.createElement('canvas'); cv.width = Wc; cv.height = Hc;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      const dur = v.duration; if (!dur || !isFinite(dur)) throw new Error('no-duration');
+      const N = 18, gx = 16, gy = 13; const heat = new Array(gx * gy).fill(0);
+      let last = null, seen = 0;
+      for (let i = 0; i < N; i++) {
+        await seekVideo(v, (i / (N - 1)) * Math.max(0, dur - 0.05));
+        g.drawImage(v, 0, 0, Wc, Hc);
+        let img; try { img = g.getImageData(0, 0, Wc, Hc); } catch (e) { throw new Error('tainted'); }
+        const det = VISION.detect(img.data, Wc, Hc, { step: 2 });
+        const bf = VISION.toBoardFrame(det, vHomography);
+        last = bf.frame; seen += bf.counts.white + bf.counts.dark; accHeat(bf.frame, heat, gx, gy);
+      }
+      renderTrack(last, heat, gx, gy, seen);
+      ctx.toast('Positions mapped onto the board');
+    } catch (e) {
+      if (out) out.innerHTML = `<div class="muted">Couldn’t read positions${/tainted/.test(e.message) ? ' — a cross-origin (YouTube) video can’t be scanned; use an uploaded file' : (/duration/.test(e.message) ? ' — the video didn’t report a duration yet, try again in a second' : '')}.</div>`;
+    } finally { btn.disabled = false; }
+  }
+  function renderTrack(frame, heat, gx, gy, seen) {
+    const out = root && root.querySelector('#film-track-out'); if (!out) return;
+    out.innerHTML = `<div class="track-grid">
+      <div class="track-boardcol"><span class="ef-label">Detected positions on your board</span>
+        <svg id="film-track-board" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet"></svg></div>
+      <div class="track-side"><span class="ef-label">Read-out</span>
+        <div class="track-readout">${Object.keys(frame.att).length} white · ${Object.keys(frame.def).length} dark · keeper ${frame.gk?'✓':'—'} · ball ${frame.ball && frame.ball.x!=null?'✓':'—'}<br><span class="muted">${seen} cap detections across the clip</span></div>
+        <button class="btn-primary sm" id="track-save">Open as a play</button>
+        <p class="fa-note">Estimated from cap colour — drag any disc to correct it, then save.</p></div>
+    </div>`;
+    const svg = out.querySelector('#film-track-board'); const layers = POOL.render(svg);
+    // heatmap under the discs
+    const B = VISION.BOARD, cw = (B.x1 - B.x0) / gx, ch = (B.y1 - B.y0) / gy;
+    const max = Math.max(1, ...heat);
+    heat.forEach((n, k) => { if (!n) return; const cx = k % gx, cy = Math.floor(k / gx);
+      layers.pathLayer.appendChild(POOL.svg('rect', { x: B.x0 + cx * cw, y: B.y0 + cy * ch, width: cw, height: ch, fill: '#1fc0d4', opacity: 0.06 + 0.32 * (n / max) })); });
+    const mk = (team, label, pt, setter) => {
+      const grp = POOL.disc(team, label); grp.classList.add('editable');
+      grp.setAttribute('transform', `translate(${pt.x},${pt.y})`); layers.discLayer.appendChild(grp);
+      dragOn(grp, svg, np => { setter(np); grp.setAttribute('transform', `translate(${np.x},${np.y})`); });
+    };
+    Object.keys(frame.att).forEach(p => mk('A', p, frame.att[p], np => frame.att[p] = np));
+    Object.keys(frame.def).forEach(p => mk('D', p, frame.def[p], np => frame.def[p] = np));
+    if (frame.gk) mk('GK', 'GK', frame.gk, np => frame.gk = np);
+    const ball = POOL.ball(); ball.classList.add('editable');
+    ball.setAttribute('transform', `translate(${frame.ball.x},${frame.ball.y})`); layers.discLayer.appendChild(ball);
+    dragOn(ball, svg, np => { frame.ball = { carrier: null, x: np.x, y: np.y }; ball.setAttribute('transform', `translate(${np.x},${np.y})`); });
+    out.querySelector('#track-save').onclick = () => {
+      const att = Object.keys(frame.att).length, def = Object.keys(frame.def).length, n = Math.max(att, def);
+      const sit = n >= 6 ? '6v6' : n === 5 ? '6v5' : n === 4 ? '5v4' : n >= 3 ? '4v3' : n === 2 ? '3v2' : '2v1';
+      ctx.rebuild(sit, 'offense', `${cur.title} — tracked positions`, 'Positions read from the video (Tier 1). Drag to fine-tune, then save.', frame);
+    };
+  }
+
   /* ---------------- render ---------------- */
   function render(container, context) {
     ctx = context; root = container;
@@ -359,7 +461,7 @@ const FILM = (() => {
     if (cur) renderSession();
   }
 
-  function openSession(id) { cur = sessions.find(s=>s.id===id) || cur; pickOrigin=null; pickZone=''; render(root, ctx); }
+  function openSession(id) { cur = sessions.find(s=>s.id===id) || cur; pickOrigin=null; pickZone=''; vHomography=null; vCorners=[]; render(root, ctx); }
 
   function renderSession() {
     const s = cur, canEdit = ctx.canEdit;
@@ -395,8 +497,15 @@ const FILM = (() => {
       ${canEdit && s.source.kind==='file' ? `<div class="film-auto" id="film-auto">
         <div class="fa-head"><strong>🔎 Auto-analyse <span class="fa-beta">beta</span></strong>
           <button class="btn-ghost sm" id="film-scan">Scan the footage</button>
-          <span class="fa-note">Reads the uploaded video and finds the busy moments by motion, so you can jump straight to them. (Full player &amp; ball tracking is a cloud feature.)</span></div>
+          <span class="fa-note">Reads the uploaded video and finds the busy moments by motion, so you can jump straight to them.</span></div>
         <div id="film-auto-out"></div>
+      </div>
+      <div class="film-auto" id="film-track">
+        <div class="fa-head"><strong>📍 Position tracking <span class="fa-beta">Tier 1</span></strong>
+          <button class="btn-ghost sm" id="film-calibrate">Calibrate pool</button>
+          <button class="btn-ghost sm" id="film-scanpos" disabled>Track positions</button>
+          <span class="fa-note">Reads the caps (white / dark / red&nbsp;keeper) and the orange ball and maps them onto your board. Calibrate once by clicking the four corners of the field of play. Offline &amp; private.</span></div>
+        <div id="film-track-out"></div>
       </div>` : ''}
 
       <div class="film-grid2">
@@ -446,6 +555,10 @@ const FILM = (() => {
 
     const scanBtn = main.querySelector('#film-scan');
     if (scanBtn) scanBtn.onclick = () => runAutoAnalyse(scanBtn);
+    const calBtn = main.querySelector('#film-calibrate');
+    if (calBtn) calBtn.onclick = () => startCalibrate();
+    const posBtn = main.querySelector('#film-scanpos');
+    if (posBtn) { posBtn.disabled = !vHomography; posBtn.onclick = () => trackPositions(posBtn); }
 
     main.querySelectorAll('[data-seek]').forEach(b => b.onclick = () => seekTo(parseFloat(b.dataset.seek)));
     main.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
