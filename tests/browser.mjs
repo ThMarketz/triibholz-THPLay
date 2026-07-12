@@ -155,7 +155,8 @@ const corners = [[0.1,0.15],[0.9,0.15],[0.9,0.9],[0.1,0.9]];
 for (const [fx,fy] of corners){ await page.mouse.click(cal.x+cal.width*fx, cal.y+cal.height*fy); await page.waitForTimeout(80); }
 ok('calibration completes → Track enabled', /Calibrated/i.test(await page.locator('#cal-hint').innerText()) && !(await page.locator('#film-scanpos').isDisabled()));
 await page.screenshot({ path:OUT+'/qa_22_calibrate.png' });
-await page.click('#film-scanpos'); await page.waitForTimeout(700);
+ok('Hardened (Tier 2) toggle present & on by default', await page.locator('#film-hardened').count()===1 && await page.locator('#film-hardened').isChecked());
+await page.click('#film-scanpos'); await page.waitForTimeout(800);
 ok('Track positions produces a result panel (board or graceful note)', (await page.locator('#film-track-out').innerText()).trim().length>0);
 await page.click('.nav-btn[data-view="playbook"]'); await page.waitForTimeout(250);   // [3b] expects the playbook stage
 

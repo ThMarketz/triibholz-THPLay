@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -315,6 +315,47 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     const bf=VISION.toBoardFrame(det, H);
     ok('assembles a board frame (att/def/gk/ball)', Object.keys(bf.frame.att).length===2 && Object.keys(bf.frame.def).length===2 && !!bf.frame.gk && bf.frame.ball.x!=null);
     ok('positions land inside the board water', Object.values(bf.frame.att).every(p=>p.x>=VISION.BOARD.x0-1 && p.x<=VISION.BOARD.x1+1));
+  }
+
+  console.log('\n[6i] Tier 2 hardened tracking — CC + tracker + temporal fusion');
+  {
+    const { TRACK } = window.__T;
+    // connected components: two real blobs + a 1px speckle → speckle rejected
+    const W=10,Hm=8; const mask=new Uint8Array(W*Hm);
+    for(let y=1;y<4;y++)for(let x=1;x<4;x++)mask[y*W+x]=1;   // 3x3
+    for(let y=5;y<7;y++)for(let x=7;x<9;x++)mask[y*W+x]=1;   // 2x2
+    mask[0*W+5]=1;                                           // speckle
+    ok('connected components reject speckle (2 blobs, minArea 2)', TRACK.ccLabels(mask,W,Hm,2).length===2);
+    // tracker keeps one stable id through a one-frame dropout
+    const tr=new TRACK.Tracker({minHits:2,maxAge:3,gate:6});
+    [[{x:0,y:0,cls:'white'}],[{x:2,y:0,cls:'white'}],[],[{x:6,y:0,cls:'white'}],[{x:8,y:0,cls:'white'}]].forEach(d=>tr.update(d));
+    ok('tracker bridges a dropout → one confirmed track', tr.confirmed().length===1);
+    // consolidate rejects a one-frame splash speckle
+    const spk=[
+      {white:[{x:0,y:0,n:9}],dark:[],keeper:[],ball:[]},
+      {white:[{x:3,y:0,n:9},{x:40,y:40,n:2}],dark:[],keeper:[],ball:[]},
+      {white:[{x:6,y:0,n:9}],dark:[],keeper:[],ball:[]},
+      {white:[{x:9,y:0,n:9}],dark:[],keeper:[],ball:[]},
+    ];
+    ok('temporal fusion rejects one-frame splash', TRACK.consolidate(spk,{minHits:2,maxAge:3,gate:8}).white.length===1);
+    // consolidate bridges an occluded frame
+    const occ=[
+      {white:[{x:0,y:0,n:9}],dark:[],keeper:[],ball:[]},
+      {white:[{x:2,y:0,n:9}],dark:[],keeper:[],ball:[]},
+      {white:[],dark:[],keeper:[],ball:[]},
+      {white:[{x:6,y:0,n:9}],dark:[],keeper:[],ball:[]},
+      {white:[{x:8,y:0,n:9}],dark:[],keeper:[],ball:[]},
+    ];
+    ok('temporal fusion bridges occlusion', TRACK.consolidate(occ,{minHits:2,maxAge:3,gate:6}).white.length===1);
+    // detectCC on a synthetic frame, with a 1px speckle rejected by minArea
+    const FW=80,FH=45; const data=new Uint8ClampedArray(FW*FH*4);
+    const fill=(x0,y0,x1,y1,r,g,b)=>{ for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){const i=(y*FW+x)*4; data[i]=r;data[i+1]=g;data[i+2]=b;data[i+3]=255;} };
+    fill(0,0,FW,FH,30,90,140);
+    fill(6,6,12,12,245,248,250); fill(60,8,66,14,245,248,250);
+    fill(70,20,75,25,220,40,40); fill(38,20,41,23,255,130,30);
+    fill(5,40,6,41,245,248,250);   // speckle
+    const det=TRACK.detectCC(data,FW,FH,{step:1,minArea:4});
+    ok('detectCC: 2 white / keeper / ball, speckle dropped', det.white.length===2 && det.keeper.length===1 && det.ball.length===1);
   }
 
   console.log('\n[7] Basics + i18n');

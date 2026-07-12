@@ -711,3 +711,5 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .track-side{display:flex;flex-direction:column;gap:9px}
 .track-readout{font-size:12.5px;color:var(--ink-dim);background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:10px 12px;line-height:1.6}
 @media (max-width:720px){ .track-grid{grid-template-columns:1fr} }
+.fa-check{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-dim);cursor:pointer}
+.fa-check input{accent-color:var(--teal)}

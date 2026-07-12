@@ -347,35 +347,57 @@ const FILM = (() => {
     const out = root && root.querySelector('#film-track-out');
     if (!vHomography) { ctx.toast('Calibrate the pool first'); return; }
     if (!v || !v.src) { ctx.toast('Re-attach the uploaded video first'); return; }
+    const hardened = !!(root.querySelector('#film-hardened') && root.querySelector('#film-hardened').checked && typeof TRACK !== 'undefined');
     btn.disabled = true; if (out) out.innerHTML = '<div class="muted">Reading positions from the footage… ⏳</div>';
     try {
       const Wc = vCalibW || 320, Hc = vCalibH || 180;
       const cv = document.createElement('canvas'); cv.width = Wc; cv.height = Hc;
       const g = cv.getContext('2d', { willReadFrequently: true });
       const dur = v.duration; if (!dur || !isFinite(dur)) throw new Error('no-duration');
-      const N = 18, gx = 16, gy = 13; const heat = new Array(gx * gy).fill(0);
-      let last = null, seen = 0;
+      const gx = 16, gy = 13; const heat = new Array(gx * gy).fill(0);
+
+      // sampling plan: Tier 1 = sparse across the whole clip (a snapshot of the
+      // last frame); Tier 2 = a DENSE short passage so the tracker is valid.
+      const winSec = Math.min(2.5, dur);
+      const start = hardened ? Math.min(v.currentTime || 0, Math.max(0, dur - winSec)) : 0;
+      const span = hardened ? winSec : Math.max(0, dur - 0.05);
+      const N = hardened ? 24 : 18;
+      const perFrame = [];
+      let last = null;
       for (let i = 0; i < N; i++) {
-        await seekVideo(v, (i / (N - 1)) * Math.max(0, dur - 0.05));
+        await seekVideo(v, start + (i / (N - 1)) * span);
         g.drawImage(v, 0, 0, Wc, Hc);
         let img; try { img = g.getImageData(0, 0, Wc, Hc); } catch (e) { throw new Error('tainted'); }
-        const det = VISION.detect(img.data, Wc, Hc, { step: 2 });
-        const bf = VISION.toBoardFrame(det, vHomography);
-        last = bf.frame; seen += bf.counts.white + bf.counts.dark; accHeat(bf.frame, heat, gx, gy);
+        const det = hardened ? TRACK.detectCC(img.data, Wc, Hc, { step: 2, minArea: 3 })
+                             : VISION.detect(img.data, Wc, Hc, { step: 2 });
+        perFrame.push(det);
+        accHeat(VISION.toBoardFrame(det, vHomography).frame, heat, gx, gy);
+        if (!hardened) last = VISION.toBoardFrame(det, vHomography).frame;
       }
-      renderTrack(last, heat, gx, gy, seen);
+
+      let seen, meta;
+      if (hardened) {
+        const con = TRACK.consolidate(perFrame, { minHits: 2, maxAge: 4, gate: Math.max(Wc, Hc) / 8 });
+        last = VISION.toBoardFrame(con, vHomography).frame;
+        seen = con.white.length + con.dark.length;
+        meta = `Tier 2 · ${seen} stable player${seen === 1 ? '' : 's'} tracked over ${winSec.toFixed(1)}s from ${fmt(start)} · occlusion-bridged`;
+      } else {
+        seen = Object.keys(last.att).length + Object.keys(last.def).length;
+        meta = `Tier 1 · ${seen} caps in the final frame`;
+      }
+      renderTrack(last, heat, gx, gy, meta);
       ctx.toast('Positions mapped onto the board');
     } catch (e) {
       if (out) out.innerHTML = `<div class="muted">Couldn’t read positions${/tainted/.test(e.message) ? ' — a cross-origin (YouTube) video can’t be scanned; use an uploaded file' : (/duration/.test(e.message) ? ' — the video didn’t report a duration yet, try again in a second' : '')}.</div>`;
     } finally { btn.disabled = false; }
   }
-  function renderTrack(frame, heat, gx, gy, seen) {
+  function renderTrack(frame, heat, gx, gy, meta) {
     const out = root && root.querySelector('#film-track-out'); if (!out) return;
     out.innerHTML = `<div class="track-grid">
       <div class="track-boardcol"><span class="ef-label">Detected positions on your board</span>
         <svg id="film-track-board" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet"></svg></div>
       <div class="track-side"><span class="ef-label">Read-out</span>
-        <div class="track-readout">${Object.keys(frame.att).length} white · ${Object.keys(frame.def).length} dark · keeper ${frame.gk?'✓':'—'} · ball ${frame.ball && frame.ball.x!=null?'✓':'—'}<br><span class="muted">${seen} cap detections across the clip</span></div>
+        <div class="track-readout">${Object.keys(frame.att).length} white · ${Object.keys(frame.def).length} dark · keeper ${frame.gk?'✓':'—'} · ball ${frame.ball && frame.ball.x!=null?'✓':'—'}<br><span class="muted">${esc(meta||'')}</span></div>
         <button class="btn-primary sm" id="track-save">Open as a play</button>
         <p class="fa-note">Estimated from cap colour — drag any disc to correct it, then save.</p></div>
     </div>`;
@@ -504,7 +526,8 @@ const FILM = (() => {
         <div class="fa-head"><strong>📍 Position tracking <span class="fa-beta">Tier 1</span></strong>
           <button class="btn-ghost sm" id="film-calibrate">Calibrate pool</button>
           <button class="btn-ghost sm" id="film-scanpos" disabled>Track positions</button>
-          <span class="fa-note">Reads the caps (white / dark / red&nbsp;keeper) and the orange ball and maps them onto your board. Calibrate once by clicking the four corners of the field of play. Offline &amp; private.</span></div>
+          <label class="fa-check" title="Tier 2: connected-component detection + multi-object tracking — rejects splash, bridges occlusion, steadier positions"><input type="checkbox" id="film-hardened" checked> Hardened <span class="fa-beta">Tier&nbsp;2</span></label>
+          <span class="fa-note">Reads the caps (white / dark / red&nbsp;keeper) and the orange ball and maps them onto your board. Calibrate once by clicking the four corners of the field of play. <strong>Hardened</strong> tracks a short passage from the current time and bridges occlusion. Offline &amp; private.</span></div>
         <div id="film-track-out"></div>
       </div>` : ''}
 

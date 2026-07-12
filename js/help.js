@@ -77,6 +77,7 @@ const HELP = (() => {
       'The timeline jumps the video on tap; the shot chart, origin map and insights build themselves from your tags.',
       '<strong>Board ⚡</strong> on any moment opens your staged positions in the editor — add the correction steps and save it as a play.',
       'For uploaded clips: <strong>🔎 Auto-analyse</strong> finds the busy moments by motion, and <strong>📍 Position tracking</strong> reads the caps &amp; ball straight onto your board — calibrate once by clicking the four corners of the field of play, then <strong>Track positions</strong> and open it as a play.',
+      'Leave <strong>Hardened (Tier 2)</strong> on: it tracks a short passage from the current time, rejects splash, and bridges brief occlusions for steadier positions. Turn it off for a quick single-frame read of the whole clip.',
     ], tips:[ 'Tag 5–10 moments per match; the insights get sharper with every tag.', 'Position tracking is offline &amp; private — nothing leaves your device. It reads cap colour, so it works best on clear, steady footage.' ]},
 
     trivia: { icon:'🎓', title:'Trivia — learn the rules & the legends', steps:[
