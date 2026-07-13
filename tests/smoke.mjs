@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/events.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -375,6 +375,38 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     // classes don't cross-associate
     const mixed=BYTETRACK.track([[D(0,'white',.9),D(30,'dark',.9)],[D(2,'white',.9),D(32,'dark',.9)]], {gate:6});
     ok('separate classes tracked independently', mixed.white.length===1 && mixed.dark.length===1);
+    // series() yields one snapshot per input frame
+    ok('series() emits a snapshot per frame', BYTETRACK.series([[D(0,'white',.9)],[D(2,'white',.9)],[D(4,'white',.9)]], {gate:6}).length===3);
+  }
+
+  console.log('\n[6l] Phase 3 — heuristic event detection');
+  {
+    const { EVENTS } = window.__T;
+    const bf = (attX, ballX, ballY) => ({ att:{1:{x:attX,y:110}}, def:{1:{x:120,y:110}}, gk:{x:292,y:110}, ball:{carrier:null,x:ballX,y:ballY}, extra:[] });
+    // possession: attacker sits on the ball across the passage
+    const poss = EVENTS.detect([0,1,2,3].map(i=>({ t:i*0.1, boardFrame: bf(250,252,110) })), {});
+    ok('possession detected for the ball-side team', poss.some(e=>e.type==='possession' && e.team==='att'));
+    // turnover: att holds, then def holds
+    const to = EVENTS.detect([
+      {t:0,boardFrame:{att:{1:{x:250,y:110}},def:{1:{x:120,y:110}},gk:{x:292,y:110},ball:{carrier:null,x:251,y:110},extra:[]}},
+      {t:0.1,boardFrame:{att:{1:{x:250,y:110}},def:{1:{x:120,y:110}},gk:{x:292,y:110},ball:{carrier:null,x:251,y:110},extra:[]}},
+      {t:0.2,boardFrame:{att:{1:{x:250,y:110}},def:{1:{x:120,y:110}},gk:{x:292,y:110},ball:{carrier:null,x:121,y:110},extra:[]}},
+      {t:0.3,boardFrame:{att:{1:{x:250,y:110}},def:{1:{x:120,y:110}},gk:{x:292,y:110},ball:{carrier:null,x:121,y:110},extra:[]}},
+    ], {});
+    ok('turnover detected when the holding team flips', to.some(e=>e.type==='turnover'));
+    // shot: ball accelerates toward the goal from the attacking third
+    const shot = EVENTS.detect([
+      {t:0, boardFrame: bf(250,250,110)},
+      {t:0.1, boardFrame: bf(250,285,110)},
+    ], {});
+    ok('shot detected on a fast ball toward goal', shot.some(e=>e.type==='shot'));
+    // goal: ball reaches the goal mouth
+    const goal = EVENTS.detect([
+      {t:0, boardFrame: bf(260,280,110)},
+      {t:0.1, boardFrame: bf(260,294,110)},
+    ], {});
+    ok('goal detected when the ball reaches the mouth', goal.some(e=>e.type==='goal'));
+    ok('every event carries a board frame to confirm', shot.concat(goal,poss).every(e=>e.frame && e.frame.att));
   }
 
   console.log('\n[6j] Tier 3 Phase 0 — analysis contract + swappable submit + review');

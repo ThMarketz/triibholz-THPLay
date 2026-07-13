@@ -21,7 +21,8 @@ global.VISION = require('../js/vision.js');
 global.TRACK = require('../js/track.js');
 global.ANALYSIS = require('../js/analysis.js');
 global.BYTETRACK = require('../js/bytetrack.js');
-const VISION = global.VISION, ANALYSIS = global.ANALYSIS, BYTETRACK = global.BYTETRACK;
+global.EVENTS = require('../js/events.js');
+const VISION = global.VISION, ANALYSIS = global.ANALYSIS, BYTETRACK = global.BYTETRACK, EVENTS = global.EVENTS;
 const { makeDetector } = require('./detector.js');
 
 const WORK_W = 320, WORK_H = 180;   // analysis resolution
@@ -49,14 +50,22 @@ async function framesToResult(frames, w, h, cal, opts) {
   const detector = opts.detector || makeDetector({ modelEndpoint: opts.modelEndpoint, step: opts.step, minArea: opts.minArea });
   const perFrame = [];
   for (const f of frames) perFrame.push(await detector.detect(f, w, h));
-  const con = BYTETRACK.track(perFrame, { minHits: 2, maxAge: 4, gate: Math.max(w, h) / 8 });
-  const board = VISION.toBoardFrame(con, H).frame;
-  const t = opts.start || 0;
+  const tOpts = { minHits: 2, maxAge: 4, gate: Math.max(w, h) / 8 };
+  // Phase 3: keep the per-frame trajectories, project each to the board,
+  // then read events off the sequence.
+  const snaps = BYTETRACK.series(perFrame, tOpts);
+  const fps = opts.fps || 10, start = opts.start || 0;
+  const seriesFrames = snaps.map((s, i) => ({ t: +(start + i / fps).toFixed(2), boardFrame: VISION.toBoardFrame(s, H).frame }));
+  const detected = EVENTS.detect(seriesFrames, {});
+  // a representative frame (most players on it) for the formation overview
+  let rep = seriesFrames[0] || { t: start, boardFrame: VISION.toBoardFrame({}, H).frame }, best = -1;
+  seriesFrames.forEach(sf => { const c = Object.keys(sf.boardFrame.att).length + Object.keys(sf.boardFrame.def).length; if (c > best) { best = c; rep = sf; } });
+  const final = snaps.length ? snaps[snaps.length - 1] : { white: [], dark: [], keeper: [], ball: [] };
   return ANALYSIS.normalizeResult({
     engine: 'server', version: ANALYSIS.VERSION,
-    tracks: tracksFrom(con),
-    frames: [{ t, boardFrame: board }],
-    events: [{ t, type: 'formation', conf: 0.72, frame: board }],
+    tracks: tracksFrom(final),
+    frames: seriesFrames.length ? seriesFrames : [{ t: start, boardFrame: rep.boardFrame }],
+    events: [{ t: rep.t, type: 'formation', conf: 0.72, frame: rep.boardFrame }].concat(detected),
   });
 }
 

@@ -35,15 +35,20 @@ const BYTETRACK = (() => {
     }
   }
 
-  /* track(perFrame, opts) — perFrame[i] = flat detections [{x,y,cls,conf,n}].
-     Returns confirmed tracks grouped by class (drop-in for toBoardFrame). */
-  function track(perFrame, opts) {
+  // confirmed tracks grouped by class (drop-in for VISION.toBoardFrame)
+  function snapshot(tracks, minHits) {
+    const out = { white: [], dark: [], keeper: [], ball: [] };
+    tracks.filter(t => t.hits >= minHits && t.missed === 0).forEach(t =>
+      (out[t.cls] || (out[t.cls] = [])).push({ x: +t.x.toFixed(1), y: +t.y.toFixed(1), n: t.n, id: t.id, conf: +(t.conf || 0).toFixed(2) }));
+    CLASSES.forEach(c => out[c].sort((a, b) => b.n - a.n));
+    return out;
+  }
+  // core two-stage loop; onFrame(tracks) fires after each input frame
+  function run(perFrame, opts, onFrame) {
     opts = opts || {};
     const gate = opts.gate || 22, maxAge = opts.maxAge != null ? opts.maxAge : 4,
-      minHits = opts.minHits != null ? opts.minHits : 2, alpha = opts.alpha != null ? opts.alpha : 0.5,
-      high = opts.highThresh != null ? opts.highThresh : 0.5;
+      alpha = opts.alpha != null ? opts.alpha : 0.5, high = opts.highThresh != null ? opts.highThresh : 0.5;
     let tracks = [], id = 1;
-
     (perFrame || []).forEach(raw => {
       const dets = (raw || []).map(d => ({ x: d.x, y: d.y, cls: d.cls, conf: d.conf != null ? d.conf : 1, n: d.n || 1, _used: false }));
       tracks.forEach(t => { t.x += t.vx; t.y += t.vy; t.missed++; t._used = false; });   // predict
@@ -53,16 +58,26 @@ const BYTETRACK = (() => {
       associate(tracks.filter(t => !t._used), lowD, gate, alpha);              // stage 2 (recover)
       highD.forEach(d => { if (d._used) return; tracks.push({ id: id++, cls: d.cls, x: d.x, y: d.y, vx: 0, vy: 0, n: d.n, conf: d.conf, hits: 1, missed: 0, _used: true }); });
       tracks = tracks.filter(t => t.missed <= maxAge);
+      if (onFrame) onFrame(tracks);
     });
-
-    const out = { white: [], dark: [], keeper: [], ball: [] };
-    tracks.filter(t => t.hits >= minHits && t.missed === 0).forEach(t =>
-      (out[t.cls] || (out[t.cls] = [])).push({ x: +t.x.toFixed(1), y: +t.y.toFixed(1), n: t.n, id: t.id, conf: +(t.conf || 0).toFixed(2) }));
-    CLASSES.forEach(c => out[c].sort((a, b) => b.n - a.n));
-    return out;
+    return tracks;
   }
 
-  return { CLASSES, track };
+  /* track(perFrame, opts) → final confirmed positions by class */
+  function track(perFrame, opts) {
+    opts = opts || {};
+    return snapshot(run(perFrame, opts), opts.minHits != null ? opts.minHits : 2);
+  }
+  /* series(perFrame, opts) → one confirmed-position snapshot PER input frame
+     (the per-frame trajectories event detection runs on) */
+  function series(perFrame, opts) {
+    opts = opts || {}; const mh = opts.minHits != null ? opts.minHits : 2;
+    const snaps = [];
+    run(perFrame, opts, tr => snaps.push(snapshot(tr, mh)));
+    return snaps;
+  }
+
+  return { CLASSES, track, series };
 })();
 
 // Node/CommonJS interop (no-op in the browser)

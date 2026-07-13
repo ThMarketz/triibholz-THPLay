@@ -51,8 +51,8 @@ function frame(w, h) {
     ok('analyse responds 200', r.status === 200);
     const result = await r.json();
     ok('returns the shared Result schema (engine=server)', result.engine === 'server' && Array.isArray(result.tracks) && Array.isArray(result.events) && Array.isArray(result.frames));
-    ok('detected a board frame with players', result.frames.length === 1 && Object.keys(result.frames[0].boardFrame.att).length >= 1);
-    ok('carried the timestamp through (start=3)', result.frames[0].t === 3 && result.events[0].t === 3);
+    ok('detected board frames with players (time series)', result.frames.length >= 1 && result.frames.some(f => Object.keys(f.boardFrame.att).length >= 1));
+    ok('series timestamps start at start=3', result.frames[0].t === 3 && result.events[0].t >= 3);
     ok('CORS is open for the PWA origin', r.headers.get('access-control-allow-origin') === '*');
 
     console.log('\n[3] Async queue — submit → poll → result');
@@ -84,13 +84,31 @@ function frame(w, h) {
     const mr = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(mbody) });
     const mres = await mr.json();
     ok('served model is used → engine=server, result valid', mr.status === 200 && mres.engine === 'server' && Array.isArray(mres.frames));
-    ok('model detections drive the board (2 white → 2 attackers)', Object.keys(mres.frames[0].boardFrame.att).length === 2 && Object.keys(mres.frames[0].boardFrame.def).length === 1);
+    ok('model detections drive the board (2 white → 2 attackers)', mres.frames.some(f => Object.keys(f.boardFrame.att).length === 2 && Object.keys(f.boardFrame.def).length === 1));
     ok('model tracks carried through', mres.tracks.length >= 4);
     // a dead model endpoint surfaces a clean error, not a crash
     const deadBody = { mode: 'frames', w, h: hh, frames, calibration: { corners }, opts: { modelEndpoint: 'http://127.0.0.1:4111/nope' } };
     const dead = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(deadBody) });
     ok('unreachable model → 422 {error}, no crash', dead.status === 422 && !!(await dead.json()).error);
     model.close();
+
+    console.log('\n[3c] Phase 3 — event detection end-to-end (moving ball → shot/goal)');
+    // frames where the orange ball marches toward the goal; players static.
+    function frameBall(bx) {
+      const d = new Array(w * hh * 4).fill(0);
+      const put = (x0, y0, x1, y1, r, g, b) => { for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const i = (y * w + x) * 4; d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255; } };
+      put(0, 0, w, hh, 30, 90, 140);
+      put(4, 4, 10, 10, 245, 248, 250); put(24, 5, 30, 11, 245, 248, 250);   // white attackers
+      put(12, 15, 18, 21, 22, 26, 30);                                        // dark defender
+      put(bx, 10, bx + 5, 15, 255, 130, 30);                                  // ball, moving →
+      return d;
+    }
+    const moving = [10, 14, 18, 24, 30, 37].map(frameBall);
+    const mv = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'frames', w, h: hh, frames: moving, calibration: { corners }, opts: { start: 0, fps: 10 } }) });
+    const mvres = await mv.json();
+    ok('result carries a time-series of frames', mv.status === 200 && mvres.frames.length >= 4);
+    ok('auto-tagged a shot or goal from the ball trajectory', mvres.events.some(e => e.type === 'shot' || e.type === 'goal'));
+    ok('events carry a board frame to confirm', mvres.events.every(e => !e.frame || (e.frame.att && e.frame.ball)));
 
     console.log('\n[4] Error handling');
     ok('bad JSON → 400', (await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{oops' })).status === 400);
