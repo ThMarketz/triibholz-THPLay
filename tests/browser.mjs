@@ -156,6 +156,7 @@ for (const [fx,fy] of corners){ await page.mouse.click(cal.x+cal.width*fx, cal.y
 ok('calibration completes → Track enabled', /Calibrated/i.test(await page.locator('#cal-hint').innerText()) && !(await page.locator('#film-scanpos').isDisabled()));
 await page.screenshot({ path:OUT+'/qa_22_calibrate.png' });
 ok('Hardened (Tier 2) toggle present & on by default', await page.locator('#film-hardened').count()===1 && await page.locator('#film-hardened').isChecked());
+ok('on-device detector chip shows colour by default', /colour/i.test(await page.locator('#ondevice-detector').innerText()));
 await page.click('#film-scanpos'); await page.waitForTimeout(800);
 ok('Track positions produces a result panel (board or graceful note)', (await page.locator('#film-track-out').innerText()).trim().length>0);
 // Tier 3 Phase 0 — cloud analysis contract UI

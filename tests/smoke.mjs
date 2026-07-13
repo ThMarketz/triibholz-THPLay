@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/events.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -407,6 +407,38 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ], {});
     ok('goal detected when the ball reaches the mouth', goal.some(e=>e.type==='goal'));
     ok('every event carries a board frame to confirm', shot.concat(goal,poss).every(e=>e.frame && e.frame.att));
+  }
+
+  console.log('\n[6m] T2b — on-device detector seam (WebDetector)');
+  {
+    const { WEBDETECTOR } = window.__T;
+    ok('defaults to the colour detector', WEBDETECTOR.status().detector==='colour' && WEBDETECTOR.status().hasModel===false);
+    // NMS: two heavily-overlapping same-class boxes → one survives; distinct box kept
+    const nmsOut = WEBDETECTOR.nms([
+      {x:10,y:10,w:8,h:8,cls:'white',conf:0.9},
+      {x:11,y:11,w:8,h:8,cls:'white',conf:0.6},   // overlaps the first → suppressed
+      {x:60,y:60,w:8,h:8,cls:'white',conf:0.8},   // separate → kept
+    ], 0.45);
+    ok('non-max suppression dedupes overlaps', nmsOut.length===2);
+    // postprocess: drops unknown classes + below-threshold scores
+    const pp = WEBDETECTOR.postprocess([
+      {x:5,y:5,w:6,h:6,cls:'white',conf:0.9},
+      {x:9,y:9,w:6,h:6,cls:'referee',conf:0.9},   // unknown class → dropped
+      {x:40,y:40,w:6,h:6,cls:'ball',conf:0.1},    // below score threshold → dropped
+    ], {scoreThresh:0.3});
+    ok('postprocess keeps only valid, confident classes', pp.length===1 && pp[0].cls==='white');
+    // register a stand-in model → detector switches; detections flow through as per-class
+    let called=false;
+    WEBDETECTOR.register(async ()=>{ called=true; return [
+      {x:8,y:6,w:6,h:6,cls:'white',conf:0.95},{x:30,y:7,w:6,h:6,cls:'white',conf:0.95},
+      {x:20,y:12,w:6,h:6,cls:'ball',conf:0.8},
+    ]; }, 'mock-net');
+    ok('registering a model flips the detector', WEBDETECTOR.status().detector==='model' && WEBDETECTOR.status().name==='mock-net');
+    const byc = await WEBDETECTOR.detectByClass(new Uint8ClampedArray(40*24*4), 40, 24);
+    ok('model detections flow through as per-class', called && byc.white.length===2 && byc.ball.length===1);
+    // fall back to colour
+    WEBDETECTOR.register(null);
+    ok('register(null) falls back to colour', WEBDETECTOR.status().detector==='colour');
   }
 
   console.log('\n[6j] Tier 3 Phase 0 — analysis contract + swappable submit + review');

@@ -360,8 +360,11 @@ const FILM = (() => {
       await seekVideo(v, start + (i / (N - 1)) * span);
       g.drawImage(v, 0, 0, Wc, Hc);
       let img; try { img = g.getImageData(0, 0, Wc, Hc); } catch (e) { throw new Error('tainted'); }
-      const det = hardened ? TRACK.detectCC(img.data, Wc, Hc, { step: 2, minArea: 3 })
-                           : VISION.detect(img.data, Wc, Hc, { step: 2 });
+      // T2b: on-device detection is pluggable — a registered neural model
+      // takes over the Hardened path, else the colour engine.
+      const det = hardened
+        ? (typeof WEBDETECTOR !== 'undefined' ? await WEBDETECTOR.detectByClass(img.data, Wc, Hc) : TRACK.detectCC(img.data, Wc, Hc, { step: 2, minArea: 3 }))
+        : VISION.detect(img.data, Wc, Hc, { step: 2 });
       perFrame.push(det);
       accHeat(VISION.toBoardFrame(det, vHomography).frame, heat, gx, gy);
       if (!hardened) last = VISION.toBoardFrame(det, vHomography).frame;
@@ -608,6 +611,7 @@ const FILM = (() => {
           <button class="btn-ghost sm" id="film-calibrate">Calibrate pool</button>
           <button class="btn-ghost sm" id="film-scanpos" disabled>Track positions</button>
           <label class="fa-check" title="Tier 2: connected-component detection + multi-object tracking — rejects splash, bridges occlusion, steadier positions"><input type="checkbox" id="film-hardened" checked> Hardened <span class="fa-beta">Tier&nbsp;2</span></label>
+          <span class="cloud-status" id="ondevice-detector">● colour</span>
           <span class="fa-note">Reads the caps (white / dark / red&nbsp;keeper) and the orange ball and maps them onto your board. Calibrate once by clicking the four corners of the field of play. <strong>Hardened</strong> tracks a short passage from the current time and bridges occlusion. Offline &amp; private.</span></div>
         <div id="film-track-out"></div>
       </div>
@@ -669,6 +673,8 @@ const FILM = (() => {
     if (scanBtn) scanBtn.onclick = () => runAutoAnalyse(scanBtn);
     const calBtn = main.querySelector('#film-calibrate');
     if (calBtn) calBtn.onclick = () => startCalibrate();
+    const odChip = main.querySelector('#ondevice-detector');
+    if (odChip && typeof WEBDETECTOR !== 'undefined') { const st = WEBDETECTOR.status(); odChip.textContent = st.hasModel ? `● model: ${st.name}` : '● colour'; odChip.className = 'cloud-status ' + (st.hasModel ? 'cloud' : 'offline'); }
     const posBtn = main.querySelector('#film-scanpos');
     if (posBtn) { posBtn.disabled = !vHomography; posBtn.onclick = () => trackPositions(posBtn); }
     if (main.querySelector('#film-cloud') && typeof ANALYSIS !== 'undefined') {
