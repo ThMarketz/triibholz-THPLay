@@ -20,6 +20,8 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const engine = require('./engine.js');
+const { makeDetector } = require('./detector.js');
+const MODEL_ENDPOINT = process.env.MODEL_ENDPOINT || '';
 
 const PORT = +(process.env.PORT || 4200);
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -63,16 +65,19 @@ async function processJob(id) {
 /* ---------------- the actual analysis ---------------- */
 async function runEngine(req) {
   req = req || {};
+  const opts = Object.assign({}, req.opts);
+  opts.modelEndpoint = opts.modelEndpoint || req.modelEndpoint || MODEL_ENDPOINT || undefined;
   if (req.mode === 'frames' || Array.isArray(req.frames)) {
     const w = req.w || engine.WORK_W, h = req.h || engine.WORK_H;
     const frames = (req.frames || []).map(f => Array.isArray(f) ? f : (f && f.data) || []);
-    return engine.framesToResult(frames, w, h, req.calibration, req.opts || {});
+    return engine.framesToResult(frames, w, h, req.calibration, opts);
   }
   if (req.videoRef) {
     if (!hasFfmpeg) { const e = new Error('ffmpeg-unavailable'); e.code = 'ffmpeg-unavailable'; throw e; }
     const vp = path.join(VIDEO_DIR, req.videoRef.replace(/[^\w.\-]/g, ''));
     if (!fs.existsSync(vp)) { const e = new Error('video-not-found'); e.code = 'video-not-found'; throw e; }
-    return engine.videoToResult(vp, req.calibration, Object.assign({ ffmpeg: process.env.FFMPEG }, req.opts || {}));
+    opts.ffmpeg = process.env.FFMPEG;
+    return engine.videoToResult(vp, req.calibration, opts);
   }
   const e = new Error('no-input'); e.code = 'no-input'; throw e;
 }
@@ -99,7 +104,7 @@ const server = http.createServer(async (req, res) => {
     const p = url.pathname;
     if (req.method === 'OPTIONS') { cors(res); res.writeHead(204); return res.end(); }
 
-    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, engine: 'server', ffmpeg: hasFfmpeg, queued: queue.length, running });
+    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, engine: 'server', detector: makeDetector({ modelEndpoint: MODEL_ENDPOINT }).name, ffmpeg: hasFfmpeg, queued: queue.length, running });
 
     if (req.method === 'POST' && p === '/api/analyse') {
       const ct = (req.headers['content-type'] || '');

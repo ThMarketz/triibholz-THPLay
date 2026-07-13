@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -356,6 +356,25 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     fill(5,40,6,41,245,248,250);   // speckle
     const det=TRACK.detectCC(data,FW,FH,{step:1,minArea:4});
     ok('detectCC: 2 white / keeper / ball, speckle dropped', det.white.length===2 && det.keeper.length===1 && det.ball.length===1);
+    ok('detectCC now carries a confidence per blob', det.white.every(b=>typeof b.conf==='number' && b.conf>0 && b.conf<=1));
+  }
+
+  console.log('\n[6k] Phase 2 — ByteTrack two-stage association');
+  {
+    const { BYTETRACK } = window.__T;
+    const D=(x,cls,conf)=>({x,y:0,cls,conf,n:9});
+    // a high-confidence object across frames → one confirmed track
+    ok('high-confidence object → one track', BYTETRACK.track(
+      [[D(0,'white',.9)],[D(2,'white',.9)],[D(4,'white',.9)],[D(6,'white',.9)]], {gate:6}).white.length===1);
+    // a real object that dips to LOW confidence for a frame is recovered (stage 2)
+    ok('low-confidence frame is recovered, not lost', BYTETRACK.track(
+      [[D(0,'white',.9)],[D(2,'white',.9)],[D(4,'white',.2)],[D(6,'white',.9)]], {gate:6}).white.length===1);
+    // isolated LOW-confidence blobs never BIRTH a track (splash/glare rejected)
+    ok('low-confidence blobs cannot start a phantom track', BYTETRACK.track(
+      [[D(0,'white',.2)],[D(2,'white',.2)],[D(4,'white',.2)],[D(6,'white',.2)]], {gate:6}).white.length===0);
+    // classes don't cross-associate
+    const mixed=BYTETRACK.track([[D(0,'white',.9),D(30,'dark',.9)],[D(2,'white',.9),D(32,'dark',.9)]], {gate:6});
+    ok('separate classes tracked independently', mixed.white.length===1 && mixed.dark.length===1);
   }
 
   console.log('\n[6j] Tier 3 Phase 0 — analysis contract + swappable submit + review');

@@ -70,10 +70,12 @@ const TRACK = (() => {
     }
     const out = {};
     CLASSES.forEach(cls => {
+      const ref = opts.refArea || 8;
       out[cls] = ccLabels(masks[cls], mw, mh, minArea)
         .filter(c => c.area <= maxArea)
         .map(c => ({ x: c.cx * step, y: c.cy * step, n: c.area,
-          w: (c.maxx - c.minx + 1) * step, h: (c.maxy - c.miny + 1) * step }))
+          w: (c.maxx - c.minx + 1) * step, h: (c.maxy - c.miny + 1) * step,
+          conf: Math.max(0.35, Math.min(1, c.area / ref)) }))    // area-based confidence
         .sort((a, b) => b.n - a.n);
     });
     return out;

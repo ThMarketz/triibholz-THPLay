@@ -20,7 +20,9 @@ const { spawn } = require('node:child_process');
 global.VISION = require('../js/vision.js');
 global.TRACK = require('../js/track.js');
 global.ANALYSIS = require('../js/analysis.js');
-const VISION = global.VISION, TRACK = global.TRACK, ANALYSIS = global.ANALYSIS;
+global.BYTETRACK = require('../js/bytetrack.js');
+const VISION = global.VISION, ANALYSIS = global.ANALYSIS, BYTETRACK = global.BYTETRACK;
+const { makeDetector } = require('./detector.js');
 
 const WORK_W = 320, WORK_H = 180;   // analysis resolution
 
@@ -37,13 +39,17 @@ function tracksFrom(con) {
 }
 
 /* frames: array of Uint8ClampedArray|Buffer|number[] (RGBA, w*h*4 each) */
-function framesToResult(frames, w, h, cal, opts) {
+async function framesToResult(frames, w, h, cal, opts) {
   opts = opts || {};
   const H = homographyOf(cal);
   if (!H) { const e = new Error('bad-calibration'); e.code = 'bad-calibration'; throw e; }
   if (!frames || !frames.length) { const e = new Error('no-frames'); e.code = 'no-frames'; throw e; }
-  const perFrame = frames.map(f => TRACK.detectCC(f, w, h, { step: opts.step || 2, minArea: opts.minArea || 3 }));
-  const con = TRACK.consolidate(perFrame, { minHits: 2, maxAge: 4, gate: Math.max(w, h) / 8 });
+  // Phase 2: detection is pluggable (colour now, a served model when configured);
+  // ByteTrack fuses the per-frame detections into stable, occlusion-bridged tracks.
+  const detector = opts.detector || makeDetector({ modelEndpoint: opts.modelEndpoint, step: opts.step, minArea: opts.minArea });
+  const perFrame = [];
+  for (const f of frames) perFrame.push(await detector.detect(f, w, h));
+  const con = BYTETRACK.track(perFrame, { minHits: 2, maxAge: 4, gate: Math.max(w, h) / 8 });
   const board = VISION.toBoardFrame(con, H).frame;
   const t = opts.start || 0;
   return ANALYSIS.normalizeResult({

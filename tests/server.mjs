@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import http from 'node:http';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PORT = 4278;
@@ -39,6 +40,7 @@ function frame(w, h) {
     const h = await (await fetch(base + '/api/health')).json();
     ok('health ok + reports engine', h.ok === true && h.engine === 'server');
     ok('health reports ffmpeg availability (boolean)', typeof h.ffmpeg === 'boolean');
+    ok('health reports the detector in use (colour by default)', h.detector === 'colour');
 
     console.log('\n[2] Sync /api/analyse — frames mode (server runs the real engine)');
     const w = 40, hh = 24;
@@ -61,6 +63,34 @@ function frame(w, h) {
     ok('job reaches done', status === 'done');
     const jres = await fetch(base + '/api/jobs/' + sub.id + '/result');
     ok('result retrievable + valid', jres.status === 200 && (await jres.json()).engine === 'server');
+
+    console.log('\n[3b] Phase 2 — pluggable served-model detector (via a stand-in model server)');
+    // a mock model endpoint implementing the detector contract:
+    // POST { w,h,frame } -> { detections:[{x,y,cls,conf}] }
+    const MODEL_PORT = 4279;
+    const model = http.createServer((rq, rs) => {
+      let n = 0; rq.on('data', () => n++); rq.on('end', () => {
+        rs.writeHead(200, { 'content-type': 'application/json' });
+        rs.end(JSON.stringify({ detections: [
+          { x: 8, y: 6, cls: 'white', conf: 0.95 }, { x: 30, y: 7, cls: 'white', conf: 0.95 },
+          { x: 12, y: 17, cls: 'dark', conf: 0.9 }, { x: 34, y: 18, cls: 'keeper', conf: 0.92 },
+          { x: 20, y: 12, cls: 'ball', conf: 0.8 },
+        ] }));
+      });
+    });
+    await new Promise(r => model.listen(MODEL_PORT, r));
+    const modelUrl = `http://localhost:${MODEL_PORT}/`;
+    const mbody = { mode: 'frames', w, h: hh, frames, calibration: { corners }, opts: { start: 0, modelEndpoint: modelUrl } };
+    const mr = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(mbody) });
+    const mres = await mr.json();
+    ok('served model is used → engine=server, result valid', mr.status === 200 && mres.engine === 'server' && Array.isArray(mres.frames));
+    ok('model detections drive the board (2 white → 2 attackers)', Object.keys(mres.frames[0].boardFrame.att).length === 2 && Object.keys(mres.frames[0].boardFrame.def).length === 1);
+    ok('model tracks carried through', mres.tracks.length >= 4);
+    // a dead model endpoint surfaces a clean error, not a crash
+    const deadBody = { mode: 'frames', w, h: hh, frames, calibration: { corners }, opts: { modelEndpoint: 'http://127.0.0.1:4111/nope' } };
+    const dead = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(deadBody) });
+    ok('unreachable model → 422 {error}, no crash', dead.status === 422 && !!(await dead.json()).error);
+    model.close();
 
     console.log('\n[4] Error handling');
     ok('bad JSON → 400', (await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{oops' })).status === 400);
