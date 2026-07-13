@@ -161,3 +161,6 @@ const VISION = (() => {
 
   return { BOARD, boardCorners, clampBoard, rgb2hsv, classifyCap, detect, mergeBlobs, solveHomography, project, toBoardFrame };
 })();
+
+// Node/CommonJS interop (no-op in the browser)
+if (typeof module !== "undefined" && module.exports) module.exports = VISION;

@@ -139,3 +139,6 @@ const TRACK = (() => {
 
   return { CLASSES, ccLabels, detectCC, Tracker, consolidate };
 })();
+
+// Node/CommonJS interop (no-op in the browser)
+if (typeof module !== "undefined" && module.exports) module.exports = TRACK;

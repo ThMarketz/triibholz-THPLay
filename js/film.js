@@ -417,10 +417,30 @@ const FILM = (() => {
     if (!v || !v.src) { ctx.toast('Re-attach the uploaded video first'); return; }
     btn.disabled = true; if (out) out.innerHTML = '<div class="muted">Analysing… ⏳</div>';
     try {
+      const startT = v.currentTime || 0;
       const job = { videoRef: cur.id, calibration: { H: vHomography }, fps: 0, meta: { title: cur.title } };
-      // offline: the on-device engine produces a positions Result; cloud: POST the job.
-      const local = async () => { const r = await scanPositions(v, true); return ANALYSIS.resultFromBoardFrame(r.frame, v.currentTime || 0); };
-      const result = await ANALYSIS.submit(job, { local });
+      const endpoint = ANALYSIS.getEndpoint();
+      let opts;
+      if (endpoint) {
+        // cloud: upload the actual video bytes; the backend decodes full-res with ffmpeg.
+        // client + server both analyse at 320×180, so the same homography applies.
+        opts = { transport: async (jb) => {
+          const blob = await getVideo('film-' + cur.id);
+          if (!blob) throw new Error('video-missing');
+          const url = endpoint.replace(/\/+$/, '') + '/api/analyse';
+          const r = await fetch(url, { method: 'POST', headers: {
+            'content-type': 'application/octet-stream',
+            'x-calibration': JSON.stringify(jb.calibration),
+            'x-opts': JSON.stringify({ start: startT, winSec: 2.5 }),
+          }, body: blob });
+          if (!r.ok) { let m = 'cloud-http-' + r.status; try { const j = await r.json(); if (j && j.error) m = 'cloud-error: ' + j.error; } catch (e) {} throw new Error(m); }
+          return r.json();
+        } };
+      } else {
+        // offline: the on-device engine produces a positions Result.
+        opts = { local: async () => { const r = await scanPositions(v, true); return ANALYSIS.resultFromBoardFrame(r.frame, startT); } };
+      }
+      const result = await ANALYSIS.submit(job, opts);
       renderReview(result);
     } catch (e) {
       const msg = /cloud-http|cloud-error|Failed to fetch|NetworkError/.test(e.message)

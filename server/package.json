@@ -1,0 +1,6 @@
+{
+  "name": "triibholz-analysis-server",
+  "private": true,
+  "type": "commonjs",
+  "scripts": { "start": "node index.js", "test": "node ../tests/server.mjs" }
+}

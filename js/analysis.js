@@ -146,3 +146,6 @@ const ANALYSIS = (() => {
     buildReview, setItemState,
   };
 })();
+
+// Node/CommonJS interop (no-op in the browser)
+if (typeof module !== "undefined" && module.exports) module.exports = ANALYSIS;

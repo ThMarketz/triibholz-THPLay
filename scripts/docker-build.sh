@@ -15,10 +15,13 @@ echo "› staging → $STAGE"
 rm -rf "$STAGE"; mkdir -p "$STAGE"
 rsync -a --exclude='.git' --exclude='node_modules' --exclude='.DS_Store' "$SRC/" "$STAGE/"
 
-echo "› building $IMAGE"
+echo "› building $IMAGE (app)"
 docker build -t "$IMAGE" "$STAGE"
 
-echo "› (re)creating container"
+echo "› building triibholz-analysis:latest (Phase 1 backend)"
+docker build -t "triibholz-analysis:latest" -f "$STAGE/server/Dockerfile" "$STAGE"
+
+echo "› (re)creating containers"
 ( cd "$SRC" && docker compose up -d --no-build --force-recreate )
 
-echo "✓ up at http://localhost:8088"
+echo "✓ app at http://localhost:8088 · analysis API at http://localhost:4200"
