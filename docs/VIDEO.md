@@ -55,3 +55,51 @@ proxy) behind that shape.
 ## Status chip
 The panel shows **● animation (offline)** by default, or **● photoreal: provider** once a
 provider is saved.
+
+---
+
+## Photoreal via the backend adapter (recommended wiring)
+
+Rather than calling a paid provider from the browser (which would expose your API key),
+point the app's **Photoreal endpoint at your own backend**, which holds the key and
+normalises every provider to the app's contract:
+
+```
+App  →  POST http://<your-backend>/api/videogen   { prompt, seconds }
+                                                  → { url }                    (done), or
+                                                  → { status:'pending', jobId } (async)
+App  →  GET  /api/videogen/<jobId>                → { status, url }            (poll)
+```
+
+The app polls the job for you and shows the video when it's ready.
+
+### Configure the backend (env — the key never leaves the server)
+
+| Env | Meaning |
+|-----|---------|
+| `VIDEO_PROVIDER` | `mock` · `generic` · `fal` · `replicate` · `luma` · `runway` |
+| `VIDEO_API_KEY`  | the provider key (server-side only) |
+| `VIDEO_MODEL`    | provider model id (e.g. a fal path or a Replicate version hash) |
+| `VIDEO_BASE`     | base URL for the `generic` provider |
+
+```
+VIDEO_PROVIDER=fal VIDEO_API_KEY=… VIDEO_MODEL=fal-ai/kling-video/v1/standard/text-to-video \
+  node server/index.js
+```
+
+Then in the app's 🎬 panel set the Photoreal endpoint to `http://<backend>/api/videogen`
+(no key needed in the browser).
+
+### Providers
+- **`mock`** / **`generic`** — for testing and for putting your own proxy in front of any
+  model (`generic` = `POST base {prompt,seconds} → {jobId}` then `GET base/jobId → {status,url}`).
+  These two are covered by the test suite.
+- **`fal` / `replicate` / `luma` / `runway`** — mapped to their documented submit + poll
+  APIs. The plumbing (submit, poll loop, URL normalisation) is proven; **verify each against
+  a live key**, since provider endpoints/fields shift.
+
+### Security notes
+- Keys are read **only** from the server env, never from the request or the browser.
+- A request may name a `provider`/`base` but not a key — restrict or disable that in
+  production (it allows pointing at arbitrary bases). CORS is `*` for local dev; scope it
+  before any public deployment.

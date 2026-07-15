@@ -1247,14 +1247,31 @@
     const out = $('vid-out'); btn.disabled = true;
     out.innerHTML = '<div class="muted">Requesting a photoreal clip from your provider… ⏳</div>';
     try {
-      const r = await VIDEOGEN.photoreal(editPlay(), {});
-      if (r.url) out.innerHTML = `<video src="${escapeHtml(r.url)}" controls playsinline class="vid-preview"></video>
+      let r = await VIDEOGEN.photoreal(editPlay(), {});
+      if (!r.url && r.jobId) {   // async job — poll the adapter until it's ready
+        const ep = ((VIDEOGEN.getProvider() || {}).endpoint || '').replace(/\/+$/, '');
+        out.innerHTML = `<div class="muted">Your provider is generating the clip… ⏳ (job ${escapeHtml(r.jobId)}) — this can take a minute or two.</div>`;
+        r = await pollVideoJob(ep, r.jobId);
+      }
+      if (r && r.url) out.innerHTML = `<video src="${escapeHtml(r.url)}" controls playsinline class="vid-preview"></video>
         <a class="btn-primary sm" href="${escapeHtml(r.url)}" download>⬇ Download</a>`;
-      else out.innerHTML = `<div class="muted">Provider accepted the request: ${escapeHtml(JSON.stringify(r).slice(0, 180))}</div>`;
+      else out.innerHTML = `<div class="muted">Provider response: ${escapeHtml(JSON.stringify(r).slice(0, 200))}</div>`;
     } catch (e) {
-      const msg = /no-provider/.test(e.message) ? 'set a provider endpoint above first' : e.message;
+      const msg = /no-provider/.test(e.message) ? 'set a provider endpoint above first (point it at your backend’s /api/videogen)' : e.message;
       out.innerHTML = `<div class="muted">Photoreal failed — ${escapeHtml(msg)}.</div>`;
     } finally { btn.disabled = false; }
+  }
+  async function pollVideoJob(endpoint, jobId) {
+    for (let i = 0; i < 45; i++) {                 // ~3 min at 4s
+      await new Promise(r => setTimeout(r, 4000));
+      try {
+        const res = await fetch(endpoint + '/' + encodeURIComponent(jobId));
+        const j = await res.json();
+        if (j.status === 'done' && j.url) return { url: j.url };
+        if (j.status === 'error') return { error: j.error || 'provider error' };
+      } catch (e) { /* keep waiting */ }
+    }
+    return { error: 'timed out waiting for the provider' };
   }
 
   function closeEditor() { $('editor-modal').hidden = true; edit.scenario=null; }

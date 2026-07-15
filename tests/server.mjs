@@ -110,6 +110,28 @@ function frame(w, h) {
     ok('auto-tagged a shot or goal from the ball trajectory', mvres.events.some(e => e.type === 'shot' || e.type === 'goal'));
     ok('events carry a board frame to confirm', mvres.events.every(e => !e.frame || (e.frame.att && e.frame.ball)));
 
+    console.log('\n[3d] Photoreal video adapter — submit → poll → normalised URL');
+    // no provider configured → honest 501
+    const noProv = await fetch(base + '/api/videogen', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: 'x' }) });
+    ok('no provider configured → 501 {error}', noProv.status === 501 && (await noProv.json()).error === 'no-video-provider');
+    ok('missing prompt → 400', (await fetch(base + '/api/videogen', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider: 'mock' }) })).status === 400);
+    // the built-in mock provider returns a URL
+    const mk = await fetch(base + '/api/videogen', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: 'white 2 drives and shoots', provider: 'mock' }) });
+    const mkj = await mk.json();
+    ok('mock provider yields a video URL', mk.status === 200 && /mock\.local\/.*\.mp4/.test(mkj.url || ''));
+    // a stand-in async provider exercises the real submit→poll→url plumbing
+    const PROV_PORT = 4281; let polls = 0;
+    const prov = http.createServer((rq, rs) => {
+      if (rq.method === 'POST') { rq.on('data', () => {}); rq.on('end', () => { rs.writeHead(200, { 'content-type': 'application/json' }); rs.end(JSON.stringify({ jobId: 'gv1' })); }); }
+      else { polls++; rs.writeHead(200, { 'content-type': 'application/json' }); rs.end(JSON.stringify(polls >= 2 ? { status: 'done', url: 'http://prov.local/out.mp4' } : { status: 'pending' })); }
+    });
+    await new Promise(r => prov.listen(PROV_PORT, r));
+    const gen = await fetch(base + '/api/videogen', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: 'a play', provider: 'generic', base: `http://localhost:${PROV_PORT}` }) });
+    const genj = await gen.json();
+    ok('generic provider: submit → poll → done URL', gen.status === 200 && genj.url === 'http://prov.local/out.mp4');
+    ok('the adapter actually polled the provider', polls >= 2);
+    prov.close();
+
     console.log('\n[4] Error handling');
     ok('bad JSON → 400', (await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{oops' })).status === 400);
     const noInput = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });

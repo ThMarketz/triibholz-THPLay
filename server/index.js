@@ -21,7 +21,21 @@ const fs = require('node:fs');
 const path = require('node:path');
 const engine = require('./engine.js');
 const { makeDetector } = require('./detector.js');
+const videoadapter = require('./videoadapter.js');
 const MODEL_ENDPOINT = process.env.MODEL_ENDPOINT || '';
+const VIDEO_PROVIDER = process.env.VIDEO_PROVIDER || '';
+// photoreal provider config — the KEY is only ever read from the env, never the request.
+function videoCfg(body) {
+  body = body || {};
+  return {
+    provider: body.provider || VIDEO_PROVIDER,
+    base: body.base || process.env.VIDEO_BASE,
+    model: body.model || process.env.VIDEO_MODEL,
+    authScheme: process.env.VIDEO_AUTH_SCHEME,
+    key: process.env.VIDEO_API_KEY,       // server-side only
+  };
+}
+const videoJobs = new Map();   // jobId → cfg (so an async poll can resume)
 
 const PORT = +(process.env.PORT || 4200);
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -104,7 +118,32 @@ const server = http.createServer(async (req, res) => {
     const p = url.pathname;
     if (req.method === 'OPTIONS') { cors(res); res.writeHead(204); return res.end(); }
 
-    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, engine: 'server', detector: makeDetector({ modelEndpoint: MODEL_ENDPOINT }).name, ffmpeg: hasFfmpeg, queued: queue.length, running });
+    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, engine: 'server', detector: makeDetector({ modelEndpoint: MODEL_ENDPOINT }).name, ffmpeg: hasFfmpeg, videoProvider: VIDEO_PROVIDER || null, queued: queue.length, running });
+
+    // photoreal text-to-video: submit a prompt → a normalised video URL (or an async job)
+    if (req.method === 'POST' && p === '/api/videogen') {
+      const body = await readBody(req);
+      let request; try { request = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
+      if (!request.prompt) return send(res, 400, { error: 'no-prompt' });
+      const cfg = videoCfg(request);
+      if (!cfg.provider) return send(res, 501, { error: 'no-video-provider' });
+      try {
+        const out = await videoadapter.generate(cfg, { prompt: request.prompt, seconds: request.seconds || 5 }, {});
+        if (out.status === 'pending') { videoJobs.set(out.jobId, cfg); return send(res, 202, { status: 'pending', jobId: out.jobId, provider: cfg.provider }); }
+        return send(res, 200, { url: out.url, provider: cfg.provider });
+      } catch (e) { return send(res, 502, { error: e.code === 'provider-error' ? e.message : ('provider-failed: ' + (e.message || 'error')) }); }
+    }
+    const vm = p.match(/^\/api\/videogen\/([\w.\-]+)$/);
+    if (req.method === 'GET' && vm) {
+      const cfg = videoJobs.get(vm[1]) || videoCfg({});
+      if (!cfg.provider) return send(res, 404, { error: 'unknown-job' });
+      try {
+        const pr = await videoadapter.makeAdapter(Object.assign({}, cfg, { key: process.env.VIDEO_API_KEY })).poll(vm[1]);
+        if (pr.status === 'done') { videoJobs.delete(vm[1]); return send(res, 200, { status: 'done', url: pr.url }); }
+        if (pr.status === 'error') { videoJobs.delete(vm[1]); return send(res, 200, { status: 'error', error: pr.error }); }
+        return send(res, 200, { status: 'pending' });
+      } catch (e) { return send(res, 502, { error: 'poll-failed: ' + (e.message || 'error') }); }
+    }
 
     if (req.method === 'POST' && p === '/api/analyse') {
       const ct = (req.headers['content-type'] || '');
