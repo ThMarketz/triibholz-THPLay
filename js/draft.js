@@ -54,7 +54,8 @@ const DRAFT = (() => {
   };
   const clampW = p => ({ x: Math.max(28, Math.min(292, p.x)), y: Math.max(34, Math.min(186, p.y)) });
 
-  const ACTOR = '(?:player\\s*)?([1-6]|gk|goalie|keeper|hole|center|centre|point)';
+  const ACTOR = '(?:(?:white\\s*cap|player)\\s*)?([1-6]|gk|goalie|keeper|hole|center|centre|point)';
+  const DEF_ACTOR = '(?:defender|defence|defense|def|black(?:\\s*cap)?)\\s*([1-6]|gk)';
   const posOf = w => {
     w = w.toLowerCase();
     if (w === 'gk' || w === 'goalie' || w === 'keeper') return 'GK';
@@ -144,6 +145,18 @@ const DRAFT = (() => {
           continue;
         }
 
+        // defender pressure/foul: "defender 6 tries to foul 2", "black cap 6 fouls him"
+        if ((m = c.match(new RegExp('^' + DEF_ACTOR + '\\s+(?:tries?\\s+to\\s+foul|fouls?|presses?|pressures?|guards?|marks?)(?:\\s+(?:player\\s*|white\\s*cap\\s*|him|it)*\\s*([1-6]|hole|centre|center|point))?')))) {
+          const dp = (m[1] || '').toLowerCase() === 'gk' ? 'GK' : m[1];
+          const f = needFrame();
+          const tp = m[2] ? posOf(m[2]) : (carrier && carrier[0] === 'A' ? carrier.slice(1) : null);
+          const tgt = tp && f.att[tp] ? f.att[tp] : null;
+          if (tgt && f.def && f.def[dp]) f.def[dp] = clampW({ x: tgt.x + 7, y: tgt.y }); // step goal-side onto him
+          understood.push(`⚠ defender ${m[1].toUpperCase()} pressures ${tp || 'the ball'}`);
+          if (tp) addNote(tp, `Beat the pressure/foul from defender ${m[1]} — protect the ball.`);
+          continue;
+        }
+
         // screen: "3 screens for 2"
         if ((m = c.match(new RegExp('^' + ACTOR + '\\s+(?:screens?|picks?)\\s+(?:for\\s+)?' + ACTOR)))) {
           const p = posOf(m[1]), forP = posOf(m[2]);
@@ -168,6 +181,11 @@ const DRAFT = (() => {
           else if (word) np = spotFor(word, cur);
           else if (/posts?\s*up|seals?/.test(c)) np = spotFor('hole', cur);
           else np = { x: cur.x + 14, y: cur.y };      // unspecified: push forward
+          // "on the right/left (hand) side" biases the vertical side (attack → right goal)
+          if (word && !DIRS[word]) {
+            if (/\bright\b/.test(c)) np = { x: np.x, y: 150 };
+            else if (/\bleft\b/.test(c)) np = { x: np.x, y: 70 };
+          }
           setPos(f, p, clampW(np));
           if (carrier === (p === 'GK' ? 'GK' : 'A' + p)) f.ball = { carrier };
           understood.push(`→ ${m[1].toUpperCase()} → ${word || 'forward'}`);

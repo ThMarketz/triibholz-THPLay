@@ -57,6 +57,16 @@ const HELP = (() => {
       'Every answer’s rules follow the current World Aquatics laws (5 m penalty, 18 s exclusion, keeper limits).',
     ]},
 
+    video: { icon:'🎬', title:'Generate a video of the play', steps:[
+      'Build the play first — write it in <strong>✍️ Draft from words</strong> (e.g. <em>“white cap 2 drives to 2m on the right; defender 6 tries to foul 2; 2 passes to 4; 4 shoots far corner from the left”</em>, one action per line) or drag it out by hand.',
+      'Open <strong>🎬 Generate video</strong> → <strong>Generate animated video</strong>. The tool renders a clean top-down clip of the exact movement and gives you a <strong>player + Download</strong> button — share it in team chat.',
+      'The animation runs <strong>entirely on your device</strong>, is free, and shows precisely what you described.',
+      '<strong>Photoreal (optional):</strong> to get life-like footage instead, add a text-to-video provider (endpoint + key) under <em>Photoreal</em>. It’s a paid external service you supply — and today those models look real but may not follow the tactics exactly. See <strong>docs/VIDEO.md</strong>.',
+    ], tips:[
+      'One action per line makes the cleanest animation — each line becomes a step.',
+      'The clip downloads as a video file (WebM/MP4) you can send anywhere.',
+    ]},
+
     commands: { icon:'⚡', title:'Commands (audibles) — call a play, the board runs it', steps:[
       'A <strong>command</strong> is a ready-made tactical move. Instead of dragging, you press one button and the board executes it — like calling a play from the bench.',
       'Two places to use them. In the <strong>editor</strong>, open <strong>⚡ Commands (audibles)</strong> to build a play from calls — each command adds its movement step and fills the assignments. Chain a few (e.g. <em>Feed the Hole → Pick &amp; Roll</em>).',

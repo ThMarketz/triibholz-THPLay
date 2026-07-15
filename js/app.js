@@ -1097,6 +1097,7 @@
     buildCommandGroups('cmd-groups', applyCommandToEditor);
     const cp = $('cmd-panel'); if (cp) cp.open = false;
     const ct = $('cmd-target'); if (ct) ct.value = 'team';
+    wireVideoPanel();
     editorRender();
     $('editor-modal').hidden = false;
   }
@@ -1199,6 +1200,61 @@
     const b = $('audible-btn'); if (!b) return;
     b.hidden = !canPausedEdit();
     if (b.hidden) closeAudible();
+  }
+
+  /* ---- Generate a shareable video of the play (offline animation / optional photoreal) ---- */
+  function editPlay() {
+    return { situation: edit.scenario.situation, title: edit.scenario.title || 'Play',
+      description: edit.scenario.description || edit.scenario.title || 'Water polo play',
+      frames: edit.scenario.frames, notes: edit.scenario.notes || {} };
+  }
+  function updateVidStatus() {
+    const chip = $('vid-status'); if (!chip || typeof VIDEOGEN === 'undefined') return;
+    const st = VIDEOGEN.providerStatus();
+    chip.textContent = st.mode === 'photoreal' ? `● photoreal: ${st.name || 'provider'}` : '● animation (offline)';
+    chip.className = 'cloud-status ' + (st.mode === 'photoreal' ? 'cloud' : 'offline');
+  }
+  function wireVideoPanel() {
+    if (!$('video-panel') || typeof VIDEOGEN === 'undefined') return;
+    $('vid-out').innerHTML = '';
+    const p = VIDEOGEN.getProvider() || {};
+    const ep = $('vid-endpoint'), key = $('vid-key');
+    if (ep) ep.value = p.endpoint || ''; if (key) key.value = p.key || '';
+    updateVidStatus();
+    $('vid-generate').onclick = () => generateVideo($('vid-generate'));
+    const sv = $('vid-save-provider');
+    if (sv) sv.onclick = () => { VIDEOGEN.setProvider({ endpoint: (ep.value || '').trim(), key: (key.value || '').trim(), name: 'provider' }); updateVidStatus(); toast(VIDEOGEN.getProvider() ? 'Video provider saved' : 'Using offline animation'); };
+    const pr = $('vid-photoreal'); if (pr) pr.onclick = () => generatePhotoreal(pr);
+  }
+  async function generateVideo(btn) {
+    if (typeof VIDEOGEN === 'undefined' || !edit.scenario) return;
+    const out = $('vid-out'); btn.disabled = true;
+    out.innerHTML = '<div class="muted">Rendering the clip… ⏳ (about ' + Math.round(VIDEOGEN.duration(editPlay())) + 's)</div>';
+    try {
+      const play = editPlay();
+      const res = await VIDEOGEN.record(play, { caption: play.description });
+      const ext = /mp4/.test(res.mime) ? 'mp4' : 'webm';
+      const name = (play.title || 'triibholz-play').replace(/[^\w]+/g, '-').toLowerCase() + '.' + ext;
+      out.innerHTML = `<video src="${res.url}" controls playsinline class="vid-preview"></video>
+        <a class="btn-primary sm" id="vid-download" href="${res.url}" download="${escapeHtml(name)}">⬇ Download (${res.duration.toFixed(1)}s)</a>`;
+      toast('Video ready — play it or download to share');
+    } catch (e) {
+      out.innerHTML = `<div class="muted">Couldn’t render the video — ${escapeHtml(e.message || 'unknown error')}.</div>`;
+    } finally { btn.disabled = false; }
+  }
+  async function generatePhotoreal(btn) {
+    if (typeof VIDEOGEN === 'undefined' || !edit.scenario) return;
+    const out = $('vid-out'); btn.disabled = true;
+    out.innerHTML = '<div class="muted">Requesting a photoreal clip from your provider… ⏳</div>';
+    try {
+      const r = await VIDEOGEN.photoreal(editPlay(), {});
+      if (r.url) out.innerHTML = `<video src="${escapeHtml(r.url)}" controls playsinline class="vid-preview"></video>
+        <a class="btn-primary sm" href="${escapeHtml(r.url)}" download>⬇ Download</a>`;
+      else out.innerHTML = `<div class="muted">Provider accepted the request: ${escapeHtml(JSON.stringify(r).slice(0, 180))}</div>`;
+    } catch (e) {
+      const msg = /no-provider/.test(e.message) ? 'set a provider endpoint above first' : e.message;
+      out.innerHTML = `<div class="muted">Photoreal failed — ${escapeHtml(msg)}.</div>`;
+    } finally { btn.disabled = false; }
   }
 
   function closeEditor() { $('editor-modal').hidden = true; edit.scenario=null; }

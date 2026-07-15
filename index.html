@@ -346,6 +346,27 @@
           </div>
         </details>
 
+        <details class="draft-accordion vid-accordion" id="video-panel">
+          <summary>🎬 Generate video — a shareable clip of this play <button class="help-chip" data-help="video" title="How video works">？</button></summary>
+          <div class="vid-body">
+            <div class="vid-actions">
+              <button class="btn-primary sm" id="vid-generate">Generate animated video</button>
+              <span class="cloud-status" id="vid-status">● animation (offline)</span>
+            </div>
+            <div id="vid-out"></div>
+            <details class="vid-photoreal" id="vid-photoreal-cfg">
+              <summary>Photoreal (optional — needs a text-to-video provider)</summary>
+              <div class="cloud-cfg">
+                <input type="text" id="vid-endpoint" placeholder="Provider endpoint URL" />
+                <input type="text" id="vid-key" placeholder="API key (optional)" />
+                <button class="btn-ghost sm" id="vid-save-provider">Save</button>
+              </div>
+              <button class="btn-ghost sm" id="vid-photoreal">Generate photoreal</button>
+              <p class="fa-note">Uses a paid text-to-video service you supply. Looks real but may not follow the tactics exactly — see <strong>docs/VIDEO.md</strong>.</p>
+            </details>
+          </div>
+        </details>
+
         <details class="draft-accordion cmd-accordion" id="cmd-panel">
           <summary>⚡ Commands (audibles) — call a play, the board runs it <button class="help-chip" data-help="commands" title="How commands work">？</button></summary>
           <div class="cmd-body">
@@ -426,6 +447,7 @@
   <script src="js/bytetrack.js"></script>
   <script src="js/events.js"></script>
   <script src="js/webdetector.js"></script>
+  <script src="js/videogen.js"></script>
   <script src="js/analysis.js"></script>
   <script src="js/film.js"></script>
   <script src="js/app.js"></script>

@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -129,7 +129,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     kb('ArrowRight'); await wait(20);
     ok('ArrowRight steps forward', q('#frame-label').textContent!==lbl);
   }
-  ok('10 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===10);
+  ok('11 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===11);
   q('#help-btn').click(); await wait(15);
   ok('topbar ？ is context-aware (paused board → Adjust guide)', !!q('.help-backdrop:not([hidden])') &&
      /Adjust/i.test(q('#help-title').textContent));
@@ -439,6 +439,37 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     // fall back to colour
     WEBDETECTOR.register(null);
     ok('register(null) falls back to colour', WEBDETECTOR.status().detector==='colour');
+  }
+
+  console.log('\n[6n] Play → video (DRAFT defenders + VIDEOGEN)');
+  {
+    const { DRAFT, VIDEOGEN } = window.__T;
+    // DRAFT understands the coach's exact phrasing (white cap, defender foul, left/right)
+    const play = DRAFT.parse([
+      'white cap 2 has the ball',
+      'white cap 2 drives to 2m on the right hand side',
+      'defender 6 tries to foul 2',
+      '2 passes to 4',
+      '4 shoots far corner from the left',
+    ].join('\n'), '6v6');
+    ok('every described line is understood', play.report.every(l=>l.ok) && play.steps>=4);
+    ok('defender 6 steps onto the ball-carrier', play.frames.some(f=>f.def && f.def['6'] && f.def['6'].y>140));
+    ok('“2m on the right” put the driver low (right side)', play.frames.some(f=>f.att['2'] && f.att['2'].y>140));
+    ok('ball ends up with 4 / on a shot', play.frames.some(f=>f.ball.carrier==='A4') && play.frames[play.frames.length-1].ball.carrier===null);
+    // VIDEOGEN turns a play into a timed, interpolated scene
+    const vplay = { situation:'6v6', title:'demo', frames: play.frames, notes: play.notes };
+    ok('duration grows with steps', VIDEOGEN.duration(vplay) > VIDEOGEN.duration({frames:[play.frames[0]]}));
+    const s0 = VIDEOGEN.sceneAt(vplay, 0), sEnd = VIDEOGEN.sceneAt(vplay, 999);
+    ok('scene t0 matches the first frame', Math.abs(s0.att['2'].x-play.frames[0].att['2'].x)<0.01);
+    ok('scene interpolates toward the shot', sEnd.ball.x >= 290);
+    // photoreal provider seam (mock)
+    ok('defaults to offline animation', VIDEOGEN.providerStatus().mode==='animation');
+    const pr = await VIDEOGEN.photoreal(vplay, {transport: async(b)=>({url:'blob:demo', gotPrompt: b.prompt.length>10})});
+    ok('photoreal seam returns the provider video', pr.url==='blob:demo');
+    let noProv=false; try{ await VIDEOGEN.photoreal(vplay,{}); }catch(e){ noProv=/no-provider/.test(e.message); }
+    ok('no provider configured → clean error', noProv);
+    let provErr=false; try{ await VIDEOGEN.photoreal(vplay,{transport:async()=>({error:'quota'})}); }catch(e){ provErr=/provider-error/.test(e.message); }
+    ok('provider error surfaced', provErr);
   }
 
   console.log('\n[6j] Tier 3 Phase 0 — analysis contract + swappable submit + review');

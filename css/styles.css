@@ -725,3 +725,12 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .rev-main{display:flex;flex-direction:column;gap:2px;font-size:13px}
 .rev-actions{display:flex;gap:7px;flex-shrink:0}
 @media (max-width:600px){ .rev-item{flex-direction:column;align-items:stretch} }
+/* ========== play → video ========== */
+.vid-accordion{background:linear-gradient(180deg,#241a33,#171326)}
+.vid-body{margin-top:12px;display:flex;flex-direction:column;gap:10px}
+.vid-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.vid-preview{width:100%;max-width:520px;border-radius:12px;border:1px solid var(--line);background:#000;display:block;margin-bottom:8px}
+#vid-out{display:flex;flex-direction:column;gap:8px}
+.vid-photoreal{border:1px dashed var(--line);border-radius:10px;padding:9px 12px}
+.vid-photoreal summary{cursor:pointer;font-size:12.5px;color:var(--ink-dim)}
+.vid-photoreal .cloud-cfg{margin:10px 0 8px}

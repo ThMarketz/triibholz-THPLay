@@ -96,6 +96,15 @@ ok('typing produced 4 steps', (await page.locator('#frame-chips .frame-chip').co
 ok('feedback shows understood lines', (await page.locator('#draft-feedback .draft-line.ok').count())===4);
 ok('movement arrows drawn from the text', (await page.locator('#editor-pool [marker-end]').count())>=2);
 await page.screenshot({ path:OUT+'/qa_18_draft.png' });
+// 🎬 Generate a real video of this play (canvas + MediaRecorder)
+await page.locator('#video-panel').evaluate(d => { d.open = true; }); await page.waitForTimeout(120);
+ok('🎬 Generate-video panel present', await page.locator('#vid-generate').count()===1);
+ok('video status shows offline animation', /animation/i.test(await page.locator('#vid-status').innerText()));
+await page.click('#vid-generate');
+await page.waitForFunction(() => { const o = document.querySelector('#vid-out'); return o && (o.querySelector('video') || /Couldn/i.test(o.textContent)); }, { timeout: 25000 });
+const vidSrc = await page.locator('#vid-out video').getAttribute('src').catch(()=>null);
+ok('rendered a downloadable video clip', !!vidSrc && vidSrc.startsWith('blob:') && await page.locator('#vid-download').count()===1);
+await page.screenshot({ path:OUT+'/qa_23_video.png' });
 const draftCards = await page.locator('.scn-card').count();
 await page.click('#ed-save'); await page.waitForTimeout(400);
 ok('written play saved (+1)', (await page.locator('.scn-card').count())===draftCards+1);
