@@ -1067,7 +1067,8 @@
     downloadBlob(CALENDAR.toICS(ev, { name: 'Triibholz — ' + (state.user && state.user.name || 'Team') }), 'triibholz-season.ics', 'text/calendar');
     toast('Calendar exported — open it to add to Apple/Google/Outlook');
   }
-  function feedBase() { try { return localStorage.getItem('thplay.calendar.feed') || (ANALYSIS && ANALYSIS.getEndpoint && ANALYSIS.getEndpoint()) || 'http://localhost:4200'; } catch(e){ return 'http://localhost:4200'; } }
+  function defaultFeedBase() { try { const h = (location && location.hostname) || 'localhost'; const proto = (location && location.protocol === 'https:') ? 'https:' : 'http:'; return `${proto}//${h}:4200`; } catch (e) { return 'http://localhost:4200'; } }
+  function feedBase() { try { return localStorage.getItem('thplay.calendar.feed') || (typeof ANALYSIS!=='undefined' && ANALYSIS.getEndpoint && ANALYSIS.getEndpoint()) || defaultFeedBase(); } catch(e){ return defaultFeedBase(); } }
   function calToken() { try { let t=localStorage.getItem('thplay.calendar.token'); if(!t){ t=CALENDAR.uid().replace('ev_','cal'); localStorage.setItem('thplay.calendar.token',t); } return t; } catch(e){ return 'cal'; } }
   async function publishFeed() {
     const out = $('cal-subscribe-out');
@@ -1079,13 +1080,17 @@
       if (!r.ok) throw new Error('publish-'+r.status);
       const url = `${base}/api/calendar/${token}.ics`;
       const webcal = url.replace(/^https?:/, 'webcal:');
+      const lanHint = /localhost|127\.0\.0\.1/.test(base) ? '<p class="fa-note">⚠︎ This link uses <strong>localhost</strong> — only this computer can open it. For phones, open the app itself from your Mac’s network address (e.g. http://192.168.x.x:8088) and Subscribe there, or set the Feed server below to that address.</p>' : '';
       out.innerHTML = `<div class="feed-box">
         <p class="fa-note">Subscribe once on each device — matches you publish later update automatically.</p>
         <div class="feed-url"><code>${escapeHtml(url)}</code><button class="btn-ghost xs" id="feed-copy">Copy</button></div>
         <a class="btn-primary sm" href="${escapeHtml(webcal)}">＋ Subscribe on this device</a>
-        <p class="fa-note">iPhone: Calendar → Add Account → Other → Add Subscribed Calendar. Android/Google: Settings → Add by URL. Outlook: Add calendar → Subscribe from web.</p>
+        ${lanHint}
+        <div class="feed-url"><span class="muted" style="font-size:11px">Feed server</span><input type="text" id="feed-base" value="${escapeHtml(base)}" style="flex:1;font-size:11px"><button class="btn-ghost xs" id="feed-base-save">Use &amp; republish</button></div>
+        <p class="fa-note">iPhone: Calendar → Add Account → Other → Add Subscribed Calendar. Android/Google Calendar: Settings → Add by URL. Outlook: Add calendar → Subscribe from web.</p>
       </div>`;
       const cp = $('feed-copy'); if (cp) cp.onclick = ()=>{ try{ navigator.clipboard.writeText(url); toast('Link copied'); }catch(e){} };
+      const fbSave = $('feed-base-save'); if (fbSave) fbSave.onclick = ()=>{ const v=($('feed-base').value||'').trim().replace(/\/+$/,''); try{ v?localStorage.setItem('thplay.calendar.feed',v):localStorage.removeItem('thplay.calendar.feed'); }catch(e){} publishFeed(); };
       toast('Published — subscribe on any device');
     } catch(e) {
       out.innerHTML = `<div class="muted">Couldn’t publish to ${escapeHtml(base)} — start the backend (docker compose up -d analysis), or just use ⬇ Export .ics.</div>`;
