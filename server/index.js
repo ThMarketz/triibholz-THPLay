@@ -22,6 +22,7 @@ const path = require('node:path');
 const engine = require('./engine.js');
 const { makeDetector } = require('./detector.js');
 const videoadapter = require('./videoadapter.js');
+const CALENDAR = require('../js/calendar.js');
 const MODEL_ENDPOINT = process.env.MODEL_ENDPOINT || '';
 const VIDEO_PROVIDER = process.env.VIDEO_PROVIDER || '';
 // photoreal provider config — the KEY is only ever read from the env, never the request.
@@ -41,8 +42,10 @@ const PORT = +(process.env.PORT || 4200);
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const VIDEO_DIR = path.join(DATA_DIR, 'videos');
 const JOB_DIR = path.join(DATA_DIR, 'jobs');
+const CAL_DIR = path.join(DATA_DIR, 'calendars');
 const MAX_BODY = +(process.env.MAX_BODY || 200 * 1024 * 1024);   // 200 MB
-[DATA_DIR, VIDEO_DIR, JOB_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
+[DATA_DIR, VIDEO_DIR, JOB_DIR, CAL_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
+const safeToken = t => String(t || '').replace(/[^\w.\-]/g, '').slice(0, 64);
 
 let hasFfmpeg = false;
 try { require('node:child_process').spawnSync(process.env.FFMPEG || 'ffmpeg', ['-version']); hasFfmpeg = true; } catch (e) { hasFfmpeg = false; }
@@ -133,6 +136,23 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { url: out.url, provider: cfg.provider });
       } catch (e) { return send(res, 502, { error: e.code === 'provider-error' ? e.message : ('provider-failed: ' + (e.message || 'error')) }); }
     }
+    // subscribable calendar feed — publish events, then any device subscribes to the .ics
+    if (req.method === 'POST' && /^\/api\/calendar\/[\w.\-]+$/.test(p)) {
+      const token = safeToken(p.split('/').pop());
+      const body = await readBody(req);
+      let data; try { data = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
+      if (!Array.isArray(data.events)) return send(res, 400, { error: 'no-events' });
+      fs.writeFileSync(path.join(CAL_DIR, token + '.json'), JSON.stringify({ name: data.name || 'Triibholz', events: data.events, updated: Date.now() }));
+      return send(res, 200, { ok: true, ics: '/api/calendar/' + token + '.ics', events: data.events.length });
+    }
+    const cm = p.match(/^\/api\/calendar\/([\w.\-]+)\.ics$/);
+    if (req.method === 'GET' && cm) {
+      const token = safeToken(cm[1]);
+      let data; try { data = JSON.parse(fs.readFileSync(path.join(CAL_DIR, token + '.json'), 'utf8')); } catch (e) { return send(res, 404, { error: 'no-such-calendar' }); }
+      const ics = CALENDAR.toICS(data.events, { name: data.name });
+      cors(res); res.writeHead(200, { 'content-type': 'text/calendar; charset=utf-8', 'content-disposition': 'inline; filename="' + token + '.ics"' }); return res.end(ics);
+    }
+
     const vm = p.match(/^\/api\/videogen\/([\w.\-]+)$/);
     if (req.method === 'GET' && vm) {
       const cfg = videoJobs.get(vm[1]) || videoCfg({});

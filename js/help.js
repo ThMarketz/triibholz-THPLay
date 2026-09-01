@@ -57,6 +57,16 @@ const HELP = (() => {
       'Every answer’s rules follow the current World Aquatics laws (5 m penalty, 18 s exclusion, keeper limits).',
     ]},
 
+    season: { icon:'📅', title:'Season — plan &amp; calendar', steps:[
+      '<strong>Goal → plan:</strong> name your goal, set the date you want to <em>peak</em> for, pick training days/week and focus, then <strong>Generate plan</strong>. You get a periodised plan — General Prep → Specific Prep → Competition → Taper — with a weekly load wave and water-polo sessions.',
+      'Press <strong>Add all sessions to the calendar</strong> to drop the whole plan onto your schedule.',
+      '<strong>Calendar:</strong> add matches and events (with time &amp; location). <strong>⬇ Export .ics</strong> gives a file that opens in Apple Calendar, Google Calendar or Outlook.',
+      '<strong>🔗 Subscribe (all devices):</strong> publishes a live feed URL. Subscribe to it once on each phone/computer and it <strong>auto-updates</strong> whenever you publish new matches — iOS, Android and Windows all support subscribed calendars.',
+    ], tips:[
+      'The taper automatically cuts training volume in the last week or two so the team peaks on the goal date.',
+      'A subscribed calendar keeps everyone in sync — publish once, the whole team’s calendars refresh.',
+    ]},
+
     video: { icon:'🎬', title:'Generate a video of the play', steps:[
       'Build the play first — write it in <strong>✍️ Draft from words</strong> (e.g. <em>“white cap 2 drives to 2m on the right; defender 6 tries to foul 2; 2 passes to 4; 4 shoots far corner from the left”</em>, one action per line) or drag it out by hand.',
       'Open <strong>🎬 Generate video</strong> → <strong>Generate animated video</strong>. The tool renders a clean top-down clip of the exact movement and gives you a <strong>player + Download</strong> button — share it in team chat.',

@@ -734,3 +734,42 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .vid-photoreal{border:1px dashed var(--line);border-radius:10px;padding:9px 12px}
 .vid-photoreal summary{cursor:pointer;font-size:12.5px;color:var(--ink-dim)}
 .vid-photoreal .cloud-cfg{margin:10px 0 8px}
+
+/* ========== Season (plan + calendar) ========== */
+.season-wrap{padding:22px 26px;max-width:1200px;margin:0 auto;overflow-y:auto;height:100%}
+.season-cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+@media (max-width:900px){ .season-cols{grid-template-columns:1fr} }
+.season-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 20px}
+.season-card h2{margin:0 0 14px;font-size:17px}
+.goal-form,.cal-add{display:flex;flex-direction:column;gap:10px}
+.goal-form label,.cal-add label{font-size:12px;color:var(--ink-dim);display:flex;flex-direction:column;gap:5px}
+.goal-row{display:flex;gap:10px;flex-wrap:wrap}
+.goal-row>*{flex:1;min-width:120px}
+.goal-form input,.goal-form select,.cal-add input,.cal-add select{background:var(--bg2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:9px 11px;font-size:13px;font-family:inherit}
+.goal-focus{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip-check{flex-direction:row!important;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--line);border-radius:20px;padding:5px 11px;font-size:12px!important;cursor:pointer}
+.chip-check input{accent-color:var(--teal)}
+.plan-summary{margin:14px 0 8px;font-size:13px;color:var(--ink-dim)}
+.phase-band{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}
+.phase-pill{font-size:11px;font-weight:700;padding:4px 10px;border-radius:7px;background:var(--bg2);border:1px solid var(--line)}
+.phase-pill.generalprep{color:#8fd0ff} .phase-pill.specificprep{color:#7fe0b0} .phase-pill.competition{color:#ffcf7a} .phase-pill.taper{color:#ff9b9b}
+.plan-weeks{display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto}
+.plan-week{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:2px 10px}
+.plan-week summary{display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px 0;font-size:12.5px}
+.pw-n{font-weight:700} .pw-phase{color:var(--ink-faint)} .pw-rpe{color:var(--ink-faint);font-size:11px;margin-left:auto}
+.pw-load{flex:1;max-width:120px;height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.pw-load .lv{display:block;height:100%;background:linear-gradient(90deg,var(--teal),var(--accent))}
+.pw-sessions{display:flex;flex-direction:column;gap:6px;padding:6px 0 10px}
+.ses{display:flex;gap:9px;align-items:center}
+.ses-focus{font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;font-weight:700;padding:2px 7px;border-radius:5px;background:var(--panel2);color:var(--ink-dim);min-width:74px;text-align:center}
+.ses-focus.recovery{color:#7fe0b0} .ses-focus.tactics{color:#ffcf7a} .ses-focus.shooting{color:#ff9b9b} .ses-focus.match{color:var(--orange)}
+.ses-main{display:flex;flex-direction:column;font-size:12.5px;line-height:1.35}
+.cal-actions{display:flex;gap:8px;margin:14px 0 6px;flex-wrap:wrap}
+.agenda-row{display:flex;align-items:center;gap:12px;padding:9px 4px;border-bottom:1px solid var(--line-soft)}
+.ag-date{display:flex;flex-direction:column;min-width:88px;font-size:12px}
+.ag-main{display:flex;flex-direction:column;flex:1;font-size:13px}
+.ag-title{font-weight:600}
+.btn-ghost.xs,.btn-ghost.xs{font-size:11px;padding:3px 7px}
+.feed-box{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.feed-url{display:flex;align-items:center;gap:8px}
+.feed-url code{flex:1;font-size:11px;background:var(--panel2);padding:6px 8px;border-radius:6px;overflow-x:auto;white-space:nowrap}

@@ -119,7 +119,7 @@
   function switchView(view) {
     state.view = view;
     document.querySelectorAll('#main-nav .nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view===view));
-    ['dashboard','playbook','basics','film','solutions','trivia','admin'].forEach(v => $('view-'+v).classList.toggle('active', v===view));
+    ['dashboard','playbook','basics','film','solutions','season','trivia','admin'].forEach(v => $('view-'+v).classList.toggle('active', v===view));
     const inPlaybook = view==='playbook';
     $('situation-tabs').style.display = inPlaybook ? '' : 'none';
     $('phase-toggle').style.display = inPlaybook ? '' : 'none';
@@ -136,6 +136,7 @@
       },
     });
     if (view==='solutions') renderSolutions();
+    if (view==='season') renderSeason();
     if (view==='trivia') renderTrivia();
     if (view==='admin') renderAdmin();
     if (view==='playbook' && !state.selectedId) openFirstOrEmpty();
@@ -921,6 +922,174 @@
     refreshTabs(); renderLibrary();
     openScenario(scn.id);
     toast('Saved to your playbook ✓');
+  }
+
+  /* ======================================================
+     SEASON — goal → periodised training plan + a calendar that
+     exports/subscribes to iOS / Android / Windows via iCalendar.
+     ====================================================== */
+  const season = { plan: null };
+  const FOCUS_LIST = [['endurance','Endurance'],['strength','Strength'],['power','Speed & power'],['shooting','Shooting'],['skills','Ball skills'],['tactics','Tactics']];
+  function d2(n){ return String(n).padStart(2,'0'); }
+  function isoDay(d){ return `${d.getFullYear()}-${d2(d.getMonth()+1)}-${d2(d.getDate())}`; }
+  function fmtDay(iso){ const d=new Date(iso); return d.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'}); }
+  function fmtTime(iso){ const d=new Date(iso); return d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}); }
+
+  function renderSeason() {
+    const c = $('view-season');
+    if (typeof PLANNER==='undefined' || typeof CALENDAR==='undefined') { c.innerHTML='<div class="muted">Season tools unavailable.</div>'; return; }
+    const today = new Date(); const target = new Date(today.getTime()+70*86400000);
+    c.innerHTML = `<div class="season-wrap">
+      <div class="dash-head with-mascot">${(typeof FX!=='undefined')?FX.mascot(38):''}
+        <div><h1>Season <button class="help-chip" data-help="season" title="How Season works">？</button></h1>
+        <p class="dash-sub">Set a goal → get a periodised plan, and a calendar your whole team can subscribe to.</p></div></div>
+
+      <div class="season-cols">
+        <section class="season-card">
+          <h2>🎯 Goal → training plan</h2>
+          <div class="goal-form">
+            <label>Goal <input type="text" id="goal-title" placeholder="e.g. Peak for the play-offs" value="Peak for the play-offs"></label>
+            <div class="goal-row">
+              <label>Start <input type="date" id="goal-start" value="${isoDay(today)}"></label>
+              <label>Peak by <input type="date" id="goal-target" value="${isoDay(target)}"></label>
+              <label>Days/week
+                <select id="goal-days">${[2,3,4,5,6].map(n=>`<option ${n===4?'selected':''}>${n}</option>`).join('')}</select>
+              </label>
+            </div>
+            <div class="goal-focus"><span class="ef-label">Focus</span>
+              ${FOCUS_LIST.map(([k,l])=>`<label class="chip-check"><input type="checkbox" value="${k}" ${['shooting','tactics'].includes(k)?'checked':''}> ${l}</label>`).join('')}
+            </div>
+            <button class="btn-primary sm" id="goal-generate">Generate plan</button>
+          </div>
+          <div id="plan-out"></div>
+        </section>
+
+        <section class="season-card">
+          <h2>📅 Calendar</h2>
+          <div class="cal-add">
+            <div class="goal-row">
+              <select id="ev-type">${Object.keys(CALENDAR.TYPES).map(t=>`<option value="${t}">${CALENDAR.TYPES[t]}</option>`).join('')}</select>
+              <input type="text" id="ev-title" placeholder="Title (e.g. vs Red Sharks)">
+            </div>
+            <div class="goal-row">
+              <input type="date" id="ev-date" value="${isoDay(today)}">
+              <input type="time" id="ev-time" value="18:00">
+              <input type="text" id="ev-loc" placeholder="Location">
+            </div>
+            <button class="btn-ghost sm" id="ev-add">＋ Add to calendar</button>
+          </div>
+          <div class="cal-actions">
+            <button class="btn-ghost sm" id="cal-export">⬇ Export .ics</button>
+            <button class="btn-ghost sm" id="cal-subscribe">🔗 Subscribe (all devices)</button>
+          </div>
+          <div id="cal-subscribe-out"></div>
+          <div id="cal-agenda"></div>
+        </section>
+      </div>
+    </div>`;
+
+    $('goal-generate').onclick = generatePlanFromForm;
+    $('ev-add').onclick = addCalendarEvent;
+    $('cal-export').onclick = exportICS;
+    $('cal-subscribe').onclick = publishFeed;
+    if (season.plan) renderPlan();
+    renderAgenda();
+  }
+  function goalFromForm() {
+    return {
+      title: $('goal-title').value.trim() || 'Season goal',
+      startDate: $('goal-start').value, targetDate: $('goal-target').value,
+      daysPerWeek: +$('goal-days').value,
+      focus: [...document.querySelectorAll('.goal-focus input:checked')].map(i=>i.value),
+    };
+  }
+  function generatePlanFromForm() {
+    season.plan = PLANNER.generatePlan(goalFromForm());
+    renderPlan();
+    toast('Plan generated');
+  }
+  function renderPlan() {
+    const p = season.plan; if (!p) return;
+    const out = $('plan-out');
+    const phases = p.mesocycles.map(m=>`<span class="phase-pill ${m.name.replace(/\W/g,'').toLowerCase()}">${escapeHtml(m.name)} · ${m.weeks}w</span>`).join('');
+    const weeks = p.microcycles.map(mc=>`<details class="plan-week"><summary>
+        <span class="pw-n">Week ${mc.week}</span><span class="pw-phase">${escapeHtml(mc.phase)}${mc.deload?' · deload':''}</span>
+        <span class="pw-load"><i class="lv vol" style="width:${mc.load.volume}%"></i></span>
+        <span class="pw-rpe">vol ${mc.load.volume} · int ${mc.load.intensity}</span></summary>
+      <div class="pw-sessions">${mc.sessions.map(s=>`<div class="ses"><span class="ses-focus ${s.focus}">${escapeHtml(s.focus)}</span>
+        <span class="ses-main"><strong>${escapeHtml(s.title)}</strong><span class="muted">${s.durationMin}min · RPE ${s.rpe} · ${escapeHtml((s.drills||[]).slice(0,2).join(' · '))}</span></span></div>`).join('')}</div>
+      </details>`).join('');
+    out.innerHTML = `<div class="plan-summary">Peak for <strong>${escapeHtml(new Date(p.goal.targetDate).toLocaleDateString())}</strong> · ${p.weeks} weeks · ${p.goal.daysPerWeek}/wk</div>
+      <div class="phase-band">${phases}</div>
+      <div class="plan-weeks">${weeks}</div>
+      <button class="btn-primary sm" id="plan-tocal">＋ Add all ${PLANNER.planToEvents(p).length} sessions to the calendar</button>`;
+    $('plan-tocal').onclick = () => {
+      const evs = PLANNER.planToEvents(p);
+      const cur = CALENDAR.load(); const ids = new Set(cur.map(e=>e.id));
+      const add = evs.filter(e=>!ids.has(e.id));
+      CALENDAR.save(cur.concat(add));
+      toast(`${add.length} sessions added to the calendar`);
+      renderAgenda();
+    };
+  }
+  function addCalendarEvent() {
+    const date = $('ev-date').value, time = $('ev-time').value || '18:00';
+    if (!date) { toast('Pick a date'); return; }
+    const start = new Date(`${date}T${time}`);
+    const ev = { id: CALENDAR.uid(), type: $('ev-type').value, title: $('ev-title').value.trim() || 'Event',
+      start: start.toISOString(), end: new Date(start.getTime()+90*60000).toISOString(),
+      location: $('ev-loc').value.trim(), reminderMin: 120 };
+    const all = CALENDAR.load(); all.push(ev); CALENDAR.save(all);
+    $('ev-title').value=''; $('ev-loc').value='';
+    toast('Event added'); renderAgenda();
+  }
+  function renderAgenda() {
+    const wrap = $('cal-agenda'); if (!wrap) return;
+    const items = CALENDAR.agenda(CALENDAR.load(), new Date(), 90);
+    if (!items.length) { wrap.innerHTML = '<div class="muted" style="padding:12px">No upcoming events. Add a match or generate a plan.</div>'; return; }
+    wrap.innerHTML = `<div class="ef-label" style="margin-top:12px">Next 90 days (${items.length})</div>` + items.map(e=>`
+      <div class="agenda-row" data-ev="${escapeHtml(e.id)}">
+        <span class="ag-date"><b>${fmtDay(e.start)}</b>${e.allDay?'':'<span class="muted">'+fmtTime(e.start)+'</span>'}</span>
+        <span class="ag-main"><span class="ag-title">${(CALENDAR.TYPES[e.type]||'').split(' ')[0]} ${escapeHtml(e.title)}</span>
+          ${e.location?`<span class="muted">${escapeHtml(e.location)}</span>`:''}</span>
+        <button class="btn-ghost xs" data-del-ev="${escapeHtml(e.id)}" title="Remove">✕</button>
+      </div>`).join('');
+    wrap.querySelectorAll('[data-del-ev]').forEach(b=> b.onclick=()=>{ CALENDAR.save(CALENDAR.load().filter(e=>e.id!==b.dataset.delEv)); renderAgenda(); });
+  }
+  function downloadBlob(text, name, mime) {
+    try { const blob = new Blob([text], { type: mime||'text/plain' }); const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click();
+      setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 100); } catch(e){ toast('Download not supported here'); }
+  }
+  function exportICS() {
+    const ev = CALENDAR.load();
+    if (!ev.length) { toast('Nothing to export yet'); return; }
+    downloadBlob(CALENDAR.toICS(ev, { name: 'Triibholz — ' + (state.user && state.user.name || 'Team') }), 'triibholz-season.ics', 'text/calendar');
+    toast('Calendar exported — open it to add to Apple/Google/Outlook');
+  }
+  function feedBase() { try { return localStorage.getItem('thplay.calendar.feed') || (ANALYSIS && ANALYSIS.getEndpoint && ANALYSIS.getEndpoint()) || 'http://localhost:4200'; } catch(e){ return 'http://localhost:4200'; } }
+  function calToken() { try { let t=localStorage.getItem('thplay.calendar.token'); if(!t){ t=CALENDAR.uid().replace('ev_','cal'); localStorage.setItem('thplay.calendar.token',t); } return t; } catch(e){ return 'cal'; } }
+  async function publishFeed() {
+    const out = $('cal-subscribe-out');
+    const ev = CALENDAR.load(); if (!ev.length) { toast('Add events first'); return; }
+    const base = feedBase().replace(/\/+$/,''); const token = calToken();
+    out.innerHTML = '<div class="muted">Publishing…</div>';
+    try {
+      const r = await fetch(`${base}/api/calendar/${token}`, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ name:'Triibholz — '+(state.user&&state.user.name||'Team'), events: ev }) });
+      if (!r.ok) throw new Error('publish-'+r.status);
+      const url = `${base}/api/calendar/${token}.ics`;
+      const webcal = url.replace(/^https?:/, 'webcal:');
+      out.innerHTML = `<div class="feed-box">
+        <p class="fa-note">Subscribe once on each device — matches you publish later update automatically.</p>
+        <div class="feed-url"><code>${escapeHtml(url)}</code><button class="btn-ghost xs" id="feed-copy">Copy</button></div>
+        <a class="btn-primary sm" href="${escapeHtml(webcal)}">＋ Subscribe on this device</a>
+        <p class="fa-note">iPhone: Calendar → Add Account → Other → Add Subscribed Calendar. Android/Google: Settings → Add by URL. Outlook: Add calendar → Subscribe from web.</p>
+      </div>`;
+      const cp = $('feed-copy'); if (cp) cp.onclick = ()=>{ try{ navigator.clipboard.writeText(url); toast('Link copied'); }catch(e){} };
+      toast('Published — subscribe on any device');
+    } catch(e) {
+      out.innerHTML = `<div class="muted">Couldn’t publish to ${escapeHtml(base)} — start the backend (docker compose up -d analysis), or just use ⬇ Export .ics.</div>`;
+    }
   }
 
   /* ======================================================

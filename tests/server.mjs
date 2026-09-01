@@ -132,6 +132,20 @@ function frame(w, h) {
     ok('the adapter actually polled the provider', polls >= 2);
     prov.close();
 
+    console.log('\n[3e] Subscribable calendar feed — publish → .ics');
+    const calBody = { name: 'Team Season', events: [
+      { id: 'm1', type: 'match', title: 'vs Red Sharks', start: '2026-11-08T17:00:00Z', location: 'City Pool', reminderMin: 120 },
+      { id: 't1', type: 'training', title: 'Shooting · wk1', start: '2026-09-02T16:00:00Z', focus: 'shooting' },
+    ] };
+    const pub = await fetch(base + '/api/calendar/team-abc', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(calBody) });
+    const pubj = await pub.json();
+    ok('publish stores the feed', pub.status === 200 && pubj.ok === true && pubj.events === 2);
+    const ics = await fetch(base + '/api/calendar/team-abc.ics');
+    const icsText = await ics.text();
+    ok('feed serves valid iCalendar with the right content-type', ics.headers.get('content-type').includes('text/calendar') && icsText.startsWith('BEGIN:VCALENDAR') && /vs Red Sharks/.test(icsText));
+    ok('unknown feed → 404', (await fetch(base + '/api/calendar/nope.ics')).status === 404);
+    ok('publish with no events → 400', (await fetch(base + '/api/calendar/x', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status === 400);
+
     console.log('\n[4] Error handling');
     ok('bad JSON → 400', (await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{oops' })).status === 400);
     const noInput = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });

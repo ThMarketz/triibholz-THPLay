@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -129,7 +129,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     kb('ArrowRight'); await wait(20);
     ok('ArrowRight steps forward', q('#frame-label').textContent!==lbl);
   }
-  ok('11 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===11);
+  ok('12 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===12);
   q('#help-btn').click(); await wait(15);
   ok('topbar ？ is context-aware (paused board → Adjust guide)', !!q('.help-backdrop:not([hidden])') &&
      /Adjust/i.test(q('#help-title').textContent));
@@ -470,6 +470,42 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('no provider configured → clean error', noProv);
     let provErr=false; try{ await VIDEOGEN.photoreal(vplay,{transport:async()=>({error:'quota'})}); }catch(e){ provErr=/provider-error/.test(e.message); }
     ok('provider error surfaced', provErr);
+  }
+
+  console.log('\n[6o] Season — periodised plan + iCalendar');
+  {
+    const { PLANNER, CALENDAR } = window.__T;
+    const plan = PLANNER.generatePlan({ title:'Peak', startDate:'2026-09-01', targetDate:'2026-11-24', daysPerWeek:4, focus:['shooting','tactics'] });
+    ok('plan spans the right number of weeks', plan.weeks===13 && plan.microcycles.length===13);
+    ok('phase weeks sum to the total', plan.mesocycles.reduce((a,m)=>a+m.weeks,0)===plan.weeks);
+    ok('ends on a Taper', plan.mesocycles[plan.mesocycles.length-1].name==='Taper');
+    ok('taper cuts volume below mid-plan', plan.microcycles[plan.microcycles.length-1].load.volume < plan.microcycles[6].load.volume);
+    ok('each week has the requested session count', plan.microcycles.every(m=>m.sessions.length===4));
+    const evs = PLANNER.planToEvents(plan);
+    ok('plan converts to calendar events', evs.length===52 && evs.every(e=>e.type==='training' && e.start && e.notes));
+    const match = { id:'m1', type:'match', title:'vs Red Sharks', start:'2026-11-08T17:00:00Z', location:'City Pool', opponent:'Red Sharks', reminderMin:120 };
+    const ics = CALENDAR.toICS([match].concat(evs.slice(0,2)), { name:'Season', now:new Date('2026-09-01T08:00:00Z') });
+    ok('valid VCALENDAR envelope', ics.startsWith('BEGIN:VCALENDAR') && ics.trimEnd().endsWith('END:VCALENDAR') && /VERSION:2\.0/.test(ics));
+    ok('CRLF line endings only', ics.includes('\r\n') && !/[^\r]\n/.test(ics));
+    ok('event has UID/DTSTART/SUMMARY', /UID:m1@triibholz/.test(ics) && /DTSTART:20261108T170000Z/.test(ics) && /SUMMARY:.*Red Sharks/.test(ics));
+    ok('reminder alarm present', /BEGIN:VALARM[\s\S]*TRIGGER:-PT120M[\s\S]*END:VALARM/.test(ics));
+    ok('text is escaped per RFC 5545', /SUMMARY:Event: A\\; B\\, C\\nD/.test(CALENDAR.toICS([{id:'x',type:'other',title:'A; B, C\nD',start:'2026-09-02T10:00:00Z'}],{now:new Date('2026-09-01T00:00:00Z')})));
+    ok('agenda returns upcoming, sorted', (()=>{ const a=CALENDAR.agenda([match].concat(evs), new Date('2026-09-01'), 120); return a.length>1 && a[0]._t<=a[1]._t; })());
+    ok('month grid is 6×7 with the match placed', (()=>{ const g=CALENDAR.monthGrid(2026,10,[match]); return g.length===6 && g[0].length===7 && g.flat().some(d=>d.events.length); })());
+
+    // UI: the Season view renders and generates a plan
+    q('.nav-btn[data-view="season"]').click(); await wait(20);
+    ok('Season view active', q('#view-season').classList.contains('active') && !!q('#goal-generate'));
+    ok('nav label localised (not raw key)', !/nav\./.test(q('.nav-btn[data-view="season"]').textContent));
+    q('#goal-generate').click(); await wait(20);
+    ok('plan renders phases + weeks', qa('#plan-out .phase-pill').length>=2 && qa('#plan-out .plan-week').length>=1);
+    const before = CALENDAR.load().length;
+    q('#plan-tocal').click(); await wait(20);
+    ok('add-to-calendar populates the schedule', CALENDAR.load().length > before);
+    ok('agenda lists the added sessions', qa('#cal-agenda .agenda-row').length>0);
+    q('#ev-title').value='vs Blue Sharks'; q('#ev-date').value='2026-12-05'; q('#ev-type').value='match';
+    const beforeEv = CALENDAR.load().length; q('#ev-add').click(); await wait(20);
+    ok('a match can be added from the form', CALENDAR.load().length===beforeEv+1 && CALENDAR.load().some(e=>e.title==='vs Blue Sharks'));
   }
 
   console.log('\n[6j] Tier 3 Phase 0 — analysis contract + swappable submit + review');

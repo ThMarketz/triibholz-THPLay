@@ -216,6 +216,24 @@ await dragBy(page, fball, -38, 18);
 ok('board ball draggable', (await fball.getAttribute('transform')) !== fbBefore);
 await page.screenshot({ path:OUT+'/qa_13_filmroom.png' });
 
+console.log('\n[4c] Season — plan + calendar (.ics export)');
+await page.click('.nav-btn[data-view="season"]'); await page.waitForTimeout(300);
+ok('Season view + goal form', await page.locator('#goal-generate').count()===1);
+await page.click('#goal-generate'); await page.waitForTimeout(300);
+ok('a periodised plan renders (phases + weeks)', (await page.locator('#plan-out .phase-pill').count())>=2 && (await page.locator('#plan-out .plan-week').count())>=4);
+await page.click('#plan-tocal'); await page.waitForTimeout(300);
+ok('plan sessions land on the agenda', (await page.locator('#cal-agenda .agenda-row').count())>0);
+const soon = new Date(Date.now()+21*86400000).toISOString().slice(0,10);   // within the agenda window
+await page.fill('#ev-title','vs Blue Sharks'); await page.fill('#ev-date',soon);
+await page.click('#ev-add'); await page.waitForTimeout(200);
+ok('a match added from the form appears', (await page.locator('#cal-agenda .agenda-row:has-text("Blue Sharks")').count())===1);
+// export produces a real downloadable .ics
+const dl = page.waitForEvent('download', { timeout: 8000 });
+await page.click('#cal-export');
+const download = await dl.catch(()=>null);
+ok('Export .ics downloads a calendar file', !!download && /\.ics$/.test(download.suggestedFilename()));
+await page.screenshot({ path:OUT+'/qa_24_season.png' });
+
 console.log('\n[5] German locale');
 await page.click('#lang-switch-top .lang-btn:nth-child(2)'); await page.waitForTimeout(300);
 ok('nav in German', (await page.locator('.nav-btn[data-view="dashboard"]').textContent())==='Übersicht');
