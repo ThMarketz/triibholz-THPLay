@@ -175,6 +175,15 @@
   /* ======================================================
      DASHBOARD
      ====================================================== */
+  // what the system has learned ANONYMOUSLY (patterns only, k-anonymous — never a play)
+  function insightsPanelHtml() {
+    if (typeof PRIVACY==='undefined') return '';
+    const rep = PRIVACY.report(PRIVACY.load());
+    const lines = PRIVACY.insightsText(rep);
+    return `<h3 class="dash-h3">🔒 Anonymous learnings <button class="help-chip" data-help="privacy" title="How confidentiality works">？</button></h3>
+      <div class="insights-box">${lines.length ? lines.map(l=>`<div class="ins-row">${escapeHtml(l)}</div>`).join('')
+        : `<div class="muted">Patterns appear once at least ${PRIVACY.K_MIN} plays of a kind exist. Private tactics are never shown — only anonymous patterns (no names, no text).</div>`}</div>`;
+  }
   function renderDashboard() {
     const v = $('view-dashboard');
     const u = state.user;
@@ -221,6 +230,7 @@
       </div>
       <h3 class="dash-h3">Recent changes</h3>
       <div class="dash-list">${acts.filter(a=>a.type==='play').slice(0,6).map(activityRow).join('')||'<div class="muted">No edits yet — open the Playbook and press “+ New”.</div>'}</div>`;
+      html += insightsPanelHtml();
     }
     html += `</div>`;
     v.innerHTML = html;
@@ -648,7 +658,19 @@
     document.querySelectorAll('.sit-tab').forEach((b,i)=> b.classList.toggle('active', DATA.SITUATIONS[i].id===state.situation));
     document.querySelectorAll('#phase-toggle .phase-btn').forEach(b=> b.classList.toggle('active', b.dataset.phase===state.phase));
   }
-  function currentList() { return state.scenarios.filter(s => s.situation===state.situation && s.phase===state.phase); }
+  function currentList() {
+    return state.scenarios.filter(s => s.situation===state.situation && s.phase===state.phase
+      && (typeof PRIVACY==='undefined' || PRIVACY.canView(s, state.user)));
+  }
+  // stamp confidentiality + ownership, and let the system learn ANONYMOUSLY
+  function stampPrivacy(sc, fromEditor) {
+    if (typeof PRIVACY==='undefined') return;
+    if (fromEditor && $('ed-visibility')) sc.visibility = $('ed-visibility').value || 'team';
+    if (!sc.visibility) sc.visibility = 'team';
+    if (!sc.owner && state.user) sc.owner = state.user.email;
+    if (!sc.team && state.user && state.user.teamCode) sc.team = state.user.teamCode;
+    try { PRIVACY.learnFrom(sc); } catch (e) {}     // features only — never the play
+  }
 
   function renderLibrary() {
     const s = DATA.sit(state.situation);
@@ -663,7 +685,7 @@
       card.innerHTML = `
         <div class="scn-card-top">
           <span class="scn-title">${escapeHtml(scn.title||'Untitled play')}</span>
-          ${scn.builtIn?'<span class="tag tag-sample">sample</span>':'<span class="tag tag-yours">saved</span>'}
+          ${scn.builtIn?'<span class="tag tag-sample">sample</span>':'<span class="tag tag-yours">saved</span>'}${(typeof PRIVACY!=='undefined' && !scn.builtIn && PRIVACY.levelOf(scn)!=='team')?`<span class="tag vis-${PRIVACY.levelOf(scn)}">${PRIVACY.levelOf(scn)==='private'?'🔒':'🌐'}</span>`:''}
         </div>
         <div class="scn-desc">${escapeHtml(scn.description||'')}</div>
         <div class="scn-meta"><span>${scn.frames.length} step${scn.frames.length>1?'s':''}</span><span>${escapeHtml(scn.author||'')}</span></div>`;
@@ -1225,6 +1247,8 @@
   function adjustSave(asNew) {
     const sc = adjust.scn;
     sc.builtIn = false;
+    if (asNew) sc.owner = state.user.email;
+    stampPrivacy(sc, false);
     if (asNew) {
       sc.id = 'usr-' + Math.abs(hash('adj' + sc.title + (typeof performance!=='undefined'?performance.now():Math.random())));
       sc.title = (sc.title || 'Play') + ' — adjusted';
@@ -1261,6 +1285,7 @@
     ss.value = edit.scenario.situation;
     if (!ss.value) { ss.selectedIndex = 0; edit.scenario.situation = ss.value; edit.scenario.frames = [ DATA.defaultFrame(ss.value) ]; }
     $('ed-phase').value = edit.scenario.phase || 'offense';
+    if ($('ed-visibility')) $('ed-visibility').value = (typeof PRIVACY!=='undefined' ? PRIVACY.levelOf(edit.scenario) : 'team');
     $('ed-delete').hidden = isNew;
     buildNotesGrid();
     edit.layers = POOL.render($('editor-pool'));
@@ -1577,6 +1602,7 @@
     if (!sc.title){ toast('Give the play a title'); $('ed-title').focus(); return; }
     sc.builtIn=false;
     sc.author = edit.isNew ? state.user.name : (sc.author && sc.author!=='Playbook (sample)' ? sc.author : state.user.name);
+    stampPrivacy(sc, true);
     const i = state.scenarios.findIndex(s=>s.id===sc.id);
     if (i>=0) state.scenarios[i]=sc; else state.scenarios.push(sc);
     DATA.save(state.scenarios);
@@ -1593,7 +1619,7 @@
     sc.id = 'usr-' + Math.abs(hash((sc.title||'play') + (typeof performance!=='undefined'?performance.now():'') + Math.random()));
     const t = $('ed-title').value.trim();
     if (!t || t === edit.origTitle) $('ed-title').value = (t || edit.origTitle || 'Play') + ' — variant';
-    sc.builtIn = false; sc.author = state.user.name || 'You';
+    sc.builtIn = false; sc.author = state.user.name || 'You'; sc.owner = state.user.email;
     edit.isNew = true;               // saveScenario now inserts instead of replacing
     saveScenario();
   }
@@ -1783,6 +1809,7 @@
     $('add-sub').onclick = ()=>addWaiting('sub'); $('add-exc').onclick = ()=>addWaiting('exc'); $('del-wait').onclick = delWaiting;
     $('ed-situation').onchange = (e)=>{ edit.scenario.situation=e.target.value; edit.scenario.frames=[DATA.defaultFrame(e.target.value)]; edit.idx=0; editorRender(); toast('Formation reset for '+DATA.sit(e.target.value).label); };
     $('ed-phase').onchange = (e)=>{ edit.scenario.phase=e.target.value; };
+    if ($('ed-visibility')) $('ed-visibility').onchange = (e)=>{ edit.scenario.visibility=e.target.value; };
 
     $('logout-btn').onclick = (e)=>{ e.stopPropagation(); clearSession(); state.user=null; show('auth-screen'); };
     $('editor-modal').onclick = (e)=>{ if(e.target===$('editor-modal')) closeEditor(); };

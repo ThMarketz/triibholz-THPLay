@@ -773,3 +773,9 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .feed-box{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:10px;display:flex;flex-direction:column;gap:8px}
 .feed-url{display:flex;align-items:center;gap:8px}
 .feed-url code{flex:1;font-size:11px;background:var(--panel2);padding:6px 8px;border-radius:6px;overflow-x:auto;white-space:nowrap}
+
+/* ========== confidentiality + anonymous learnings ========== */
+.tag.vis-private{background:#3a1c1c;color:#ffb3b3}
+.tag.vis-public{background:#14304a;color:#8fd0ff}
+.insights-box{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--teal);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.ins-row{font-size:13px;color:var(--ink);line-height:1.5}

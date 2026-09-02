@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -129,7 +129,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     kb('ArrowRight'); await wait(20);
     ok('ArrowRight steps forward', q('#frame-label').textContent!==lbl);
   }
-  ok('12 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===12);
+  ok('13 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===13);
   q('#help-btn').click(); await wait(15);
   ok('topbar ？ is context-aware (paused board → Adjust guide)', !!q('.help-backdrop:not([hidden])') &&
      /Adjust/i.test(q('#help-title').textContent));
@@ -506,6 +506,41 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     q('#ev-title').value='vs Blue Sharks'; q('#ev-date').value='2026-12-05'; q('#ev-type').value='match';
     const beforeEv = CALENDAR.load().length; q('#ev-add').click(); await wait(20);
     ok('a match can be added from the form', CALENDAR.load().length===beforeEv+1 && CALENDAR.load().some(e=>e.title==='vs Blue Sharks'));
+  }
+
+  console.log('\n[6p] Confidential tactics + anonymous learning (PRIVACY)');
+  {
+    const { PRIVACY } = window.__T;
+    const secret = { id:'usr-s', title:'SECRET set piece', description:'do not share', notes:{1:'our trick'}, owner:'coach@club.ch', team:'A', situation:'6v5', phase:'offense', visibility:'private',
+      frames:[{att:{1:{x:230,y:80},2:{x:250,y:120},3:{x:271,y:110}},def:{1:{x:281,y:122}},gk:{x:292,y:110},ball:{carrier:'A1'}},
+              {att:{1:{x:260,y:80},2:{x:250,y:120},3:{x:271,y:110}},def:{1:{x:281,y:122}},gk:{x:292,y:110},ball:{carrier:'A2'}},
+              {att:{1:{x:260,y:80},2:{x:250,y:120},3:{x:271,y:110}},def:{1:{x:281,y:122}},gk:{x:292,y:110},ball:{carrier:null,x:293,y:94}}] };
+    const f = PRIVACY.anonymize(secret);
+    ok('anonymized features carry no title/notes/owner/id', PRIVACY.isAnonymous(f) && !JSON.stringify(f).includes('SECRET') && !JSON.stringify(f).includes('trick'));
+    ok('features still describe the pattern', f.situation==='6v5' && f.passes===1 && f.endsInShot===true && f.shotZone==='T');
+    const owner={email:'coach@club.ch',team:'A',role:'coach'}, mate={email:'m@club.ch',team:'A',role:'coach'}, admin={email:'a@x',role:'super-admin'};
+    ok('private: owner sees it, teammate + admin do not', PRIVACY.canView(secret,owner) && !PRIVACY.canView(secret,mate) && !PRIVACY.canView(secret,admin));
+    ok('team: same team yes, other team no', PRIVACY.canView({visibility:'team',team:'A'},mate) && !PRIVACY.canView({visibility:'team',team:'B'},mate));
+    let agg=PRIVACY.emptyAgg(); for (let i=0;i<4;i++) agg=PRIVACY.contribute(agg,f);
+    ok('k-anonymity: nothing reported below 5', PRIVACY.report(agg).length===0);
+    agg=PRIVACY.contribute(agg,f);
+    ok('reported at 5+, as a pattern sentence', PRIVACY.report(agg).length===1 && /6v5 offense: 5 plays/.test(PRIVACY.insightsText(PRIVACY.report(agg))[0]));
+    let refused=false; try{ PRIVACY.contribute(agg,{title:'leak',situation:'6v6'}); }catch(e){ refused=true; }
+    ok('refuses any identifying contribution', refused);
+
+    // UI: editor has the confidentiality selector; a private save is stamped + learned from, and hidden from others
+    q('.nav-btn[data-view="playbook"]').click(); await wait(20);
+    q('#new-scenario-btn').click(); await wait(20);
+    ok('editor shows “Who can see it”', !!q('#ed-visibility') && q('#ed-visibility').value==='team');
+    q('#ed-visibility').value='private'; q('#ed-visibility').dispatchEvent(new window.Event('change'));
+    q('#ed-title').value='Confidential corner play'; q('#ed-title').dispatchEvent(new window.Event('input'));
+    const nBefore = PRIVACY.load().n;
+    q('#ed-save').click(); await wait(30);
+    const saved = DATA.load().find(x=>x.title==='Confidential corner play');
+    ok('saved play is private + owned by me', !!saved && saved.visibility==='private' && !!saved.owner);
+    ok('the system learned from it anonymously (aggregate n+1)', PRIVACY.load().n===nBefore+1);
+    ok('another user cannot view it', !PRIVACY.canView(saved,{email:'someone@else.ch',team:saved.team,role:'coach'}));
+    ok('library marks it with a lock', qa('.scn-card .tag.vis-private').length>=1);
   }
 
   console.log('\n[6j] Tier 3 Phase 0 — analysis contract + swappable submit + review');

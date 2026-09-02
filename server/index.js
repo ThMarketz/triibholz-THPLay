@@ -23,6 +23,9 @@ const engine = require('./engine.js');
 const { makeDetector } = require('./detector.js');
 const videoadapter = require('./videoadapter.js');
 const CALENDAR = require('../js/calendar.js');
+const PRIVACY = require('../js/privacy.js');
+const INSIGHTS_FILE = () => path.join(DATA_DIR, 'insights.json');
+function loadInsights(){ try { return JSON.parse(fs.readFileSync(INSIGHTS_FILE(), 'utf8')); } catch (e) { return PRIVACY.emptyAgg(); } }
 const MODEL_ENDPOINT = process.env.MODEL_ENDPOINT || '';
 const VIDEO_PROVIDER = process.env.VIDEO_PROVIDER || '';
 // photoreal provider config — the KEY is only ever read from the env, never the request.
@@ -136,6 +139,21 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { url: out.url, provider: cfg.provider });
       } catch (e) { return send(res, 502, { error: e.code === 'provider-error' ? e.message : ('provider-failed: ' + (e.message || 'error')) }); }
     }
+    // anonymous learning — accepts ONLY identifier-free pattern features, stores counts, reports k-anonymously
+    if (req.method === 'POST' && p === '/api/insights') {
+      const body = await readBody(req);
+      let data; try { data = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
+      const f = data.features || data;
+      if (!PRIVACY.isAnonymous(f) || !f.situation) return send(res, 400, { error: 'not-anonymous' });
+      const agg = PRIVACY.contribute(loadInsights(), f);
+      fs.writeFileSync(INSIGHTS_FILE(), JSON.stringify(agg));
+      return send(res, 200, { ok: true, n: agg.n });
+    }
+    if (req.method === 'GET' && p === '/api/insights') {
+      const agg = loadInsights();
+      return send(res, 200, { k: PRIVACY.K_MIN, n: agg.n, report: PRIVACY.report(agg) });
+    }
+
     // subscribable calendar feed — publish events, then any device subscribes to the .ics
     if (req.method === 'POST' && /^\/api\/calendar\/[\w.\-]+$/.test(p)) {
       const token = safeToken(p.split('/').pop());

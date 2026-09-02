@@ -146,6 +146,17 @@ function frame(w, h) {
     ok('unknown feed → 404', (await fetch(base + '/api/calendar/nope.ics')).status === 404);
     ok('publish with no events → 400', (await fetch(base + '/api/calendar/x', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status === 400);
 
+    console.log('\n[3f] Anonymous learning endpoint — features only, k-anonymous report');
+    const feat = { situation: '6v5', phase: 'offense', steps: 3, passes: 1, drives: 1, screens: false, endsInShot: true, shotZone: 'T', shape: '2:1,5:2', attackers: 3, defenders: 1 };
+    for (let i = 0; i < 4; i++) await fetch(base + '/api/insights', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ features: feat }) });
+    let rep = await (await fetch(base + '/api/insights')).json();
+    ok('below k → nothing reported (n=4)', rep.n === 4 && rep.report.length === 0 && rep.k === 5);
+    const fifth = await fetch(base + '/api/insights', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ features: feat }) });
+    rep = await (await fetch(base + '/api/insights')).json();
+    ok('at k → one pattern bucket, counts only', fifth.status === 200 && rep.report.length === 1 && rep.report[0].plays === 5 && rep.report[0].shotRate === 1);
+    const leak = await fetch(base + '/api/insights', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ features: { title: 'SECRET', notes: { 1: 'x' }, situation: '6v6' } }) });
+    ok('identifying payload → 400 not-anonymous', leak.status === 400 && (await leak.json()).error === 'not-anonymous');
+
     console.log('\n[4] Error handling');
     ok('bad JSON → 400', (await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{oops' })).status === 400);
     const noInput = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });

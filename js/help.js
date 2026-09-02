@@ -57,6 +57,15 @@ const HELP = (() => {
       'Every answer’s rules follow the current World Aquatics laws (5 m penalty, 18 s exclusion, keeper limits).',
     ]},
 
+    privacy: { icon:'🔒', title:'Confidential tactics &amp; anonymous learning', steps:[
+      'Every play has a <strong>Who can see it</strong> setting: <strong>👥 Team</strong> (your team only, the default), <strong>🌐 Club</strong> (everyone in the club) or <strong>🔒 Private</strong> (only you — for confidential tactics). Others simply never see private plays in their library.',
+      '<strong>The system still learns from private plays — anonymously.</strong> It reduces a play to a handful of pattern features (situation, number of steps, passes, shot zone, a coarse formation shape) and strips the title, description, notes, owner and club. The play itself never leaves the device.',
+      'Those features only ever feed <strong>counts</strong>, and a pattern is only reported once at least <strong>5</strong> plays of that kind exist (k-anonymity) — so no single tactic can be reverse-engineered from the “Anonymous learnings” on the dashboard.',
+    ], tips:[
+      'Use 🔒 Private for set pieces and match-specific game plans; 👥 Team for the everyday playbook.',
+      'When the club backend runs, anonymous features are pooled across teams — the club learns as a whole, and nobody’s secrets are exposed.',
+    ]},
+
     season: { icon:'📅', title:'Season — plan &amp; calendar', steps:[
       '<strong>Goal → plan:</strong> name your goal, set the date you want to <em>peak</em> for, pick training days/week and focus, then <strong>Generate plan</strong>. You get a periodised plan — General Prep → Specific Prep → Competition → Taper — with a weekly load wave and water-polo sessions.',
       'Press <strong>Add all sessions to the calendar</strong> to drop the whole plan onto your schedule.',
