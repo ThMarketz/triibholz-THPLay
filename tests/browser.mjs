@@ -226,6 +226,12 @@ await page.click('#scout-run'); await page.waitForTimeout(400);
 const scoutTxt = ((await page.locator('#toast').textContent().catch(()=>''))||'') + ' ' + ((await page.locator('#scout-out').textContent().catch(()=>''))||'');
 ok('scouting without calibration/backend explains itself (no crash)', /Calibrate the pool first|didn’t respond|failed/i.test(scoutTxt));
 await page.screenshot({ path:OUT+'/qa_25_autoscout.png' });
+// 🎯 Game plan chips + 📣 Team debriefs panel
+ok('game plan: 18 instruction chips on the match', await page.locator('#film-plan .plan-chip').count()===18);
+await page.click('#film-plan .plan-chip[data-ins="d-press"]'); await page.waitForTimeout(150);
+ok('ticking an instruction lights the chip + counter', await page.locator('#film-plan .plan-chip[data-ins="d-press"].on').count()===1 && /1 instruction/.test(await page.locator('#plan-count').textContent()));
+ok('team debriefs panel present (backend list or graceful note)', await page.locator('#film-debriefs').count()===1 && (await page.locator('#debrief-list').textContent()).trim().length>0);
+await page.screenshot({ path:OUT+'/qa_26_gameplan.png' });
 
 console.log('\n[4c] Season — plan + calendar (.ics export)');
 await page.click('.nav-btn[data-view="season"]'); await page.waitForTimeout(300);

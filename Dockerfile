@@ -14,6 +14,8 @@ COPY css/   /usr/share/nginx/html/css/
 COPY js/    /usr/share/nginx/html/js/
 COPY data/  /usr/share/nginx/html/data/
 COPY icons/ /usr/share/nginx/html/icons/
+# demo clips so anyone can try Auto-scout without their own footage
+COPY docs/demo/ /usr/share/nginx/html/docs/demo/
 
 EXPOSE 80
 

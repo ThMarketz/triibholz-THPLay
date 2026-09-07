@@ -46,9 +46,11 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const VIDEO_DIR = path.join(DATA_DIR, 'videos');
 const JOB_DIR = path.join(DATA_DIR, 'jobs');
 const CAL_DIR = path.join(DATA_DIR, 'calendars');
+const CLIP_DIR = path.join(DATA_DIR, 'clips');
+const DEBRIEF_DIR = path.join(DATA_DIR, 'debriefs');
 const MAX_BODY = +(process.env.MAX_BODY || 200 * 1024 * 1024);   // 200 MB
 const MAX_UPLOAD = +(process.env.MAX_UPLOAD || 4 * 1024 * 1024 * 1024);   // 4 GB — video uploads stream to disk, never into memory
-[DATA_DIR, VIDEO_DIR, JOB_DIR, CAL_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
+[DATA_DIR, VIDEO_DIR, JOB_DIR, CAL_DIR, CLIP_DIR, DEBRIEF_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
 const safeToken = t => String(t || '').replace(/[^\w.\-]/g, '').slice(0, 64);
 
 let hasFfmpeg = false;
@@ -77,6 +79,7 @@ async function processJob(id) {
   job.status = 'processing'; job.startedAt = Date.now(); saveJob(job);
   try {
     const result = await runEngine(job.request);
+    if (job.request && job.request.videoRef && result && typeof result === 'object') result.meta = Object.assign({}, result.meta || {}, { videoRef: job.request.videoRef });   // so clips can be cut from the same file later
     job.status = 'done'; job.result = result; job.finishedAt = Date.now(); saveJob(job);
   } catch (e) {
     job.status = 'error'; job.error = e.code || e.message; job.finishedAt = Date.now(); saveJob(job);
@@ -133,6 +136,24 @@ function streamToFile(req, fp, max) {
     req.on('error', e => { if (!failed) { failed = true; reject(e); } });
   });
 }
+
+/* cut a short clip out of an uploaded video (h264, 640 px wide, audio kept) */
+function cutClip(vp, start, len, outPath) {
+  const ff = process.env.FFMPEG || 'ffmpeg';
+  const run = args => new Promise((resolve, reject) => {
+    const c = require('node:child_process').spawn(ff, args); let err = '';
+    c.stderr.on('data', d => err += d.toString());
+    c.on('error', e => reject(Object.assign(new Error('ffmpeg-spawn'), { code: 'ffmpeg' })));
+    c.on('close', code => code === 0 ? resolve() : reject(Object.assign(new Error('ffmpeg-exit-' + code + ': ' + err.slice(-200)), { code: 'ffmpeg' })));
+  });
+  const base = ['-y', '-ss', String(start), '-t', String(len), '-i', vp];
+  return run(base.concat(['-vf', 'scale=640:-2', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '28', '-c:a', 'aac', '-movflags', '+faststart', outPath]))
+    .catch(() => run(base.concat(['-c', 'copy', '-movflags', '+faststart', outPath])));
+}
+const debriefPath = id => path.join(DEBRIEF_DIR, safeToken(id) + '.json');
+const loadDebrief = id => { try { return JSON.parse(fs.readFileSync(debriefPath(id), 'utf8')); } catch (e) { return null; } };
+const saveDebrief = d => fs.writeFileSync(debriefPath(d.id), JSON.stringify(d));
+const clean = (v, n) => String(v == null ? '' : v).slice(0, n || 400);
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -233,6 +254,62 @@ const server = http.createServer(async (req, res) => {
       const job = { id: uid(), status: 'queued', createdAt: Date.now(), request };
       saveJob(job); enqueue(job.id);
       return send(res, 202, { id: job.id, status: job.status });
+    }
+
+    // ---- clips: cut a possession out of an uploaded match → a small mp4 served back
+    if (req.method === 'POST' && p === '/api/clip') {
+      const body = await readBody(req);
+      let cr; try { cr = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
+      if (!hasFfmpeg) return send(res, 503, { error: 'ffmpeg-unavailable' });
+      const vp = path.join(VIDEO_DIR, safeToken(cr.videoRef));
+      if (!cr.videoRef || !fs.existsSync(vp)) return send(res, 404, { error: 'video-not-found' });
+      const start = Math.max(0, +cr.start || 0), end = Math.max(start + 1, Math.min(start + 60, +cr.end || start + 10));
+      const id = safeToken(cr.videoRef).replace(/\.mp4$/, '') + '_' + Math.round(start * 10) + '_' + Math.round(end * 10);
+      const out = path.join(CLIP_DIR, id + '.mp4');
+      if (!fs.existsSync(out)) { try { await cutClip(vp, start, end - start, out); } catch (e) { return send(res, 500, { error: e.code || 'clip-failed' }); } }
+      return send(res, 200, { id, clipUrl: '/api/clips/' + id + '.mp4', start, end, bytes: fs.statSync(out).size });
+    }
+    const clipM = p.match(/^\/api\/clips\/([\w\-]+\.mp4)$/);
+    if (req.method === 'GET' && clipM) {
+      const fp = path.join(CLIP_DIR, safeToken(clipM[1])); if (!fs.existsSync(fp)) return send(res, 404, { error: 'not-found' });
+      const size = fs.statSync(fp).size; const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+      cors(res); res.setHeader('Accept-Ranges', 'bytes'); res.setHeader('Content-Type', 'video/mp4'); res.setHeader('Cache-Control', 'private, max-age=86400');
+      if (range) { const a = range[1] ? +range[1] : 0, b = range[2] ? Math.min(+range[2], size - 1) : size - 1; res.writeHead(206, { 'Content-Range': `bytes ${a}-${b}/${size}`, 'Content-Length': b - a + 1 }); return fs.createReadStream(fp, { start: a, end: b }).pipe(res); }
+      res.writeHead(200, { 'Content-Length': size }); return fs.createReadStream(fp).pipe(res);
+    }
+
+    // ---- debriefs: a shared match review (plan vs reality + clips + board plays) with comments
+    if (req.method === 'POST' && p === '/api/debriefs') {
+      const body = await readBody(req);
+      let d; try { d = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
+      if (!d.title || !Array.isArray(d.items)) return send(res, 400, { error: 'title-and-items-required' });
+      const deb = { id: uid(), team: safeToken(d.team || 'club'), title: clean(d.title, 120), matchTitle: clean(d.matchTitle, 120), author: clean(d.author, 80), us: d.us === 'dark' ? 'dark' : 'white', createdAt: Date.now(),
+        summary: (Array.isArray(d.summary) ? d.summary : []).slice(0, 12).map(x => clean(x, 300)),
+        plan: (Array.isArray(d.plan) ? d.plan : []).slice(0, 12).map(x => ({ id: clean(x.id, 40), label: clean(x.label, 80), side: x.side === 'defense' ? 'defense' : 'offense', attacks: +x.attacks || 0, unread: +x.unread || 0, followed: +x.followed || 0, followedPct: x.followedPct == null ? null : +x.followedPct, whenFollowed: x.whenFollowed || { n: 0, shots: 0, goals: 0 }, whenNot: x.whenNot || { n: 0, shots: 0, goals: 0 }, verdict: clean(x.verdict, 200) })),
+        items: d.items.slice(0, 24).map(it => ({ id: uid(), t0: +it.t0 || 0, t1: +it.t1 || 0, title: clean(it.title, 120), note: clean(it.note, 400), result: clean(it.result, 40), asked: clean(it.asked, 120), followed: it.followed == null ? null : !!it.followed, clipUrl: /^\/api\/clips\/[\w\-]+\.mp4$/.test(it.clipUrl || '') ? it.clipUrl : null, frames: Array.isArray(it.frames) ? it.frames.slice(0, 8) : [], notes: it.notes && typeof it.notes === 'object' ? it.notes : {} })),
+        comments: [] };
+      saveDebrief(deb);
+      return send(res, 201, { id: deb.id, createdAt: deb.createdAt });
+    }
+    if (req.method === 'GET' && p === '/api/debriefs') {
+      const team = safeToken(url.searchParams.get('team') || 'club');
+      const list = fs.readdirSync(DEBRIEF_DIR).filter(f => f.endsWith('.json')).map(f => loadDebrief(f.replace(/\.json$/, ''))).filter(d => d && d.team === team)
+        .sort((a, b) => b.createdAt - a.createdAt).slice(0, 50)
+        .map(d => ({ id: d.id, title: d.title, matchTitle: d.matchTitle, author: d.author, createdAt: d.createdAt, items: d.items.length, comments: d.comments.length }));
+      return send(res, 200, { debriefs: list });
+    }
+    const dm = p.match(/^\/api\/debriefs\/([\w]+)(\/comments)?$/);
+    if (dm) {
+      const deb = loadDebrief(dm[1]); if (!deb) return send(res, 404, { error: 'not-found' });
+      if (req.method === 'GET' && !dm[2]) return send(res, 200, deb);
+      if (req.method === 'POST' && dm[2]) {
+        const body = await readBody(req);
+        let c; try { c = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
+        if (!clean(c.text, 1000).trim()) return send(res, 400, { error: 'empty-comment' });
+        const cm2 = { id: uid(), author: clean(c.author, 80) || 'Anonymous', text: clean(c.text, 1000).trim(), itemId: c.itemId ? safeToken(c.itemId) : null, at: Date.now() };
+        deb.comments.push(cm2); if (deb.comments.length > 500) deb.comments = deb.comments.slice(-500); saveDebrief(deb);
+        return send(res, 201, cm2);
+      }
     }
 
     const jm = p.match(/^\/api\/jobs\/([\w]+)(\/result)?$/);

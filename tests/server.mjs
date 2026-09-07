@@ -178,6 +178,33 @@ function frame(w, h) {
     const over = await fetch(base + '/api/upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: Buffer.alloc(6 * 1024 * 1024, 1) }).catch(() => null);
     ok('over the limit (MAX_UPLOAD=5 MB in tests) → 413 too-large with the limit, or a clean cut', !over || (over.status === 413 && (await over.json()).maxUploadMB === 5));
 
+    console.log('\n[3h] Clips + team debriefs with comments');
+    ok('clip of an unknown video → 404', (await fetch(base + '/api/clip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef: 'nope.mp4', start: 1, end: 5 }) })).status === 404);
+    const clipR = await fetch(base + '/api/clip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef: upj.videoRef, start: 1, end: 5 }) });
+    ok('clip of a non-decodable upload fails cleanly (500 clip/ffmpeg or 503 no ffmpeg)', [500, 503].includes(clipR.status) && /ffmpeg|clip/.test((await clipR.json()).error));
+    ok('unknown clip file → 404', (await fetch(base + '/api/clips/nope.mp4')).status === 404);
+    const debBody = { team: 'schorgen-u17', title: 'Debrief: vs Red Sharks', matchTitle: 'vs Red Sharks', author: 'Coach Ruiz', us: 'white',
+      summary: ['Us (white caps): 12 possessions, 7 shots (58%).'],
+      plan: [{ id: 'o-drive-kick', label: 'Drive & kick', side: 'offense', attacks: 4, unread: 1, followed: 2, followedPct: 67, whenFollowed: { n: 2, shots: 2, goals: 1 }, whenNot: { n: 1, shots: 0, goals: 0 }, verdict: 'followed about half the time' }],
+      items: [{ t0: 12, t1: 30, title: '0:12 · us · Drive & kick', note: '1 has the ball → 1 drives in → 1 passes to 3 → 3 shoots', result: '⚽ goal', asked: 'Drive & kick', followed: true, clipUrl: '/api/clips/abc_120_300.mp4', frames: [{ att: { 1: { x: 200, y: 80 } }, def: {}, gk: { x: 292, y: 110 }, ball: { carrier: 'A1' } }], notes: { 1: 'Drive.' } },
+              { t0: 40, t1: 55, title: '0:40 · them · Hole entry', note: '', result: '🎯 shot', asked: 'Deny the hole feed', followed: false, clipUrl: 'http://evil/x.mp4', frames: [] }] };
+    const pd = await fetch(base + '/api/debriefs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(debBody) });
+    const pdj = await pd.json();
+    ok('publish a debrief → 201 {id}', pd.status === 201 && !!pdj.id);
+    ok('debrief without items → 400', (await fetch(base + '/api/debriefs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'x' }) })).status === 400);
+    const lst = await (await fetch(base + '/api/debriefs?team=schorgen-u17')).json();
+    ok('team list shows it (items + comment counts)', lst.debriefs.length === 1 && lst.debriefs[0].items === 2 && lst.debriefs[0].comments === 0);
+    ok('other team sees nothing', (await (await fetch(base + '/api/debriefs?team=other')).json()).debriefs.length === 0);
+    const one = await (await fetch(base + '/api/debriefs/' + pdj.id)).json();
+    ok('full debrief keeps plan table, frames and sanitises clip URLs', one.plan[0].followedPct === 67 && one.items[0].frames.length === 1 && one.items[0].clipUrl === '/api/clips/abc_120_300.mp4' && one.items[1].clipUrl === null);
+    const c1 = await fetch(base + '/api/debriefs/' + pdj.id + '/comments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ author: 'Sam (3)', text: 'I was late on the slide here', itemId: one.items[1].id }) });
+    const c2 = await fetch(base + '/api/debriefs/' + pdj.id + '/comments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ author: 'Coach Ruiz', text: 'Good match overall' }) });
+    ok('comments per play and on the whole debrief → 201', c1.status === 201 && c2.status === 201);
+    ok('empty comment → 400', (await fetch(base + '/api/debriefs/' + pdj.id + '/comments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: '   ' }) })).status === 400);
+    const two = await (await fetch(base + '/api/debriefs/' + pdj.id)).json();
+    ok('comments persist with author, item link and time', two.comments.length === 2 && two.comments[0].itemId === one.items[1].id && two.comments[1].itemId === null && two.comments[0].author === 'Sam (3)' && two.comments[0].at > 0);
+    ok('unknown debrief → 404', (await fetch(base + '/api/debriefs/nope')).status === 404);
+
     console.log('\n[4] Error handling');
     ok('bad JSON → 400', (await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{oops' })).status === 400);
     const noInput = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });

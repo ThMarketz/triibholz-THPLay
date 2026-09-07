@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -129,7 +129,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     kb('ArrowRight'); await wait(20);
     ok('ArrowRight steps forward', q('#frame-label').textContent!==lbl);
   }
-  ok('14 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===14);
+  ok('15 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===15);
   q('#help-btn').click(); await wait(15);
   ok('topbar ？ is context-aware (paused board → Adjust guide)', !!q('.help-backdrop:not([hidden])') &&
      /Adjust/i.test(q('#help-title').textContent));
@@ -612,6 +612,33 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('help has an auto-scout topic', !!HELP.TOPICS.autoscout);
   }
 
+  console.log('\n[6r] Game plan — plan vs reality (GAMEPLAN)');
+  {
+    const { GAMEPLAN } = window.__T;
+    const P=[
+      { offense:'att', situation:'6v6', tactic:'drive-and-kick', passes:1, endsInShot:true, goal:true, shotZone:'T', defence:'press' },
+      { offense:'att', situation:'6v6', tactic:'drive-and-kick', passes:2, endsInShot:true, goal:false, shotZone:'B', defence:'press' },
+      { offense:'att', situation:'6v6', tactic:'set-offense', passes:5, endsInShot:false, goal:false, shotZone:null, defence:'zone' },
+      { offense:'att', situation:'6v6', tactic:'unclassified', passes:0, endsInShot:false, goal:false, shotZone:null, defence:null },
+      { offense:'att', situation:'6v5', tactic:'man-up-4-2', manUp:true, passes:3, endsInShot:true, goal:true, shotZone:'M', defence:'zone' },
+      { offense:'def', situation:'6v6', tactic:'hole-entry', passes:2, endsInShot:true, goal:true, shotZone:'M', defence:'drop' },
+      { offense:'def', situation:'6v6', tactic:'perimeter-swing', passes:4, endsInShot:false, goal:false, shotZone:null, defence:'press' },
+    ];
+    ok('18 instructions, offense + defense', GAMEPLAN.INSTRUCTIONS.length===18 && GAMEPLAN.INSTRUCTIONS.some(i=>i.side==='defense'));
+    const rows = GAMEPLAN.compliance(['o-drive-kick','o-manup-42','o-shoot-high','d-press','d-deny-hole'], P, { us:'white' });
+    const dk = rows[0];
+    ok('drive & kick: 4 attacks, 1 unread, followed 67%', dk.attacks===4 && dk.unread===1 && dk.followed===2 && dk.followedPct===67);
+    ok('outcome split: when followed 2 shots/1 goal, when not 0/0', dk.whenFollowed.shots===2 && dk.whenFollowed.goals===1 && dk.whenNot.n===1 && dk.whenNot.shots===0);
+    ok('man-up 4-2 judged only on man-up possessions', rows[1].attacks===1 && rows[1].followedPct===100);
+    ok('shoot high judges shots only (3 shots, 1 high)', rows[2].attacks===3 && rows[2].followed===1 && rows[2].followedPct===33);
+    ok('defense rows use THEIR possessions', rows[3].attacks===2 && rows[3].followed===1 && rows[4].attacks===2 && rows[4].whenNot.goals===1);
+    ok('sides flip with us=dark', (()=>{ const r=GAMEPLAN.compliance(['o-drive-kick'], P, { us:'dark' })[0]; return r.attacks===2 && r.followed===0; })() && GAMEPLAN.compliance(['d-stop-drive'], P, { us:'dark' })[0].attacks===5);
+    const lines = GAMEPLAN.summary(rows);
+    ok('summary sentences per instruction', lines.length===5 && /^Drive & kick: 4 attacks, followed 67% \(1 unread\)/.test(lines[0]) && /^Shoot high \(top corners\): 3 shots/.test(lines[2]));
+    ok('empty situation → honest verdict', /nothing to judge/.test(GAMEPLAN.compliance(['o-manup-33'], [], {})[0].verdict));
+    ok('scouted plays now carry goal/defence/shotZone/frames', (()=>{ const {TACTICS}=window.__T; const f={att:{1:{x:200,y:80},2:{x:200,y:140},3:{x:230,y:150}},def:{1:{x:240,y:80},2:{x:240,y:140},3:{x:250,y:150}},gk:{x:292,y:110},ball:{x:202,y:82}}; const ser=[0,0.5,1,1.5].map(t=>({t,boardFrame:JSON.parse(JSON.stringify(f))})); ser[3].boardFrame.ball={x:293,y:110}; const sc=TACTICS.scout(ser,[{t:1.5,type:'goal'}],{}); const p=sc.plays[0]; return p && p.goal===true && 'defence' in p && Array.isArray(p.frames) && p.frames.length>=2; })());
+  }
+
   console.log('\n[7] Basics + i18n');
   q('.nav-btn[data-view="basics"]').click(); await wait(25);
   ok('10 basics cards incl. responsibilities', qa('#view-basics .basics-card').length===10);
@@ -635,6 +662,10 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
   ok('shot chart conceded badge', qa('.goal-grid .gz-a').length>=1);
   ok('insights: weak zone + corrections', /BL/.test(q('.film-insights').textContent) && /🎯/.test(q('.film-insights').textContent));
   ok('situation board with draggable discs', qa('#film-board .disc.editable').length>=13);
+  ok('🎯 Game plan panel with 18 instruction chips', qa('#film-plan .plan-chip').length===18);
+  qa('#film-plan .plan-chip').find(b=>b.dataset.ins==='o-drive-kick').click(); await wait(10);
+  ok('ticking an instruction stores it on the match', (FILM.load().find(x=>x.id===(FILM.load()[0].id))||{}).plan!==undefined && JSON.stringify(FILM.load()).includes('"o-drive-kick"') && q('#plan-count').textContent.includes('1 instruction'));
+  ok('📣 Team debriefs panel present for everyone', !!q('#film-debriefs') && !!q('#debrief-list'));
   ok('board ball draggable', !!q('#film-board .ball.editable'));
   // board follows the situation select
   q('#film-sit').value='man-down'; q('#film-sit').dispatchEvent(new window.Event('change')); await wait(20);

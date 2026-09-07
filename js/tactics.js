@@ -55,11 +55,12 @@ const TACTICS = (() => {
     opts = opts || {};
     const R = opts.possR || 24, minFrames = opts.minFrames || 3, maxGap = opts.maxGap || 4;
     const shotT = new Set((events || []).filter(e => e.type === 'shot' || e.type === 'goal').map(e => +e.t.toFixed(2)));
+    const goalT = new Set((events || []).filter(e => e.type === 'goal').map(e => +e.t.toFixed(2)));
     const out = []; let cur = null, gap = 0;
     const close = (i) => { if (cur && cur.frames.length >= minFrames) { cur.tEnd = series[i - 1].t; out.push(cur); } cur = null; gap = 0; };
     for (let i = 0; i < series.length; i++) {
       const f = series[i].boardFrame, h = holderAt(f, R), t = series[i].t;
-      if (shotT.has(+t.toFixed(2))) { if (cur) { cur.frames.push(series[i]); cur.events.push({ t, type: 'shot' }); close(i + 1); } continue; }
+      if (shotT.has(+t.toFixed(2))) { if (cur) { cur.frames.push(series[i]); cur.events.push({ t, type: goalT.has(+t.toFixed(2)) ? 'goal' : 'shot' }); close(i + 1); } continue; }
       if (h && h.key === 'GK' && cur && cur.team !== h.team) { cur.frames.push(series[i]); cur.events.push({ t, type: 'shot' }); close(i + 1); continue; }
       const team = h ? h.team : null;
       if (!team) { if (cur && ++gap > maxGap) close(i); else if (cur) cur.frames.push(series[i]); continue; }
@@ -69,7 +70,7 @@ const TACTICS = (() => {
       cur.frames.push(series[i]);
     }
     if (cur && cur.frames.length >= minFrames) { cur.tEnd = series[series.length - 1].t; out.push(cur); }
-    out.forEach(p => { p.endsInShot = p.events.some(e => e.type === 'shot') || !!(ballOf(p.frames[p.frames.length - 1].boardFrame) && ballOf(p.frames[p.frames.length - 1].boardFrame).x >= GOAL_X - 6); p.duration = +((p.tEnd - p.tStart) || 0).toFixed(2); });
+    out.forEach(p => { p.goal = p.events.some(e => e.type === 'goal'); p.endsInShot = p.events.some(e => e.type === 'shot' || e.type === 'goal') || !!(ballOf(p.frames[p.frames.length - 1].boardFrame) && ballOf(p.frames[p.frames.length - 1].boardFrame).x >= GOAL_X - 6); p.duration = +((p.tEnd - p.tStart) || 0).toFixed(2); });
     return out;
   }
 
@@ -116,7 +117,7 @@ const TACTICS = (() => {
     });
     const nAtt = Object.keys(frames[0].att).length, nDef = Object.keys(frames[0].def).length;
     const situation = nAtt >= 6 && nDef >= 6 ? '6v6' : nAtt >= 6 && nDef === 5 ? '6v5' : nAtt === 5 && nDef === 4 ? '5v4' : nAtt === 4 && nDef === 3 ? '4v3' : nAtt === 3 && nDef === 2 ? '3v2' : nAtt === 2 && nDef === 1 ? '2v1' : nAtt >= 6 ? '6v6' : nAtt === 1 ? 'GK' : '6v6';
-    return { situation, phase: 'offense', offense, frames, notes, steps, passes, endsInShot: !!poss.endsInShot, duration: poss.duration, tStart: poss.tStart, tEnd: poss.tEnd, attackers: nAtt, defenders: nDef };
+    return { situation, phase: 'offense', offense, frames, notes, steps, passes, endsInShot: !!poss.endsInShot, goal: !!poss.goal, duration: poss.duration, tStart: poss.tStart, tEnd: poss.tEnd, attackers: nAtt, defenders: nDef };
   }
 
   /* ---------- 3) tactic signatures ---------- */
@@ -214,7 +215,7 @@ const TACTICS = (() => {
     const poss = segment(series, events, opts);
     const plays = poss.map(p => { const d = distill(p, opts); if (!d) return null; d.rec = recognize(d, opts); return d; }).filter(Boolean);
     const prof = profile(plays);
-    return { possessions: poss.length, plays: plays.map(p => ({ tStart: p.tStart, tEnd: p.tEnd, offense: p.offense, situation: p.situation, tactic: p.rec.tactic, name: p.rec.name, confidence: p.rec.confidence, passes: p.passes, endsInShot: p.endsInShot, steps: p.steps })), profile: prof, summary: summary(prof, opts), playbook: buildPlaybook(plays, opts) };
+    return { possessions: poss.length, plays: plays.map(p => ({ tStart: p.tStart, tEnd: p.tEnd, offense: p.offense, situation: p.situation, tactic: p.rec.tactic, name: p.rec.name, confidence: p.rec.confidence, passes: p.passes, endsInShot: p.endsInShot, goal: !!p.goal, shotZone: p.rec.features.shotZone || null, defence: p.rec.features.defence || null, manUp: !!p.rec.features.manUp, steps: p.steps, frames: p.frames, notes: p.notes })), profile: prof, summary: summary(prof, opts), playbook: buildPlaybook(plays, opts) };
   }
 
   return { segment, distill, features, recognize, profile, summary, buildPlaybook, scout, SIGNATURES, holderAt, matchSets };

@@ -501,8 +501,10 @@ const FILM = (() => {
       xhr.send(blob);
     });
   }
+  let lastScout = null;
   function renderScout(sc, result) {
     const out = root && root.querySelector('#scout-out'); if (!out) return;
+    lastScout = { sc, result, sessionId: cur && cur.id };
     if (!sc || !sc.possessions) { out.innerHTML = '<div class="muted">No possessions could be read from this video — check the calibration and cap colours.</div>'; return; }
     const meta = result && result.meta ? ` · ${Math.round(result.meta.seconds)}s analysed` : '';
     const teamRows = Object.keys(sc.profile || {}).map(k => { const t = sc.profile[k]; return `<div class="scout-team"><strong>${k === 'att' ? 'White caps' : 'Dark caps'}</strong> — ${t.possessions} possessions · ${Math.round(t.shotRate * 100)}% shots · ${t.avgPasses} passes/poss
@@ -515,9 +517,160 @@ const FILM = (() => {
       <div class="scout-plays">${sc.playbook.map((p, i) => `<div class="scout-play"><span class="sp-t">${esc(p.title)}</span><span class="muted">${esc(p.situation)} · ${Math.round(p.confidence * 100)}%${p.needsReview ? ' · needs review' : ''}</span><span class="muted">${esc(p.description)}</span></div>`).join('') || '<div class="muted">No play reached the confidence bar (50%).</div>'}</div>
       ${sc.playbook.length ? `<button class="btn-primary sm" id="scout-add">＋ Add ${sc.playbook.length} play${sc.playbook.length > 1 ? 's' : ''} to my playbook</button>` : ''}
       <p class="fa-note">Every play stays editable; plays under 80% confidence are marked <em>needs review</em>. Accuracy depends on what the detector sees.</p>
+      ${planReportHtml(sc)}
+      ${attacksHtml(sc, result)}
+      ${ctx.canEdit ? `<div class="scout-share"><button class="btn-primary sm" id="scout-share">📣 Share debrief with the team</button><span class="muted" id="scout-share-status"> — plan vs reality, every attack as a clip + board play, open for comments</span></div>` : ''}
     </div>`;
+    wireAttacks(out, sc, result);
+    const share = out.querySelector('#scout-share'); if (share) share.onclick = () => shareDebrief(share, sc, result);
     const add = out.querySelector('#scout-add');
     if (add) add.onclick = () => { if (typeof ctx.addPlays === 'function') { const n = ctx.addPlays(sc.playbook, cur.title); ctx.toast(`${n} plays added to the playbook`); add.disabled = true; } };
+  }
+
+  /* ---------- Game plan: what we asked for ---------- */
+  function planPanelHtml(s) {
+    if (typeof GAMEPLAN === 'undefined') return '';
+    const plan = Array.isArray(s.plan) ? s.plan : [];
+    const side = sd => GAMEPLAN.INSTRUCTIONS.filter(i => i.side === sd).map(i => `<button class="plan-chip ${plan.includes(i.id) ? 'on' : ''}" data-ins="${i.id}" title="${i.when === 'any' ? 'every attack' : 'in ' + i.when}">${esc(i.label)}</button>`).join('');
+    return `<div class="film-auto" id="film-plan">
+      <div class="fa-head"><strong>🎯 Game plan <span class="fa-beta">what we asked the players</span></strong>
+        <span class="cloud-status cloud" id="plan-count">${plan.length ? `${plan.length} instruction${plan.length > 1 ? 's' : ''}` : 'nothing asked yet'}</span>
+        <span class="fa-note">Tick what you asked for in this match. After <strong>Scout this video</strong>, the report shows per instruction how many attacks there were, how often the plan was followed, and whether it worked (shots / goals when followed vs. not).</span></div>
+      <div class="plan-grid"><div><span class="ef-label">Offense — our attacks</span><div class="plan-chips">${side('offense')}</div></div>
+      <div><span class="ef-label">Defense — their attacks</span><div class="plan-chips">${side('defense')}</div></div></div>
+    </div>`;
+  }
+  function planRows(sc) {
+    if (typeof GAMEPLAN === 'undefined' || !cur || !Array.isArray(cur.plan) || !cur.plan.length) return null;
+    const us = (root.querySelector('#scout-us') || {}).value || 'white';
+    return GAMEPLAN.compliance(cur.plan, sc.plays || [], { us });
+  }
+  function planTableHtml(rows) {
+    const pct = r => r.followedPct == null ? '–' : r.followedPct + '%';
+    const sg = b => `${b.shots}/${b.goals}`;
+    return `<table class="plan-table"><thead><tr><th>Asked</th><th>Attacks</th><th>Followed</th><th title="shots / goals">When followed</th><th title="shots / goals">When not</th><th>Verdict</th></tr></thead><tbody>
+      ${rows.map(r => `<tr class="${r.side}"><td>${r.side === 'defense' ? '🛡 ' : '⚔ '}${esc(r.label)}</td><td>${r.attacks}${r.unread ? `<span class="muted"> (${r.unread} unread)</span>` : ''}</td><td><strong>${pct(r)}</strong></td><td>${sg(r.whenFollowed)} <span class="muted">in ${r.whenFollowed.n}</span></td><td>${sg(r.whenNot)} <span class="muted">in ${r.whenNot.n}</span></td><td class="muted">${esc(r.verdict)}</td></tr>`).join('')}
+    </tbody></table>`;
+  }
+  function planReportHtml(sc) {
+    const rows = planRows(sc);
+    if (!rows) return `<div class="ef-label" style="margin-top:12px">Plan vs reality</div><div class="muted">${ctx.canEdit ? 'Tick the instructions under 🎯 Game plan to see how many attacks followed the plan — and whether it worked.' : 'No game plan was set for this match.'}</div>`;
+    return `<div class="ef-label" style="margin-top:12px">Plan vs reality — what we asked, what happened</div>${planTableHtml(rows)}<p class="fa-note">"Followed" = the recognised tactic matched the instruction; "unread" = attacks the detector could not classify (counted, never hidden). Shots / goals are read from the ball reaching the goal line.</p>`;
+  }
+  /* ---------- every attack: clip + board ---------- */
+  const resultOf = p => p.goal ? '⚽ goal' : p.endsInShot ? '🎯 shot' : '— no shot';
+  function attacksHtml(sc, result) {
+    const plays = sc.plays || []; if (!plays.length) return '';
+    const us = (root.querySelector('#scout-us') || {}).value || 'white';
+    const usSide = typeof GAMEPLAN !== 'undefined' ? GAMEPLAN.usSide(us) : 'att';
+    const hasVideo = !!(result && result.meta && result.meta.videoRef);
+    return `<div class="ef-label" style="margin-top:12px">Every attack (${plays.length})${hasVideo ? '' : ' <span class="muted">· clips need the uploaded file on the backend</span>'}</div>
+      <div class="attack-list">${plays.map((p, i) => `<div class="attack-row" data-i="${i}">
+        <span class="ar-t">${fmt(p.tStart)}–${fmt(p.tEnd)}</span>
+        <span class="ar-who ${p.offense === usSide ? 'us' : 'them'}">${p.offense === usSide ? 'us' : 'them'}</span>
+        <span class="ar-main"><strong>${esc(p.name)}</strong> <span class="muted">${esc(p.situation)} · ${Math.round(p.confidence * 100)}% · ${p.passes} pass${p.passes === 1 ? '' : 'es'}${p.defence ? ' · vs ' + esc(p.defence) : ''}</span></span>
+        <span class="ar-res">${resultOf(p)}</span>
+        <span class="ar-actions">${hasVideo ? `<button class="btn-ghost sm" data-clip="${i}">▶ Clip</button>` : ''}<button class="btn-ghost sm" data-board="${i}">Board ⚡</button></span>
+        <div class="ar-clip" hidden></div>
+      </div>`).join('')}</div>`;
+  }
+  async function cutClip(videoRef, t0, t1) {
+    const r = await fetch(scoutBase() + '/api/clip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, start: Math.max(0, t0 - 2), end: t1 + 2 }) });
+    if (!r.ok) throw new Error('clip-' + r.status);
+    return (await r.json()).clipUrl;
+  }
+  function wireAttacks(out, sc, result) {
+    out.querySelectorAll('[data-clip]').forEach(b => b.onclick = async () => {
+      const p = sc.plays[+b.dataset.clip], holder = b.closest('.attack-row').querySelector('.ar-clip');
+      b.disabled = true; holder.hidden = false; holder.innerHTML = '<span class="muted">Cutting the clip… ⏳</span>';
+      try { const url = await cutClip(result.meta.videoRef, p.tStart, p.tEnd); holder.innerHTML = `<video controls playsinline preload="metadata" src="${esc(scoutBase() + url)}"></video>`; }
+      catch (e) { holder.innerHTML = `<span class="muted">Clip failed (${esc(e.message)}).</span>`; b.disabled = false; }
+    });
+    out.querySelectorAll('[data-board]').forEach(b => b.onclick = () => {
+      const p = sc.plays[+b.dataset.board];
+      if (typeof ctx.openPlay === 'function') ctx.openPlay({ title: `${cur.title} — ${p.name} @ ${fmt(p.tStart)}`, description: (p.steps || []).join(' → '), situation: p.situation, frames: p.frames, notes: p.notes });
+    });
+  }
+  /* ---------- Debriefs: share with the team, comments ---------- */
+  const teamOf = () => (ctx && ctx.user && (ctx.user.team || ctx.user.club)) || 'club';
+  async function shareDebrief(btn, sc, result) {
+    const st = root.querySelector('#scout-share-status'); btn.disabled = true;
+    const us = (root.querySelector('#scout-us') || {}).value || 'white', usSide = typeof GAMEPLAN !== 'undefined' ? GAMEPLAN.usSide(us) : 'att';
+    const rows = planRows(sc) || [];
+    const plays = (sc.plays || []).slice().sort((a, b) => (b.tactic !== 'unclassified') - (a.tactic !== 'unclassified') || (b.endsInShot - a.endsInShot)).slice(0, 12).sort((a, b) => a.tStart - b.tStart);
+    const items = [];
+    try {
+      for (let i = 0; i < plays.length; i++) {
+        const p = plays[i]; if (st) st.textContent = ` — preparing clip ${i + 1}/${plays.length}…`;
+        let clipUrl = null; if (result && result.meta && result.meta.videoRef) { try { clipUrl = await cutClip(result.meta.videoRef, p.tStart, p.tEnd); } catch (e) {} }
+        const asked = rows.filter(r => r.side === (p.offense === usSide ? 'offense' : 'defense')).map(r => r.label).join(', ');
+        const followed = rows.length && typeof GAMEPLAN !== 'undefined' ? (() => { const js = cur.plan.map(id => GAMEPLAN.byId(id)).filter(Boolean).map(ins => GAMEPLAN.judge(ins, p, us)).filter(j => j.applies && j.read); return js.length ? js.some(j => j.followed) : null; })() : null;
+        items.push({ t0: p.tStart, t1: p.tEnd, title: `${fmt(p.tStart)} · ${p.offense === usSide ? 'us' : 'them'} · ${p.name}`, note: (p.steps || []).join(' → '), result: resultOf(p), asked, followed, clipUrl, frames: p.frames, notes: p.notes });
+      }
+      if (st) st.textContent = ' — publishing…';
+      const body = { team: teamOf(), title: `Debrief: ${cur.title}`, matchTitle: cur.title, author: ctx.user && ctx.user.name, us, summary: sc.summary, plan: rows, items };
+      const r = await fetch(scoutBase() + '/api/debriefs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r.ok) throw new Error('debrief-' + r.status);
+      if (st) st.textContent = ' — shared ✓ (see Team debriefs below)'; ctx.toast('Debrief shared with the team');
+      await loadDebriefs(); const d = root.querySelector('#film-debriefs'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) { if (st) st.textContent = ` — failed (${e.message})`; btn.disabled = false; }
+  }
+  async function loadDebriefs() {
+    const list = root && root.querySelector('#debrief-list'); if (!list) return;
+    try {
+      const r = await fetch(scoutBase() + '/api/debriefs?team=' + encodeURIComponent(teamOf()));
+      const { debriefs } = await r.json();
+      if (!debriefs.length) { list.innerHTML = '<span class="muted">No debriefs shared yet.' + (ctx.canEdit ? ' Scout a video, then “Share debrief with the team”.' : '') + '</span>'; return; }
+      list.className = 'debrief-list';
+      list.innerHTML = debriefs.map(d => `<button class="debrief-item" data-deb="${d.id}"><strong>${esc(d.title)}</strong><span class="muted">${new Date(d.createdAt).toLocaleDateString()} · ${esc(d.author || '')} · ${d.items} plays · 💬 ${d.comments}</span></button>`).join('');
+      list.querySelectorAll('[data-deb]').forEach(b => b.onclick = () => openDebrief(b.dataset.deb));
+    } catch (e) { list.innerHTML = `<span class="muted">Debriefs live on the analysis backend (${esc(scoutBase())}) — it didn’t respond.</span>`; }
+  }
+  async function openDebrief(id) {
+    const box = root && root.querySelector('#debrief-open'); if (!box) return;
+    box.innerHTML = '<div class="muted">Loading…</div>';
+    let d; try { d = await (await fetch(scoutBase() + '/api/debriefs/' + id)).json(); } catch (e) { box.innerHTML = '<div class="muted">Could not load this debrief.</div>'; return; }
+    const cmts = itemId => d.comments.filter(c => (c.itemId || null) === (itemId || null));
+    const cHtml = itemId => `<div class="deb-comments" data-for="${itemId || ''}">${cmts(itemId).map(c => `<div class="deb-c"><strong>${esc(c.author)}</strong> <span class="muted">${new Date(c.at).toLocaleString()}</span><div>${esc(c.text)}</div></div>`).join('') || '<span class="muted">No comments yet.</span>'}
+      <div class="deb-c-new"><input type="text" placeholder="Add a comment…" data-cin="${itemId || ''}" /><button class="btn-ghost sm" data-cpost="${itemId || ''}">Post</button></div></div>`;
+    box.innerHTML = `<div class="debrief">
+      <div class="deb-head"><h4>${esc(d.title)}</h4><span class="muted">${esc(d.author || '')} · ${new Date(d.createdAt).toLocaleString()}</span><button class="btn-ghost sm" id="deb-close">Close</button></div>
+      ${d.summary.length ? `<div class="scout-summary">${d.summary.map(l => `<div class="ins-row">${esc(l)}</div>`).join('')}</div>` : ''}
+      ${d.plan.length ? `<div class="ef-label">Plan vs reality</div>${planTableHtml(d.plan)}` : ''}
+      <div class="ef-label">Plays (${d.items.length})</div>
+      ${d.items.map((it, i) => `<div class="deb-item" data-item="${it.id}">
+        <div class="deb-item-head"><strong>${esc(it.title)}</strong> <span class="ar-res">${esc(it.result)}</span>${it.asked ? `<span class="muted"> · asked: ${esc(it.asked)}${it.followed == null ? '' : it.followed ? ' · ✔ followed' : ' · ✘ not followed'}</span>` : ''}</div>
+        ${it.note ? `<div class="muted">${esc(it.note)}</div>` : ''}
+        <div class="deb-media">
+          ${it.clipUrl ? `<video controls playsinline preload="metadata" src="${esc(scoutBase() + it.clipUrl)}"></video>` : '<span class="muted">no clip</span>'}
+          ${it.frames && it.frames.length ? `<div class="deb-board"><svg viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet" data-board-i="${i}"></svg><button class="btn-ghost sm" data-replay="${i}">▶ Replay on the board</button></div>` : ''}
+        </div>
+        ${cHtml(it.id)}
+      </div>`).join('')}
+      <div class="ef-label">Discussion</div>${cHtml(null)}
+    </div>`;
+    box.querySelector('#deb-close').onclick = () => { box.innerHTML = ''; };
+    // board replays
+    const players = {};
+    box.querySelectorAll('svg[data-board-i]').forEach(svg => {
+      try {
+        const it = d.items[+svg.dataset.boardI];
+        const scn = DATA.newScenario(sitFromFrame(it.frames[0]) || '6v6', 'offense'); scn.frames = it.frames; scn.notes = it.notes || {};
+        const pl = new ANIM.Player(new ANIM.Renderer(svg), scn); pl.setPaths(true); pl.seek(0); players[svg.dataset.boardI] = pl;
+      } catch (e) {}
+    });
+    box.querySelectorAll('[data-replay]').forEach(b => b.onclick = () => { const pl = players[b.dataset.replay]; if (pl) { pl.seek(0); pl.play(); } });
+    // comments
+    box.querySelectorAll('[data-cpost]').forEach(b => b.onclick = async () => {
+      const inp = box.querySelector(`input[data-cin="${b.dataset.cpost}"]`); const text = (inp.value || '').trim(); if (!text) return;
+      b.disabled = true;
+      try {
+        const r = await fetch(scoutBase() + '/api/debriefs/' + id + '/comments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ author: ctx.user && ctx.user.name, text, itemId: b.dataset.cpost || null }) });
+        if (!r.ok) throw new Error('comment-' + r.status);
+        await openDebrief(id); loadDebriefs();
+      } catch (e) { ctx.toast('Comment failed: ' + e.message); b.disabled = false; }
+    });
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function renderReview(result) {
@@ -668,6 +821,8 @@ const FILM = (() => {
         </div>
       </div>` : ''}
 
+      ${canEdit ? planPanelHtml(s) : ''}
+
       ${canEdit && s.source.kind==='file' ? `<div class="film-auto" id="film-auto">
         <div class="fa-head"><strong>🔎 Auto-analyse <span class="fa-beta">beta</span></strong>
           <button class="btn-ghost sm" id="film-scan">Scan the footage</button>
@@ -732,6 +887,12 @@ const FILM = (() => {
           <h3 class="fp-h">What the video says</h3>
           <div class="film-insights">${insights(s).map(i=>`<div class="fi-row">${i}</div>`).join('')}</div>
         </div>
+      </div>
+
+      <div class="film-panel" id="film-debriefs">
+        <h3>📣 Team debriefs <span class="rightbar-hint">plan vs reality · clips · board · comments</span></h3>
+        <div id="debrief-list" class="muted">Loading debriefs…</div>
+        <div id="debrief-open"></div>
       </div>`;
 
     // video
@@ -761,6 +922,14 @@ const FILM = (() => {
     if (posBtn) { posBtn.disabled = !vHomography; posBtn.onclick = () => trackPositions(posBtn); }
     const scoutBtn = main.querySelector('#scout-run');
     if (scoutBtn) scoutBtn.onclick = () => runAutoScout(scoutBtn);
+    main.querySelectorAll('#film-plan .plan-chip').forEach(b => b.onclick = () => {
+      s.plan = Array.isArray(s.plan) ? s.plan : [];
+      const i = s.plan.indexOf(b.dataset.ins); if (i >= 0) s.plan.splice(i, 1); else s.plan.push(b.dataset.ins);
+      b.classList.toggle('on', i < 0); save(sessions);
+      const c = main.querySelector('#plan-count'); if (c) c.textContent = s.plan.length ? `${s.plan.length} instruction${s.plan.length > 1 ? 's' : ''}` : 'nothing asked yet';
+      if (lastScout && lastScout.sessionId === s.id) renderScout(lastScout.sc, lastScout.result);
+    });
+    loadDebriefs();
     if (main.querySelector('#film-cloud') && typeof ANALYSIS !== 'undefined') {
       const ep = main.querySelector('#cloud-endpoint'); if (ep) ep.value = ANALYSIS.getEndpoint();
       updateCloudStatus();

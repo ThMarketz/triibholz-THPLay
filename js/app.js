@@ -144,6 +144,14 @@
         if (n) { DATA.save(state.scenarios); DATA.logActivity('play', `Auto-scout added ${n} play${n > 1 ? 's' : ''} from “${source || 'video'}”`, 'Auto-scout'); renderLibrary(); }
         return n;
       },
+      // an auto-scouted attack (≤6 keyframes) opens as an animated play in the editor
+      openPlay: (play) => {
+        const sc = DATA.newScenario(play.situation || '6v6', 'offense');
+        sc.title = play.title || 'Scouted attack'; sc.description = play.description || '';
+        if (play.frames && play.frames.length) sc.frames = DATA.clone(play.frames);
+        sc.notes = DATA.clone(play.notes || {});
+        openEditor(sc, true);
+      },
       rebuild: (situation, phase, title, desc, frame) => {
         const sc = DATA.newScenario(situation, phase);
         sc.title = title; sc.description = desc;

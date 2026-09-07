@@ -56,7 +56,7 @@ const ANALYSIS = (() => {
       .filter(f => f && f.boardFrame)
       .map(f => ({ t: +f.t || 0, boardFrame: f.boardFrame }));
     if (r.scout && typeof r.scout === 'object') out.scout = r.scout;   // auto-scout report (possessions/plays/profile/summary/playbook)
-    if (r.meta && typeof r.meta === 'object') out.meta = { seconds: +r.meta.seconds || 0, fps: +r.meta.fps || 0, chunks: +r.meta.chunks || 0 };   // whole-video job stats
+    if (r.meta && typeof r.meta === 'object') { out.meta = { seconds: +r.meta.seconds || 0, fps: +r.meta.fps || 0, chunks: +r.meta.chunks || 0 }; if (typeof r.meta.videoRef === 'string') out.meta.videoRef = r.meta.videoRef; }   // whole-video job stats
     return out;
   }
 

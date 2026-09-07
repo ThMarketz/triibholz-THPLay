@@ -53,3 +53,35 @@ didn't see.
 2. **🧠 Scout this video** → read the summary and plays → **Add plays**.
 3. API: `POST /api/analyse` with `mode:'frames'` + `scout:true` returns `result.scout`
    (`possessions`, `plays`, `profile`, `summary`, `playbook`).
+
+## Game plan → plan vs reality → team debrief (v1.24.0)
+
+**What we asked vs what happened.** On a match, tick under **🎯 Game plan** the instructions
+given to the players (18 in the library: drive & kick, feed the hole, pick & roll, swing,
+wing iso, counter, man‑up 4‑2 / 3‑3, shoot high / low, quick / patient attacks; press, drop,
+zone, deny the hole feed, stop the drive & kick, concede no counters). After
+**Scout this video** the report shows a **Plan vs reality** table, per instruction:
+
+| Asked | Attacks | Followed | When followed (shots/goals) | When not | Verdict |
+|---|---|---|---|---|---|
+| ⚔ Drive & kick | 14 (2 unread) | 64 % | 5 / 3 in 9 | 1 / 0 in 3 | largely followed — and it worked better |
+
+`js/gameplan.js` is pure and unit‑tested (`GAMEPLAN.compliance(planIds, scout.plays, {us})`).
+"Followed" means the recognised tactic matched the instruction; "unread" attacks (the
+detector could not classify them) are always counted, never hidden.
+
+**Every attack** is listed with time, side, tactic, confidence and result. **▶ Clip** cuts
+that possession out of the uploaded match on the backend (`POST /api/clip` → h264, 640 px,
+served with range requests from `/api/clips/…`); **Board ⚡** opens it as an animated play in
+the editor.
+
+**📣 Share debrief with the team** publishes summary + plan table + up to 12 attacks (clip +
+board play + "asked / followed") to `POST /api/debriefs`. Everyone on the same backend sees
+**Team debriefs** at the bottom of the Film Room, replays each play on the board, watches the
+clip, and comments per play or on the whole match (`POST /api/debriefs/:id/comments`).
+Debriefs are stored per team in the backend data directory — one club per backend today;
+the multi‑club tenancy layer from the rollout roadmap takes over later.
+
+**Synthetic demo clip:** `docs/demo/triibholz-demo-attack.mp4` (20 s, white drive & kick
+then a dark possession) is generated, not filmed — it proves the pipeline end‑to‑end and
+produces a recognised drive & kick, not a benchmark of real‑footage accuracy.

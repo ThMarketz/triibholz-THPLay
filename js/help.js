@@ -67,6 +67,16 @@ const HELP = (() => {
       'Pick which caps are “us” with the White / Dark switch so the summary reads from your side.',
     ]},
 
+    gameplan: { icon:'🎯', title:'Game plan → plan vs reality → team debrief', steps:[
+      'Before (or after) the match, open it in the Film Room and tick under <strong>🎯 Game plan</strong> what you asked the players for — e.g. “Man-up: play 4-2”, “Press”, “Deny the hole feed”, “Shoot high”.',
+      'Run <strong>🧠 Scout this video</strong>. The report gains a <strong>Plan vs reality</strong> table: per instruction, how many attacks there were, how often the plan was followed, and the shots / goals when it was followed vs. when it was not — plus how many attacks the detector could not read.',
+      '<strong>Every attack</strong> is listed with its time, tactic and result; <em>▶ Clip</em> cuts that possession out of the match video on the backend, <em>Board ⚡</em> opens it as an animated play in the editor.',
+      '<strong>📣 Share debrief with the team</strong> publishes the summary, the plan table and every attack (clip + board play) to <strong>Team debriefs</strong>, where players replay the board, watch the clips and leave comments per play or on the whole match.',
+    ], tips:[
+      'Debriefs and comments are stored on the club’s analysis backend, so everyone on the same backend sees them; they are not shared outside the club.',
+      'A “followed” judgement is only as good as the tactic recognition — clean, steady footage first; unread attacks are always shown as a count.',
+    ]},
+
     privacy: { icon:'🔒', title:'Confidential tactics &amp; anonymous learning', steps:[
       'Every play has a <strong>Who can see it</strong> setting: <strong>👥 Team</strong> (your team only, the default), <strong>🌐 Club</strong> (everyone in the club) or <strong>🔒 Private</strong> (only you — for confidential tactics). Others simply never see private plays in their library.',
       '<strong>The system still learns from private plays — anonymously.</strong> It reduces a play to a handful of pattern features (situation, number of steps, passes, shot zone, a coarse formation shape) and strips the title, description, notes, owner and club. The play itself never leaves the device.',
