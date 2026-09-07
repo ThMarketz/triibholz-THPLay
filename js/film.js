@@ -678,6 +678,12 @@ const FILM = (() => {
           <span class="fa-note">Auto-tag the match, then confirm what’s right — the same workflow whether it runs on-device (now) or in the cloud (when a pipeline is live). Calibrate first under Position tracking.</span></div>
         <div class="cloud-cfg"><input type="text" id="cloud-endpoint" placeholder="Cloud endpoint URL (optional — blank = on-device)" /><button class="btn-ghost sm" id="cloud-save">Save endpoint</button></div>
         <div id="cloud-out"></div>
+      </div>` : canEdit ? `<div class="film-auto" id="film-scout">
+        <div class="fa-head"><strong>🧠 Auto-scout <span class="fa-beta">Tier 3</span></strong>
+          <button class="btn-primary sm" id="scout-run" disabled>Scout this video</button>
+          <span class="cloud-status offline" id="scout-status">● needs the video file</span>
+          <span class="fa-note">Auto-scout, position tracking and auto-analyse read the <strong>video file itself</strong>. This match is ${s.source.kind==='youtube' ? 'a YouTube link' : 'an external link'} the analyser can’t open — download the match from ${s.source.kind==='youtube' ? 'YouTube' : 'your camera platform (Veo, Pixellot, …)'} and use <strong>Upload video</strong> on the left; the tools appear on that upload.</span></div>
+        <div id="scout-out"></div>
       </div>` : ''}
 
       <div class="film-grid2">

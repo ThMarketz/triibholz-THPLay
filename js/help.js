@@ -58,7 +58,7 @@ const HELP = (() => {
     ]},
 
     autoscout: { icon:'🧠', title:'Auto-scout — the system builds the playbook from a video', steps:[
-      'In the Film Room, on an uploaded match video, calibrate the pool once, then press <strong>🧠 Scout this video</strong>. The backend watches the <em>whole</em> video (a minute or a full match — long videos run as a background job you can poll).',
+      'In the Film Room, on an <strong>uploaded video file</strong> (Upload video — a YouTube or Veo link can’t be read by the analyser; download the match first), calibrate the pool once, then press <strong>🧠 Scout this video</strong>. The backend watches the <em>whole</em> video (a minute or a full match — long videos run as a background job you can poll).',
       'It cuts the match into <strong>possessions</strong>, boils each one down to a clean play (start → passes → drives → shot), and <strong>recognises the tactic</strong>: drive &amp; kick, hole entry, pick &amp; roll, perimeter swing, wing isolation, counter-attack, man-up 4-2 / 3-3, and the defence it met (press / drop / zone).',
       'You get a <strong>scouting summary</strong> in plain sentences (tendencies with percentages, shot zones, tempo, man-up count) for <em>both</em> teams — so it works to study your own movements or to read what the opponent is trying to play.',
       'Press <strong>Add plays to my playbook</strong> — the distinct recognised plays land as real, editable plays (Team visibility). Anything below 80% confidence is flagged <em>needs review</em>; nothing is invented below 50%.',

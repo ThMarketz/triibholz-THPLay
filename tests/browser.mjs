@@ -215,7 +215,9 @@ const fbBefore = await fball.getAttribute('transform');
 await dragBy(page, fball, -38, 18);
 ok('board ball draggable', (await fball.getAttribute('transform')) !== fbBefore);
 await page.screenshot({ path:OUT+'/qa_13_filmroom.png' });
-// 🧠 Auto-scout panel — only for uploaded videos (the [3e] clip), side selectable, fails gracefully without a backend
+// 🧠 Auto-scout — on a link-based match the panel explains it needs the video file (button disabled)
+ok('link-based match: scout panel explains it needs the file', await page.locator('#film-scout #scout-run[disabled]').count()===1 && /Upload video/.test(await page.locator('#film-scout').textContent()));
+// … and on an uploaded video (the [3e] clip) it is live: side selectable, fails gracefully without a backend
 await page.click('.film-item:has-text("clip")'); await page.waitForTimeout(500);
 await page.locator('#film-scout').scrollIntoViewIfNeeded().catch(()=>{});
 ok('auto-scout panel with run button + side select', await page.locator('#scout-run').count()===1 && await page.locator('#scout-us option').count()===2);

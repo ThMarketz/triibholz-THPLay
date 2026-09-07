@@ -47,7 +47,9 @@ Everything is confidence‑gated and reviewable; the system never fabricates a p
 didn't see.
 
 ## How to test it
-1. Film Room → upload `docs/demo/triibholz-demo-clip.mp4` (or any clip) → Calibrate.
+1. Film Room → **Upload video** with `docs/demo/triibholz-demo-clip.mp4` (or any clip) → Calibrate.
+   A match added as a YouTube / Veo / other **link** shows the panel greyed out: the analyser needs
+   the file itself, so download the match from the camera platform and upload it.
 2. **🧠 Scout this video** → read the summary and plays → **Add plays**.
 3. API: `POST /api/analyse` with `mode:'frames'` + `scout:true` returns `result.scout`
    (`possessions`, `plays`, `profile`, `summary`, `playbook`).
