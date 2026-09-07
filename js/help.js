@@ -77,6 +77,16 @@ const HELP = (() => {
       'A “followed” judgement is only as good as the tactic recognition — clean, steady footage first; unread attacks are always shown as a count.',
     ]},
 
+    share: { icon:'📤', title:'Download, import &amp; share plays — sets and video reels', steps:[
+      '<strong>⬇ Download</strong> (top right of an open play) saves it as a small <em>.thplay.json</em> file — send it to another coach, keep it as a backup, or move it to your other device.',
+      '<strong>⬆ Import</strong> (left, above the play list) reads such files — or drop a file onto the list. Plays already in your playbook are skipped, not duplicated.',
+      '<strong>🔗 Share</strong> makes a link that carries the whole play: whoever opens it sees it animated and can press <em>Save to my playbook</em>. On a phone it opens the share sheet (WhatsApp, Mail, AirDrop…).',
+      '<strong>☑ Select</strong> lets you pick several plays — e.g. all your defense scenarios — then <strong>⬇ Set</strong> downloads them as one file, and <strong>🎬 Reel</strong> renders them into ONE video: a title card and the animation for each play, ready to send to the team.',
+    ], tips:[
+      'Private and team-only plays ask you to confirm before they leave the app — a file or link can’t be taken back.',
+      'A share link works without a login for the play itself; saving it into a playbook needs a signed-in (or demo) user.',
+    ]},
+
     privacy: { icon:'🔒', title:'Confidential tactics &amp; anonymous learning', steps:[
       'Every play has a <strong>Who can see it</strong> setting: <strong>👥 Team</strong> (your team only, the default), <strong>🌐 Club</strong> (everyone in the club) or <strong>🔒 Private</strong> (only you — for confidential tactics). Others simply never see private plays in their library.',
       '<strong>The system still learns from private plays — anonymously.</strong> It reduces a play to a handful of pattern features (situation, number of steps, passes, shot zone, a coarse formation shape) and strips the title, description, notes, owner and club. The play itself never leaves the device.',

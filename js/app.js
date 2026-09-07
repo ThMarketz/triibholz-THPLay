@@ -188,6 +188,8 @@
     show('app-screen');
     refreshAdminBadge();
     switchView('dashboard');
+    if ($('import-btn')) $('import-btn').hidden = !canEdit();
+    if (typeof SHARE!=='undefined' && SHARE.fromHash(location.hash)) openSharedPlay();
     maybeRunTour();
   }
   function refreshAdminBadge() {
@@ -705,18 +707,19 @@
     if (items.length===0) list.innerHTML = `<div class="empty-lib">No ${state.phase} plays here yet.${canEdit()?'<br><span>Press “+ New” to build one.</span>':''}</div>`;
     items.forEach(scn => {
       const card = document.createElement('button');
-      card.className='scn-card' + (scn.id===state.selectedId?' active':'');
-      card.innerHTML = `
+      card.className='scn-card' + (scn.id===state.selectedId?' active':'') + (selecting?' selectable':'') + (selecting && selected.has(scn.id)?' picked':'');
+      card.innerHTML = `${selecting?`<span class="scn-check">${selected.has(scn.id)?'☑':'☐'}</span>`:''}
         <div class="scn-card-top">
           <span class="scn-title">${escapeHtml(scn.title||'Untitled play')}</span>
           ${scn.builtIn?'<span class="tag tag-sample">sample</span>':'<span class="tag tag-yours">saved</span>'}${(typeof PRIVACY!=='undefined' && !scn.builtIn && PRIVACY.levelOf(scn)!=='team')?`<span class="tag vis-${PRIVACY.levelOf(scn)}">${PRIVACY.levelOf(scn)==='private'?'🔒':'🌐'}</span>`:''}
         </div>
         <div class="scn-desc">${escapeHtml(scn.description||'')}</div>
         <div class="scn-meta"><span>${scn.frames.length} step${scn.frames.length>1?'s':''}</span><span>${escapeHtml(scn.author||'')}</span></div>`;
-      card.onclick = () => openScenario(scn.id);
+      card.onclick = () => selecting ? togglePick(scn.id) : openScenario(scn.id);
       list.appendChild(card);
     });
-    if (canEdit()) {
+    updateSelectBar();
+    if (canEdit() && !selecting) {
       const plus = document.createElement('button');
       plus.className = 'scn-card scn-new';
       plus.innerHTML = '<span class="scn-new-plus">＋</span> Create a new play';
@@ -736,6 +739,8 @@
     $('scenario-title').textContent = 'Select a scenario';
     $('scenario-desc').textContent = ''; $('scenario-desc').style.display = '';
     $('edit-btn').hidden = true;
+    if ($('dl-btn')) { $('dl-btn').hidden = true; $('share-btn').hidden = true; }
+    if ($('shared-banner')) $('shared-banner').hidden = true;
     $('assign-list').innerHTML = ''; POOL.render($('pool'));
   }
 
@@ -748,6 +753,8 @@
     $('scenario-title').textContent = scn.title || 'Untitled play';
     $('scenario-desc').textContent = scn.description || '';
     $('edit-btn').hidden = !canEdit();
+    if ($('dl-btn')) { $('dl-btn').hidden = false; $('share-btn').hidden = false; }
+    if ($('shared-banner')) $('shared-banner').hidden = !scn.shared;
     state.focus = (state.viewMode==='me') ? defaultFocus() : null;
     buildViewer(0, false);
     syncFocusUI();
@@ -1436,6 +1443,158 @@
     if (b.hidden) closeAudible();
   }
 
+  /* ======================================================
+     DOWNLOAD · IMPORT · SHARE LINK · MULTI-SELECT (set / reel)
+     Plays are portable: a .thplay.json file, or a link that carries
+     the whole play. Confidential plays ask before they leave the app.
+     ====================================================== */
+  let selecting = false; const selected = new Set();
+  function askConfirm(msg, okLabel) {
+    return new Promise(resolve => {
+      const m = $('confirm-modal'); if (!m) { resolve(true); return; }
+      $('confirm-text').textContent = msg; $('confirm-yes').textContent = okLabel || 'Continue';
+      m.hidden = false;
+      const done = v => { m.hidden = true; $('confirm-yes').onclick = null; $('confirm-no').onclick = null; resolve(v); };
+      $('confirm-yes').onclick = () => done(true); $('confirm-no').onclick = () => done(false);
+    });
+  }
+  const currentScenario = () => state.scenarios.find(s => s.id === state.selectedId);
+  const levelOf = sc => (typeof PRIVACY !== 'undefined' && !sc.builtIn) ? PRIVACY.levelOf(sc) : 'public';
+  async function guardConfidential(scns) {
+    const conf = scns.filter(sc => levelOf(sc) !== 'public');
+    if (!conf.length) return true;
+    const allPriv = conf.every(sc => levelOf(sc) === 'private');
+    const what = conf.length === 1 ? `“${conf[0].title || 'this play'}” is` : `${conf.length} of these plays are`;
+    return askConfirm(`${what} marked ${allPriv ? 'private' : 'team-only'}. Once downloaded or shared, the file leaves the app and you can’t take it back. Continue?`, 'Yes, export');
+  }
+  async function downloadPlay() {
+    const sc = currentScenario(); if (!sc || typeof SHARE === 'undefined') return;
+    if (!await guardConfidential([sc])) return;
+    downloadBlob(JSON.stringify(SHARE.pack(sc), null, 1), SHARE.filename(sc.title, 'thplay.json'), 'application/json');
+    DATA.logActivity('play', `Downloaded “${sc.title}”`, state.user && state.user.name);
+    toast('Play downloaded — send the file to another coach; they add it with ⬆ Import');
+  }
+  async function downloadSet(scns, name) {
+    if (!scns.length || typeof SHARE === 'undefined') return;
+    if (!await guardConfidential(scns)) return;
+    downloadBlob(JSON.stringify(SHARE.packMany(scns, { name }), null, 1), SHARE.filename(name, 'thplay.json'), 'application/json');
+    toast(`${scns.length} plays downloaded as one set`);
+  }
+  async function sharePlay() {
+    const sc = currentScenario(); if (!sc || typeof SHARE === 'undefined') return;
+    if (!await guardConfidential([sc])) return;
+    let url; try { url = SHARE.shareUrl(location.href, await SHARE.encode(SHARE.pack(sc))); } catch (e) { toast('Could not build the link'); return; }
+    if (navigator.share) { try { await navigator.share({ title: sc.title, text: 'Water polo play: ' + sc.title, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+    const done = () => toast('Link copied — whoever opens it sees the play animated and can save it to their playbook');
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done).catch(() => prompt('Copy this link', url));
+    else prompt('Copy this link', url);
+  }
+  function addImported(p, source) {
+    const sc = DATA.newScenario(p.situation, p.phase);
+    sc.title = p.title; sc.description = p.description || '';
+    sc.frames = DATA.clone(p.frames); sc.notes = DATA.clone(p.notes || {});
+    sc.author = (p.author || 'Imported') + (source ? ' · ' + source : '');
+    sc.visibility = p.visibility || 'team'; sc.owner = state.user && state.user.email; sc.builtIn = false;
+    if (p.tactic) sc.tactic = p.tactic;
+    while (state.scenarios.some(x => x.id === sc.id)) sc.id += 'i';
+    state.scenarios.push(sc);
+    return sc;
+  }
+  async function importFiles(files) {
+    if (typeof SHARE === 'undefined' || !files || !files.length) return;
+    const read = f => f.text ? f.text() : new Promise(r => { const fr = new FileReader(); fr.onload = () => r(String(fr.result || '')); fr.readAsText(f); });
+    const texts = await Promise.all(Array.from(files).map(read));
+    let added = 0, dup = 0, bad = 0, first = null;
+    texts.forEach(txt => {
+      const r = SHARE.unpack(txt); if (!r.plays.length) { bad++; return; }
+      r.plays.forEach(p => { if (SHARE.isDuplicate(p, state.scenarios)) { dup++; return; } const sc = addImported(p, 'imported'); added++; first = first || sc; });
+    });
+    if (added) { DATA.save(state.scenarios); DATA.logActivity('play', `Imported ${added} play${added > 1 ? 's' : ''}`, state.user && state.user.name); }
+    if (first) { state.situation = first.situation; state.phase = first.phase; buildSituationTabs(); refreshTabs(); renderLibrary(); openScenario(first.id); }
+    toast(`${added} play${added === 1 ? '' : 's'} imported${dup ? ` · ${dup} skipped (already in your playbook)` : ''}${bad ? ` · ${bad} file${bad > 1 ? 's' : ''} not a play` : ''}`);
+    return { added, dup, bad };
+  }
+  // ---- multi-select → set download / video reel
+  function toggleSelectMode(on) {
+    selecting = on == null ? !selecting : !!on; if (!selecting) selected.clear();
+    $('select-btn').classList.toggle('active', selecting);
+    $('select-bar').hidden = !selecting; $('sb-out').innerHTML = '';
+    renderLibrary();
+  }
+  function togglePick(id) { if (selected.has(id)) selected.delete(id); else selected.add(id); renderLibrary(); }
+  function updateSelectBar() {
+    const c = $('sb-count'); if (!c) return;
+    c.textContent = `${selected.size} selected`;
+    $('sb-download').disabled = !selected.size; $('sb-reel').disabled = !selected.size;
+  }
+  const pickedScenarios = () => Array.from(selected).map(id => state.scenarios.find(sc => sc.id === id)).filter(Boolean);
+  const setName = () => `${DATA.sit(state.situation).label} ${state.phase}`;
+  async function makeReel() {
+    const scns = pickedScenarios(); if (!scns.length || typeof VIDEOGEN === 'undefined') return;
+    if (!await guardConfidential(scns)) return;
+    const out = $('sb-out'); const btn = $('sb-reel'); btn.disabled = true;
+    const plays = scns.map(sc => ({ situation: sc.situation, phase: sc.phase, title: sc.title || 'Play', description: sc.description || '', frames: sc.frames, notes: sc.notes || {} }));
+    const total = VIDEOGEN.reelDuration(plays, { title: setName() });
+    out.innerHTML = `<div class="muted">Rendering the reel… ⏳ ${scns.length} plays, about ${Math.round(total)}s — <span id="sb-pct">0%</span></div>`;
+    try {
+      const res = await VIDEOGEN.recordReel(plays, { title: setName(), subtitle: `${scns.length} play${scns.length > 1 ? 's' : ''} · ${state.phase}`, onProgress: p => { const e = $('sb-pct'); if (e) e.textContent = Math.round(p * 100) + '%'; } });
+      const ext = /mp4/.test(res.mime) ? 'mp4' : 'webm';
+      const name = SHARE.filename(setName() + ' reel', ext);
+      out.innerHTML = `<video src="${res.url}" controls playsinline class="vid-preview"></video>
+        <div class="sb-actions"><a class="btn-primary sm" id="sb-reel-download" href="${res.url}" download="${escapeHtml(name)}">⬇ Download reel (${res.duration.toFixed(0)}s)</a>${navigator.share ? '<button class="btn-ghost sm" id="sb-reel-share">📤 Share…</button>' : ''}</div>`;
+      const sh = $('sb-reel-share'); if (sh) sh.onclick = async () => { try { const file = new File([res.blob], name, { type: res.mime }); if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: setName() + ' reel' }); else toast('Sharing files isn’t supported here — use Download'); } catch (e) {} };
+      toast('Reel ready — play it or download to share');
+    } catch (e) { out.innerHTML = `<div class="muted">Couldn’t render the reel — ${escapeHtml(e.message || 'unknown error')}.</div>`; }
+    finally { btn.disabled = !selected.size; }
+  }
+  // ---- a share link opens the play (no server, no login for the play itself)
+  async function openSharedPlay() {
+    const code = SHARE.fromHash(location.hash); if (!code) return;
+    let obj; try { obj = await SHARE.decode(code); } catch (e) { toast(e.message === 'unsupported-browser' ? 'This browser can’t open compressed share links' : 'This share link is damaged or from a newer version'); return; }
+    const r = SHARE.unpack(obj); if (!r.plays.length) { toast('The link holds no play'); return; }
+    const p = r.plays[0];
+    state.scenarios = state.scenarios.filter(sc => !sc.shared);
+    const sc = Object.assign(DATA.newScenario(p.situation, p.phase), { id: 'shared-' + SHARE.fingerprint(p), title: p.title, description: p.description || '', frames: DATA.clone(p.frames), notes: DATA.clone(p.notes || {}), author: (p.author || 'Someone') + ' · shared link', visibility: 'team', shared: true, builtIn: false, sharedPlay: p });
+    state.scenarios.push(sc);
+    state.situation = sc.situation; state.phase = sc.phase; buildSituationTabs(); refreshTabs();
+    switchView('playbook'); openScenario(sc.id);
+    const already = SHARE.isDuplicate(p, state.scenarios.filter(x => !x.shared));
+    $('shared-text').textContent = `🔗 Shared play “${sc.title}”${p.author ? ' from ' + p.author : ''}${already ? ' — already in your playbook' : ''}`;
+    $('shared-save').hidden = already; $('shared-banner').hidden = false;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  }
+  function saveSharedPlay() {
+    const sc = currentScenario(); if (!sc || !sc.shared) return;
+    const kept = addImported(sc.sharedPlay, 'shared link');
+    state.scenarios = state.scenarios.filter(x => !x.shared);
+    DATA.save(state.scenarios); DATA.logActivity('play', `Saved shared play “${kept.title}”`, state.user && state.user.name);
+    renderLibrary(); openScenario(kept.id); toast('Saved to your playbook');
+  }
+  function dismissShared() {
+    const sc = currentScenario();
+    state.scenarios = state.scenarios.filter(x => !x.shared);
+    $('shared-banner').hidden = true; renderLibrary();
+    if (sc && sc.shared) openFirstOrEmpty();
+  }
+  function wireShare() {
+    if (!$('dl-btn')) return;
+    $('dl-btn').onclick = downloadPlay; $('share-btn').onclick = sharePlay;
+    $('select-btn').onclick = () => toggleSelectMode();
+    $('sb-close').onclick = () => toggleSelectMode(false);
+    $('sb-all').onclick = () => { currentList().forEach(sc => selected.add(sc.id)); renderLibrary(); };
+    $('sb-download').onclick = () => downloadSet(pickedScenarios(), setName() + ' set');
+    $('sb-reel').onclick = makeReel;
+    $('import-btn').onclick = () => $('import-file').click();
+    $('import-file').onchange = e => { importFiles(e.target.files); e.target.value = ''; };
+    const list = $('scenario-list');
+    list.addEventListener('dragover', e => { if (canEdit()) { e.preventDefault(); list.classList.add('drop'); } });
+    list.addEventListener('dragleave', () => list.classList.remove('drop'));
+    list.addEventListener('drop', e => { list.classList.remove('drop'); if (!canEdit()) return; e.preventDefault(); if (e.dataTransfer && e.dataTransfer.files) importFiles(e.dataTransfer.files); });
+    $('shared-save').onclick = saveSharedPlay; $('shared-dismiss').onclick = dismissShared;
+    // a share link pasted while the app is already open (same-document hash change)
+    window.addEventListener('hashchange', () => { if (state.user && $('app-screen').classList.contains('active') && SHARE.fromHash(location.hash)) openSharedPlay(); });
+  }
+
   /* ---- Generate a shareable video of the play (offline animation / optional photoreal) ---- */
   function editPlay() {
     return { situation: edit.scenario.situation, title: edit.scenario.title || 'Play',
@@ -1794,6 +1953,7 @@
     const afterFocusChange = ()=>{ if(state.viewer)state.viewer.setFocus(state.focus); if(adjust.live)renderAdjustBoard(); syncFocusUI(); const s=state.scenarios.find(x=>x.id===state.selectedId); if(s)renderAssignments(s); };
     $('view-team').onclick = ()=>{ state.viewMode='team'; state.focus=null; afterFocusChange(); };
     $('steps-toggle').onclick = toggleSteps;
+    wireShare();
     $('view-me').onclick = ()=>{ state.viewMode='me'; state.focus=defaultFocus()||(state.user.position||'1'); afterFocusChange(); };
     $('focus-pos').onchange = (e)=>{ state.focus=e.target.value||null; state.viewMode=state.focus?'me':'team'; afterFocusChange(); };
 
@@ -1847,7 +2007,7 @@
     $('ed-phase').onchange = (e)=>{ edit.scenario.phase=e.target.value; };
     if ($('ed-visibility')) $('ed-visibility').onchange = (e)=>{ edit.scenario.visibility=e.target.value; };
 
-    $('logout-btn').onclick = (e)=>{ e.stopPropagation(); clearSession(); state.user=null; show('auth-screen'); };
+    $('logout-btn').onclick = (e)=>{ e.stopPropagation(); clearSession(); state.user=null; if (typeof SHARE!=='undefined' && $('auth-share-note')) $('auth-share-note').hidden = !SHARE.fromHash(location.hash); show('auth-screen'); };
     $('editor-modal').onclick = (e)=>{ if(e.target===$('editor-modal')) closeEditor(); };
   }
 
@@ -1897,6 +2057,7 @@
     }
     const sess = loadSession();
     if (sess && sess.email) { const u = DATA.findUserByEmail(sess.email); if (u && u.role) { routeUser(u); return; } }
+    if (typeof SHARE!=='undefined' && SHARE.fromHash(location.hash) && $('auth-share-note')) $('auth-share-note').hidden = false;
     show('auth-screen');
   }
   document.addEventListener('DOMContentLoaded', boot);

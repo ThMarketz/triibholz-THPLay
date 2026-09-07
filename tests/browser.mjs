@@ -52,6 +52,30 @@ ok('steps off → notes bar hidden, fewer marks on the board', !(await page.loca
 await page.screenshot({ path:OUT+'/qa_27_steps_off.png' });
 await page.click('#steps-toggle'); await page.waitForTimeout(200);
 ok('steps back on', await page.locator('#rightbar').isVisible());
+// ⬇ Download a play file · ☑ Select → 🎬 Reel of several plays (one real video) · 🔗 share link
+const dlp = page.waitForEvent('download', { timeout: 8000 });
+await page.click('#dl-btn');
+const dlFile = await dlp.catch(()=>null);
+ok('⬇ Download saves a .thplay.json play file', !!dlFile && /\.thplay\.json$/.test(dlFile.suggestedFilename()));
+await page.click('#select-btn'); await page.waitForTimeout(150);
+await page.click('#sb-all'); await page.waitForTimeout(150);
+const picked = await page.locator('.scn-card.picked').count();
+ok('select mode picks every play in the list ('+picked+')', picked>=2);
+await page.click('#sb-reel');
+await page.waitForFunction(() => { const o = document.querySelector('#sb-out'); return o && (o.querySelector('video') || /Couldn/i.test(o.textContent)); }, { timeout: 90000 });
+const reelSrc = await page.locator('#sb-out video').getAttribute('src').catch(()=>null);
+ok('🎬 Reel rendered ONE video for all selected plays', !!reelSrc && reelSrc.startsWith('blob:') && await page.locator('#sb-reel-download').count()===1);
+await page.screenshot({ path:OUT+'/qa_28_reel.png' });
+await page.click('#sb-close'); await page.waitForTimeout(100);
+const shareLink = await page.evaluate(async () => { const sc = { title:'Link test play', situation:'6v6', phase:'offense', frames:[{att:{1:{x:200,y:80},2:{x:150,y:140}},def:{1:{x:240,y:80}},gk:{x:292,y:110},ball:{carrier:'A1'}},{att:{1:{x:260,y:80},2:{x:150,y:140}},def:{1:{x:240,y:80}},gk:{x:292,y:110},ball:{carrier:null,x:293,y:110}}], notes:{1:'Drive and shoot.'} }; return SHARE.shareUrl(location.href, await SHARE.encode(SHARE.pack(sc))); });
+await page.goto(shareLink, { waitUntil:'networkidle' }); await page.waitForTimeout(600);
+ok('share link opens the play animated with the shared banner', await page.locator('#shared-banner:not([hidden])').count()===1 && /Link test play/.test(await page.locator('#scenario-title').textContent()));
+const cardsBeforeShare = await page.locator('.scn-card:not(.scn-new)').count();
+await page.click('#shared-save'); await page.waitForTimeout(300);
+ok('Save to my playbook keeps it', (await page.locator('.scn-card:not(.scn-new)').count())===cardsBeforeShare && await page.locator('#shared-banner').isHidden() && (await page.locator('.scn-card:has-text("Link test play")').count())===1);
+await page.screenshot({ path:OUT+'/qa_29_shared_link.png' });
+// back to a full 6v6 sample play for the sections that follow
+await page.locator('.scn-card:has-text("Drive & kick")').first().click(); await page.waitForTimeout(400);
 await page.click('#play-btn');
 await page.click('#step-fwd');
 ok('step label updates', /Step \d+ \/ \d+/.test(await page.locator('#frame-label').textContent()));

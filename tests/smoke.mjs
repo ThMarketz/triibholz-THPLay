@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -129,7 +129,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     kb('ArrowRight'); await wait(20);
     ok('ArrowRight steps forward', q('#frame-label').textContent!==lbl);
   }
-  ok('15 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===15);
+  ok('16 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===16);
   q('#help-btn').click(); await wait(15);
   ok('topbar ？ is context-aware (paused board → Adjust guide)', !!q('.help-backdrop:not([hidden])') &&
      /Adjust/i.test(q('#help-title').textContent));
@@ -648,6 +648,53 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('off → notes bar hidden, remembered on the device', q('#view-playbook').classList.contains('steps-hidden') && window.localStorage.getItem('thplay.showSteps')==='0' && q('#steps-toggle').getAttribute('aria-pressed')==='false');
     q('#steps-toggle').click(); await wait(20);
     ok('on again → notes bar back', !q('#view-playbook').classList.contains('steps-hidden') && window.localStorage.getItem('thplay.showSteps')==='1');
+  }
+
+  console.log('\n[6t] Download · import · share link · multi-select set/reel (SHARE)');
+  {
+    const { SHARE, VIDEOGEN, DATA } = window.__T;
+    const raw = { id:'usr-x', title:'Drive & kick', description:'d', situation:'6v6', phase:'defense', visibility:'private', author:'Coach', notes:{1:'Drive.'}, secret:'no',
+      frames:[{att:{1:{x:200.123,y:80}},def:{1:{x:240,y:80}},gk:{x:292,y:110},ball:{carrier:'A1'}},{att:{1:{x:240,y:80}},def:{},gk:{x:292,y:110},ball:{carrier:null,x:293,y:110}}] };
+    const pk = SHARE.pack(raw);
+    ok('pack → versioned file, positions rounded, unknown fields dropped, visibility kept', pk.format==='thplay-play' && pk.version===1 && pk.play.frames[0].att[1].x===200.1 && !('secret' in pk.play) && pk.play.visibility==='private' && pk.play.phase==='defense');
+    const code = await SHARE.encode(pk); const back = await SHARE.decode(code);
+    ok('share link code round-trips (compressed when the browser can)', /^[zj]\./.test(code) && JSON.stringify(back.play)===JSON.stringify(pk.play));
+    ok('unpack accepts file / set / raw / array, rejects junk', SHARE.unpack(JSON.stringify(pk)).plays.length===1 && SHARE.unpack(SHARE.packMany([raw,raw,{bad:1}],{name:'Defense set'})).plays.length===2 && SHARE.unpack(raw).plays.length===1 && SHARE.unpack('nope').error==='not-json' && SHARE.unpack({a:1}).error==='not-a-play-file');
+    ok('duplicate = same movement, whatever the title', SHARE.isDuplicate(Object.assign({},pk.play,{title:'Other name'}),[raw]) && !SHARE.isDuplicate(Object.assign({},pk.play,{frames:[pk.play.frames[0]]}),[raw]));
+    ok('share url + filename', SHARE.shareUrl('http://x/app/?join=1#foo','z.abc')==='http://x/app/#play=z.abc' && SHARE.fromHash('#play=z.abc&x=1')==='z.abc' && SHARE.filename('Drive & kick!','thplay.json')==='drive-kick.thplay.json');
+    // reel timeline: title card + (card + play) per play
+    const segs = VIDEOGEN.reelSegments([{title:'A',frames:raw.frames},{title:'B',frames:raw.frames}],{title:'6 on 6 defense'});
+    ok('reel = title card + card+play per play, duration adds up', segs.length===5 && segs[0].card.title==='6 on 6 defense' && Math.abs(VIDEOGEN.reelDuration([{frames:raw.frames},{frames:raw.frames}],{title:'t'}) - (2+2*1.5+2*VIDEOGEN.duration({frames:raw.frames})))<0.01);
+    // UI — coach is signed in from the earlier sections
+    q('.nav-btn[data-view="playbook"]').click(); await wait(30);
+    qa('#scenario-list .scn-card').find(c=>!c.classList.contains('scn-new')).click(); await wait(40);
+    ok('open play shows ⬇ Download + 🔗 Share; ⬆ Import for coaches', !q('#dl-btn').hidden && !q('#share-btn').hidden && !q('#import-btn').hidden);
+    q('#select-btn').click(); await wait(20);
+    ok('select mode → checkboxes on cards, select bar visible, actions disabled at 0', qa('.scn-card.selectable').length>=2 && !q('#select-bar').hidden && q('#sb-download').disabled && q('#sb-reel').disabled);
+    q('#sb-all').click(); await wait(20);
+    ok('“All here” picks every play in the list', /^(\d+) selected$/.test(q('#sb-count').textContent) && +q('#sb-count').textContent.split(' ')[0]===qa('.scn-card.selectable').length && !q('#sb-download').disabled);
+    qa('.scn-card.picked')[0].click(); await wait(20);
+    ok('clicking a picked card un-picks it', qa('.scn-card.picked').length===qa('.scn-card.selectable').length-1);
+    q('#sb-close').click(); await wait(20);
+    ok('leaving select mode clears the bar', q('#select-bar').hidden && qa('.scn-card.selectable').length===0);
+    // import a set through the file input (duplicates skipped)
+    const before = DATA.load().length;
+    const setFile = new window.File([JSON.stringify(SHARE.packMany([raw, Object.assign({}, raw, {title:'Second', frames:[raw.frames[1], raw.frames[0]]})],{name:'Set'}))], 'set.thplay.json', {type:'application/json'});
+    const inp = q('#import-file'); Object.defineProperty(inp, 'files', { value:[setFile], configurable:true });
+    inp.dispatchEvent(new window.Event('change')); await wait(120);
+    ok('import adds the plays (+2), keeps visibility, opens the first', DATA.load().length===before+2 && DATA.load().some(x=>x.title==='Drive & kick' && x.visibility==='private' && /imported/.test(x.author)) && q('#scenario-title').textContent==='Drive & kick');
+    inp.dispatchEvent(new window.Event('change')); await wait(120);   // same file again
+    ok('importing the same file again adds nothing (duplicates skipped)', DATA.load().length===before+2);
+    // share link → shared banner → save
+    const link = SHARE.shareUrl(window.location.href, await SHARE.encode(SHARE.pack(Object.assign({}, raw, {title:'From a friend', frames:[raw.frames[0], {att:{1:{x:100,y:100}},def:{},gk:{x:292,y:110},ball:{carrier:'A1'}}]}))));
+    window.location.hash = link.slice(link.indexOf('#'));
+    q('#logout-btn').click(); await wait(20);
+    ok('auth screen tells you a play is waiting', !q('#auth-share-note').hidden);
+    qa('.demo-btn').find(b=>b.dataset.demo==='coach').click(); await wait(200);
+    ok('after sign-in the shared play opens with its banner', !q('#shared-banner').hidden && /From a friend/.test(q('#shared-text').textContent) && q('#scenario-title').textContent==='From a friend');
+    const n0 = DATA.load().length; q('#shared-save').click(); await wait(60);
+    ok('Save to my playbook stores it (+1) and clears the banner', DATA.load().length===n0+1 && q('#shared-banner').hidden && DATA.load().some(x=>x.title==='From a friend' && /shared link/.test(x.author)));
+    window.location.hash = '';
   }
 
   console.log('\n[7] Basics + i18n');

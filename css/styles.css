@@ -831,3 +831,20 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .vt-btn.steps-btn:not(.active){opacity:.6;text-decoration:line-through}
 @media (max-width:1100px){.layout.steps-hidden{grid-template-columns:220px 1fr}}
 @media (max-width:760px){.layout.steps-hidden{grid-template-columns:1fr}}
+
+/* ---- Download / import / share / multi-select (v1.25) ---- */
+.lib-tools{display:flex;gap:6px;padding:6px 12px 0}
+.lib-tools .btn-ghost.active{background:var(--accent);color:#04151a;border-color:var(--accent)}
+.select-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);background:rgba(31,192,212,.06)}
+.sb-count{font-size:.8rem;color:var(--muted);margin-right:auto}
+.sb-out{flex-basis:100%}.sb-out video{width:100%;border-radius:8px;background:#000;margin-top:6px}
+.sb-actions{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.scn-card.selectable{position:relative;padding-left:34px}
+.scn-check{position:absolute;left:10px;top:12px;font-size:1.05rem;color:var(--muted)}
+.scn-card.picked{border-color:var(--accent);background:rgba(31,192,212,.10)}.scn-card.picked .scn-check{color:var(--accent)}
+.scenario-list.drop{outline:2px dashed var(--accent);outline-offset:-6px}
+.shared-banner{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 14px 0;padding:8px 12px;border:1px solid var(--accent);border-radius:10px;background:rgba(31,192,212,.10);font-size:.9rem}
+.shared-banner span{flex:1;min-width:200px}
+.auth-share-note{margin-bottom:12px;padding:8px 12px;border-radius:10px;background:rgba(31,192,212,.12);border:1px solid var(--accent);font-size:.9rem}
+.modal-sm{max-width:440px}.modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:0 18px 16px}
+#confirm-text{margin:0;line-height:1.45}

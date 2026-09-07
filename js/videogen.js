@@ -121,8 +121,64 @@ const VIDEOGEN = (() => {
     if (typeof MediaRecorder === 'undefined') return 'video/webm';
     return opts.find(m => { try { return MediaRecorder.isTypeSupported(m); } catch (e) { return false; } }) || 'video/webm';
   }
+  /* a title card between plays of a reel */
+  function drawCard(ctx, W, H, card, t) {
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#0b2a3a'); g.addColorStop(1, '#06151f');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const a = Math.min(1, t / 0.35);                       // quick fade-in
+    ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.fillStyle = '#e8f6f8';
+    ctx.font = `700 ${Math.round(H * 0.085)}px system-ui, -apple-system, Segoe UI, sans-serif`;
+    ctx.fillText(String(card.title || '').slice(0, 48), W / 2, H * 0.47);
+    if (card.sub) { ctx.fillStyle = '#7fd4de'; ctx.font = `500 ${Math.round(H * 0.045)}px system-ui, -apple-system, Segoe UI, sans-serif`; ctx.fillText(String(card.sub).slice(0, 80), W / 2, H * 0.58); }
+    ctx.fillStyle = 'rgba(232,246,248,.55)'; ctx.font = `600 ${Math.round(H * 0.032)}px system-ui, sans-serif`; ctx.fillText('Triibholz · THPLAY', W / 2, H * 0.92);
+    ctx.globalAlpha = 1; ctx.textAlign = 'left';
+  }
+  const segDur = seg => seg.card ? (seg.dur || 1.5) : duration(seg.play);
+  function sequenceDuration(segments) { return (segments || []).reduce((s, x) => s + segDur(x), 0); }
+  // recordSequence(segments, opts) → { blob, url, duration, mime }  (browser only)
+  //   segment = { play } | { card:{title,sub}, dur }
+  async function recordSequence(segments, opts) {
+    opts = opts || {};
+    const W = opts.width || 854, H = opts.height || 480, fps = opts.fps || 30;
+    const canvas = opts.canvas || document.createElement('canvas'); canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    const dur = sequenceDuration(segments);
+    const drawAt = t => { let acc = 0; for (const seg of segments) { const d = segDur(seg); if (t <= acc + d || seg === segments[segments.length - 1]) { const lt = Math.max(0, Math.min(t - acc, d)); if (seg.card) drawCard(ctx, W, H, seg.card, lt); else drawScene(ctx, seg.play, lt, W, H, Object.assign({}, opts, { caption: seg.play.description || seg.play.title })); return; } acc += d; } };
+    const stream = canvas.captureStream(fps);
+    const mime = pickMime();
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: opts.bitrate || 4000000 });
+    const chunks = []; rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    const stopped = new Promise(res => { rec.onstop = res; });
+    drawAt(0);
+    rec.start();
+    const now = () => (typeof performance !== 'undefined' ? performance.now() : new Date().getTime());
+    const t0 = now();
+    await new Promise(resolve => {
+      const step = () => {
+        const t = (now() - t0) / 1000;
+        drawAt(Math.min(t, dur));
+        if (typeof opts.onProgress === 'function') opts.onProgress(Math.min(1, t / dur));
+        if (t >= dur + 0.08) return resolve();
+        (typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame(step) : setTimeout(step, 1000 / fps));
+      };
+      step();
+    });
+    rec.stop(); await stopped;
+    const blob = new Blob(chunks, { type: mime.split(';')[0] });
+    return { blob, url: (typeof URL !== 'undefined' ? URL.createObjectURL(blob) : ''), duration: dur, mime: blob.type };
+  }
+  /* several plays → one clip: [reel title] → (title card → play) × n */
+  function reelSegments(plays, opts) {
+    opts = opts || {}; const segs = [];
+    if (opts.title) segs.push({ card: { title: opts.title, sub: opts.subtitle || `${plays.length} play${plays.length === 1 ? '' : 's'}` }, dur: 2 });
+    (plays || []).forEach(p => { segs.push({ card: { title: p.title || 'Play', sub: [p.situation, p.phase].filter(Boolean).join(' · ') }, dur: 1.5 }); segs.push({ play: p }); });
+    return segs;
+  }
+  const reelDuration = (plays, opts) => sequenceDuration(reelSegments(plays, opts));
+  const recordReel = (plays, opts) => recordSequence(reelSegments(plays, opts), opts);
   // record(play, opts) → { blob, url, duration, mime }  (browser only)
   async function record(play, opts) {
+    if (opts && opts.legacy === false) return recordSequence([{ play }], opts);
     opts = opts || {};
     const W = opts.width || 854, H = opts.height || 480, fps = opts.fps || 30;
     const canvas = opts.canvas || document.createElement('canvas'); canvas.width = W; canvas.height = H;
@@ -181,7 +237,7 @@ const VIDEOGEN = (() => {
     return out;
   }
 
-  return { SEC_PER_STEP, duration, sceneAt, ballPointOf, drawScene, record, pickMime,
+  return { SEC_PER_STEP, duration, sceneAt, ballPointOf, drawScene, drawCard, record, recordSequence, recordReel, reelSegments, reelDuration, sequenceDuration, pickMime,
     getProvider, setProvider, providerStatus, promptFromPlay, photoreal };
 })();
 

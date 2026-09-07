@@ -20,6 +20,7 @@
   <!-- ===================== AUTH SCREEN ===================== -->
   <section id="auth-screen" class="screen active">
     <div class="auth-card">
+      <div class="auth-share-note" id="auth-share-note" hidden>🔗 A play was shared with you — sign in (or pick a demo persona below) to open it.</div>
       <div class="auth-brand">
         <div class="auth-logo" aria-hidden="true">
           <svg viewBox="0 0 64 64" width="56" height="56">
@@ -190,6 +191,19 @@
           <button class="btn-new" id="new-scenario-btn" title="Create a new play from scratch" data-i18n="lib.new">＋ New play</button>
         </div>
         <div class="sidebar-sub" id="library-sub">Pick a situation above</div>
+        <div class="lib-tools">
+          <button class="btn-ghost sm" id="select-btn" title="Select several plays — download them as one set or render them into one video reel">☑ <span data-i18n="share.select">Select</span></button>
+          <button class="btn-ghost sm" id="import-btn" title="Import plays from a .thplay.json file (or drop the file on the list)" hidden>⬆ <span data-i18n="share.import">Import</span></button>
+          <input type="file" id="import-file" accept=".json,application/json" multiple hidden />
+        </div>
+        <div class="select-bar" id="select-bar" hidden>
+          <span class="sb-count" id="sb-count">0 selected</span>
+          <button class="btn-ghost sm" id="sb-all">All here</button>
+          <button class="btn-ghost sm" id="sb-download" title="One .thplay.json with every selected play">⬇ Set</button>
+          <button class="btn-primary sm" id="sb-reel" title="One video: title card + animation for each selected play">🎬 Reel</button>
+          <button class="btn-ghost sm" id="sb-close" title="Leave select mode">✕</button>
+          <div class="sb-out" id="sb-out"></div>
+        </div>
         <div class="scenario-list" id="scenario-list"><!-- scenarios injected --></div>
       </aside>
 
@@ -206,10 +220,17 @@
               <button class="mode-btn" data-mode="problem" data-i18n="mode.problem">Problem</button>
               <button class="mode-btn active" data-mode="solution" data-i18n="mode.solution">Solution</button>
             </span>
+            <button class="btn-ghost" id="dl-btn" hidden title="Download this play as a file (.thplay.json) — another coach imports it with ⬆ Import">⬇ <span data-i18n="share.download">Download</span></button>
+            <button class="btn-ghost" id="share-btn" hidden title="Share a link that opens this play animated on any phone or laptop">🔗 <span data-i18n="share.share">Share</span></button>
             <button class="btn-ghost" id="edit-btn" hidden>Edit</button>
           </div>
         </div>
 
+        <div class="shared-banner" id="shared-banner" hidden>
+          <span id="shared-text">Shared play</span>
+          <button class="btn-primary sm" id="shared-save">＋ Save to my playbook</button>
+          <button class="btn-ghost sm" id="shared-dismiss">✕</button>
+        </div>
         <div class="pool-wrap">
           <svg id="pool" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet" aria-label="Water polo pool"></svg>
           <div class="pool-empty" id="pool-empty">
@@ -303,6 +324,12 @@
   </section>
 
   <!-- ===================== EDITOR MODAL ===================== -->
+  <div class="modal-backdrop" id="confirm-modal" hidden>
+    <div class="modal modal-sm">
+      <div class="modal-body"><p id="confirm-text"></p></div>
+      <div class="modal-foot"><button class="btn-ghost" id="confirm-no">Cancel</button><button class="btn-primary" id="confirm-yes">Continue</button></div>
+    </div>
+  </div>
   <div class="modal-backdrop" id="editor-modal" hidden>
     <div class="modal">
       <div class="modal-head">
@@ -465,6 +492,7 @@
   <script src="js/privacy.js"></script>
   <script src="js/tactics.js"></script>
   <script src="js/gameplan.js"></script>
+  <script src="js/share.js"></script>
   <script src="js/analysis.js"></script>
   <script src="js/film.js"></script>
   <script src="js/app.js"></script>
