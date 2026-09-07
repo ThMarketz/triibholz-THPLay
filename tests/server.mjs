@@ -32,6 +32,7 @@ function frame(w, h) {
 
 (async () => {
   try {
+    process.env.MAX_UPLOAD = String(5 * 1024 * 1024);
     const mod = await import('../server/index.js');
     const server = (mod.default && mod.default.server) || mod.server;
     await new Promise(r => server.listen(PORT, r));
@@ -171,6 +172,11 @@ function frame(w, h) {
     let sjob; for (let i = 0; i < 60; i++) { await wait(100); sjob = await (await fetch(base + '/api/jobs/' + sj.id)).json(); if (sjob.status === 'done' || sjob.status === 'error') break; }
     ok('job finishes (done, or a clean ffmpeg/no-frames error on a host without ffmpeg)', sjob.status === 'done' || (sjob.status === 'error' && /ffmpeg|no-frames|bad-calibration/.test(sjob.error || '')));
     ok('empty upload → 400', (await fetch(base + '/api/upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: '' })).status === 400);
+    ok('health reports the upload limit (MB)', typeof (await (await fetch(base + '/api/health')).json()).maxUploadMB === 'number');
+    const big = await fetch(base + '/api/upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: Buffer.alloc(3 * 1024 * 1024, 1) });
+    ok('3 MB upload streams to disk fine', big.status === 200 && (await big.json()).bytes === 3 * 1024 * 1024);
+    const over = await fetch(base + '/api/upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: Buffer.alloc(6 * 1024 * 1024, 1) }).catch(() => null);
+    ok('over the limit (MAX_UPLOAD=5 MB in tests) → 413 too-large with the limit, or a clean cut', !over || (over.status === 413 && (await over.json()).maxUploadMB === 5));
 
     console.log('\n[4] Error handling');
     ok('bad JSON → 400', (await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{oops' })).status === 400);

@@ -463,9 +463,11 @@ const FILM = (() => {
     if (out) out.innerHTML = '<div class="muted">Uploading the video to the analysis backend… ⏳</div>';
     try {
       const blob = await getVideo('film-' + cur.id); if (!blob) throw new Error('video-missing');
-      const up = await fetch(base + '/api/upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: blob });
-      if (!up.ok) throw new Error('upload-' + up.status);
-      const { videoRef } = await up.json();
+      let health = null; try { health = await (await fetch(base + '/api/health')).json(); } catch (e) { throw new Error('backend-unreachable'); }
+      if (health && health.ffmpeg === false) throw new Error('backend-no-ffmpeg');
+      const mb = blob.size / 1048576;
+      if (health && health.maxUploadMB && mb > health.maxUploadMB) throw new Error(`too-large:${Math.round(mb)}:${health.maxUploadMB}`);
+      const videoRef = await uploadWithProgress(base + '/api/upload', blob, pct => { setScoutStatus(`● uploading ${pct}%`, 'cloud'); if (out) out.innerHTML = `<div class="muted">Uploading ${Math.round(mb)} MB to the analysis backend… ${pct}%</div>`; });
       const job = await fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, calibration: { H: vHomography }, scout: true, us, opts: { fps: 6, chunkSec: 20 } }) });
       if (!job.ok) throw new Error('job-' + job.status);
       const { id } = await job.json();
@@ -478,8 +480,26 @@ const FILM = (() => {
       setScoutStatus('● done', 'cloud'); ctx.toast('Scouting report ready');
     } catch (e) {
       setScoutStatus('● failed', 'offline');
-      if (out) out.innerHTML = `<div class="muted">Auto-scout failed — ${esc(/upload|job|Failed to fetch|NetworkError/.test(e.message) ? 'the analysis backend at ' + base + ' didn’t respond (docker compose up -d analysis)' : e.message)}.</div>`;
+      const m = String(e.message || e); let why;
+      if (/^too-large:/.test(m)) { const [, got, max] = m.split(':'); why = `this video is ${got} MB and the backend accepts up to ${max} MB — trim the match (or raise MAX_UPLOAD on the backend)`; }
+      else if (m === 'upload-413') why = 'the backend refused the upload as too large (raise MAX_UPLOAD on the backend)';
+      else if (m === 'backend-unreachable' || /Failed to fetch|NetworkError/.test(m)) why = 'the analysis backend at ' + base + ' didn’t respond — start it with “docker compose up -d analysis”; on a phone/other device use your Mac’s LAN address instead of localhost';
+      else if (m === 'upload-network') why = 'the upload was cut off before it finished — check the connection to ' + base + ' and try again';
+      else if (m === 'backend-no-ffmpeg') why = 'the backend has no ffmpeg, so it cannot decode video (use the Docker image)';
+      else if (m === 'video-missing') why = 'the video file is no longer in this browser’s storage — upload it again';
+      else why = m;
+      if (out) out.innerHTML = `<div class="muted">Auto-scout failed — ${esc(why)}.</div>`;
     } finally { btn.disabled = false; }
+  }
+  function uploadWithProgress(url, blob, onPct) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest(); xhr.open('POST', url);
+      xhr.setRequestHeader('content-type', 'application/octet-stream');
+      xhr.upload.onprogress = ev => { if (ev.lengthComputable && onPct) onPct(Math.round(100 * ev.loaded / ev.total)); };
+      xhr.onload = () => { if (xhr.status === 200) { try { resolve(JSON.parse(xhr.responseText).videoRef); } catch (e) { reject(new Error('upload-bad-json')); } } else reject(new Error('upload-' + xhr.status)); };
+      xhr.onerror = () => reject(new Error('upload-network'));
+      xhr.send(blob);
+    });
   }
   function renderScout(sc, result) {
     const out = root && root.querySelector('#scout-out'); if (!out) return;

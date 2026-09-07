@@ -47,6 +47,7 @@ const VIDEO_DIR = path.join(DATA_DIR, 'videos');
 const JOB_DIR = path.join(DATA_DIR, 'jobs');
 const CAL_DIR = path.join(DATA_DIR, 'calendars');
 const MAX_BODY = +(process.env.MAX_BODY || 200 * 1024 * 1024);   // 200 MB
+const MAX_UPLOAD = +(process.env.MAX_UPLOAD || 4 * 1024 * 1024 * 1024);   // 4 GB — video uploads stream to disk, never into memory
 [DATA_DIR, VIDEO_DIR, JOB_DIR, CAL_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
 const safeToken = t => String(t || '').replace(/[^\w.\-]/g, '').slice(0, 64);
 
@@ -121,13 +122,25 @@ function readBody(req) {
   });
 }
 
+/* stream a request body straight to a file (a full-match video can be gigabytes) */
+function streamToFile(req, fp, max) {
+  return new Promise((resolve, reject) => {
+    const ws = fs.createWriteStream(fp); let size = 0, failed = false;
+    req.on('data', c => { size += c.length; if (!failed && size > max) { failed = true; ws.destroy(); try { fs.unlinkSync(fp); } catch (e) {} reject(Object.assign(new Error('body-too-large'), { code: 'too-large' })); req.resume(); } });
+    req.pipe(ws);
+    ws.on('finish', () => { if (!failed) resolve(size); });
+    ws.on('error', e => { if (!failed) { failed = true; reject(e); } });
+    req.on('error', e => { if (!failed) { failed = true; reject(e); } });
+  });
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
     const p = url.pathname;
     if (req.method === 'OPTIONS') { cors(res); res.writeHead(204); return res.end(); }
 
-    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, engine: 'server', detector: makeDetector({ modelEndpoint: MODEL_ENDPOINT }).name, ffmpeg: hasFfmpeg, videoProvider: VIDEO_PROVIDER || null, queued: queue.length, running });
+    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, engine: 'server', detector: makeDetector({ modelEndpoint: MODEL_ENDPOINT }).name, ffmpeg: hasFfmpeg, videoProvider: VIDEO_PROVIDER || null, queued: queue.length, running, maxUploadMB: Math.round(MAX_UPLOAD / 1048576) });
 
     // photoreal text-to-video: submit a prompt → a normalised video URL (or an async job)
     if (req.method === 'POST' && p === '/api/videogen') {
@@ -144,11 +157,10 @@ const server = http.createServer(async (req, res) => {
     }
     // upload a video once → { videoRef }; then enqueue { videoRef, calibration, scout:true } on /api/jobs
     if (req.method === 'POST' && p === '/api/upload') {
-      const body = await readBody(req);
-      if (!body.length) return send(res, 400, { error: 'empty-body' });
-      const ref = uid() + '.mp4';
-      fs.writeFileSync(path.join(VIDEO_DIR, ref), body);
-      return send(res, 200, { videoRef: ref, bytes: body.length });
+      const ref = uid() + '.mp4', fp = path.join(VIDEO_DIR, ref);
+      const bytes = await streamToFile(req, fp, MAX_UPLOAD);
+      if (!bytes) { try { fs.unlinkSync(fp); } catch (e) {} return send(res, 400, { error: 'empty-body' }); }
+      return send(res, 200, { videoRef: ref, bytes });
     }
 
     // anonymous learning — accepts ONLY identifier-free pattern features, stores counts, reports k-anonymously
@@ -235,7 +247,8 @@ const server = http.createServer(async (req, res) => {
 
     return send(res, 404, { error: 'no-route' });
   } catch (e) {
-    return send(res, e.code === 'too-large' ? 413 : 500, { error: e.code || 'server-error' });
+    if (e.code === 'too-large') res.setHeader('Connection', 'close');
+    return send(res, e.code === 'too-large' ? 413 : 500, e.code === 'too-large' ? { error: 'too-large', maxUploadMB: Math.round(MAX_UPLOAD / 1048576) } : { error: e.code || 'server-error' });
   }
 });
 
