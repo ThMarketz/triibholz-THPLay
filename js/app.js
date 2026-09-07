@@ -769,6 +769,16 @@
     // only a real playing→paused transition re-opens the drag surface
     if (!playing && was) setTimeout(() => { if (state.viewer && !state.viewer.playing) enterPausedEdit(); }, 0);
   }
+  /* Steps on/off: the per-position notes (right bar) + the arrows/paths on the board.
+     Off = watch the pure movement. Remembered per device. */
+  function stepsShown() { try { return localStorage.getItem('thplay.showSteps') !== '0'; } catch (e) { return true; } }
+  function applySteps() {
+    const show = stepsShown();
+    const lay = $('view-playbook'); if (lay) lay.classList.toggle('steps-hidden', !show);
+    const b = $('steps-toggle'); if (b) { b.classList.toggle('active', show); b.setAttribute('aria-pressed', show ? 'true' : 'false'); }
+    if (state.viewer && state.mode !== 'problem') state.viewer.setPaths(show);
+  }
+  function toggleSteps() { try { localStorage.setItem('thplay.showSteps', stepsShown() ? '0' : '1'); } catch (e) {} applySteps(); }
   function buildViewer(t0, andPlay) {
     const scn = state.scenarios.find(s=>s.id===state.selectedId);
     if (!scn) return;
@@ -777,6 +787,7 @@
     state.viewer = new ANIM.Player(state.renderer, scn, onViewerFrame);
     state.viewer.setOnState(onPlayState);
     state.viewer.setFocus(state.focus);
+    applySteps();
     if (t0) state.viewer.seek(t0);
     if (andPlay) state.viewer.play();
   }
@@ -797,7 +808,7 @@
     $('scenario-desc').style.display = problem ? 'none' : '';
     if (state.viewer) {
       if (problem) { state.viewer.stop(); state.viewer.seek(0); state.viewer.setPaths(false); }
-      else { state.viewer.setPaths(true); }
+      else { state.viewer.setPaths(stepsShown()); }
     }
     if (problem && scn) {
       const sd = DATA.sit(scn.situation);
@@ -1782,6 +1793,7 @@
     };
     const afterFocusChange = ()=>{ if(state.viewer)state.viewer.setFocus(state.focus); if(adjust.live)renderAdjustBoard(); syncFocusUI(); const s=state.scenarios.find(x=>x.id===state.selectedId); if(s)renderAssignments(s); };
     $('view-team').onclick = ()=>{ state.viewMode='team'; state.focus=null; afterFocusChange(); };
+    $('steps-toggle').onclick = toggleSteps;
     $('view-me').onclick = ()=>{ state.viewMode='me'; state.focus=defaultFocus()||(state.user.position||'1'); afterFocusChange(); };
     $('focus-pos').onchange = (e)=>{ state.focus=e.target.value||null; state.viewMode=state.focus?'me':'team'; afterFocusChange(); };
 

@@ -13,7 +13,7 @@ const HELP = (() => {
       'Players see their position, XP, 🔥 streak, badges and both trivia best scores.',
       'Super Admins see pending approvals and the live activity feed.',
       'Tap any listed play or button to jump straight there.',
-    ], tips:[ 'The 🔊 button in the top bar turns match sounds on (off by default).' ]},
+    ], tips:[ 'The 🔊 button in the top bar turns match sounds on (off by default).', '<strong>Steps 👁</strong> next to the Team / My position switch hides the step notes and the arrows on the board, so you watch the pure movement; press it again to bring them back. The choice is remembered on this device.' ]},
 
     playbook: { icon:'📖', title:'Playbook — watch & understand a play', steps:[
       'Pick a <strong>situation</strong> in the top bar (6 on 6 … 1 on GK) and <strong>Offense/Defense</strong>.',

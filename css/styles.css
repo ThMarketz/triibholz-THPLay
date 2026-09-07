@@ -823,3 +823,11 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .deb-comments{margin-top:6px;display:flex;flex-direction:column;gap:6px}
 .deb-c{font-size:.86rem;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,.04)}
 .deb-c-new{display:flex;gap:6px}.deb-c-new input{flex:1;min-width:0}
+
+/* ---- Steps on/off (v1.24.1): hide the notes bar + arrows to watch the pure movement ---- */
+.layout.steps-hidden{grid-template-columns:260px 1fr}
+.layout.steps-hidden .rightbar{display:none}
+.vt-btn.steps-btn{margin-left:6px}
+.vt-btn.steps-btn:not(.active){opacity:.6;text-decoration:line-through}
+@media (max-width:1100px){.layout.steps-hidden{grid-template-columns:220px 1fr}}
+@media (max-width:760px){.layout.steps-hidden{grid-template-columns:1fr}}

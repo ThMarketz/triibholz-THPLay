@@ -44,6 +44,14 @@ await page.click('.nav-btn[data-view="playbook"]'); await page.waitForTimeout(40
 ok('play auto-opened', (await page.locator('#pool .disc').count())>=6);
 await page.click('#play-btn'); await page.waitForTimeout(900);
 await page.screenshot({ path:OUT+'/qa_03_playbook_anim.png' });
+// Steps 👁 toggle — hides the notes bar + the arrows so only the movement shows
+ok('Steps toggle visible and on', await page.locator('#steps-toggle.active').count()===1 && await page.locator('#rightbar').isVisible());
+const pathsBefore = await page.locator('#pool path, #pool polyline, #pool line').count();
+await page.click('#steps-toggle'); await page.waitForTimeout(250);
+ok('steps off → notes bar hidden, fewer marks on the board', !(await page.locator('#rightbar').isVisible()) && (await page.locator('#pool path, #pool polyline, #pool line').count()) <= pathsBefore);
+await page.screenshot({ path:OUT+'/qa_27_steps_off.png' });
+await page.click('#steps-toggle'); await page.waitForTimeout(200);
+ok('steps back on', await page.locator('#rightbar').isVisible());
 await page.click('#play-btn');
 await page.click('#step-fwd');
 ok('step label updates', /Step \d+ \/ \d+/.test(await page.locator('#frame-label').textContent()));

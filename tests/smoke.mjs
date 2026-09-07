@@ -639,6 +639,17 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('scouted plays now carry goal/defence/shotZone/frames', (()=>{ const {TACTICS}=window.__T; const f={att:{1:{x:200,y:80},2:{x:200,y:140},3:{x:230,y:150}},def:{1:{x:240,y:80},2:{x:240,y:140},3:{x:250,y:150}},gk:{x:292,y:110},ball:{x:202,y:82}}; const ser=[0,0.5,1,1.5].map(t=>({t,boardFrame:JSON.parse(JSON.stringify(f))})); ser[3].boardFrame.ball={x:293,y:110}; const sc=TACTICS.scout(ser,[{t:1.5,type:'goal'}],{}); const p=sc.plays[0]; return p && p.goal===true && 'defence' in p && Array.isArray(p.frames) && p.frames.length>=2; })());
   }
 
+  console.log('\n[6s] Steps on/off — watch the pure movement');
+  {
+    q('.nav-btn[data-view="playbook"]').click(); await wait(30);
+    const first = q('#scenario-list .scenario-item, #scenario-list button'); if (first) { first.click(); await wait(60); }
+    ok('Steps toggle present and on by default', !!q('#steps-toggle') && q('#steps-toggle').classList.contains('active') && !q('#view-playbook').classList.contains('steps-hidden'));
+    q('#steps-toggle').click(); await wait(20);
+    ok('off → notes bar hidden, remembered on the device', q('#view-playbook').classList.contains('steps-hidden') && window.localStorage.getItem('thplay.showSteps')==='0' && q('#steps-toggle').getAttribute('aria-pressed')==='false');
+    q('#steps-toggle').click(); await wait(20);
+    ok('on again → notes bar back', !q('#view-playbook').classList.contains('steps-hidden') && window.localStorage.getItem('thplay.showSteps')==='1');
+  }
+
   console.log('\n[7] Basics + i18n');
   q('.nav-btn[data-view="basics"]').click(); await wait(25);
   ok('10 basics cards incl. responsibilities', qa('#view-basics .basics-card').length===10);
