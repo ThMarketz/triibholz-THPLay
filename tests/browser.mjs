@@ -215,6 +215,15 @@ const fbBefore = await fball.getAttribute('transform');
 await dragBy(page, fball, -38, 18);
 ok('board ball draggable', (await fball.getAttribute('transform')) !== fbBefore);
 await page.screenshot({ path:OUT+'/qa_13_filmroom.png' });
+// 🧠 Auto-scout panel — only for uploaded videos (the [3e] clip), side selectable, fails gracefully without a backend
+await page.click('.film-item:has-text("clip")'); await page.waitForTimeout(500);
+await page.locator('#film-scout').scrollIntoViewIfNeeded().catch(()=>{});
+ok('auto-scout panel with run button + side select', await page.locator('#scout-run').count()===1 && await page.locator('#scout-us option').count()===2);
+await page.selectOption('#scout-us','dark');
+await page.click('#scout-run'); await page.waitForTimeout(400);
+const scoutTxt = ((await page.locator('#toast').textContent().catch(()=>''))||'') + ' ' + ((await page.locator('#scout-out').textContent().catch(()=>''))||'');
+ok('scouting without calibration/backend explains itself (no crash)', /Calibrate the pool first|didn’t respond|failed/i.test(scoutTxt));
+await page.screenshot({ path:OUT+'/qa_25_autoscout.png' });
 
 console.log('\n[4c] Season — plan + calendar (.ics export)');
 await page.click('.nav-btn[data-view="season"]'); await page.waitForTimeout(300);

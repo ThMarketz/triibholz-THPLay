@@ -87,6 +87,7 @@ async function runEngine(req) {
   req = req || {};
   const opts = Object.assign({}, req.opts);
   opts.modelEndpoint = opts.modelEndpoint || req.modelEndpoint || MODEL_ENDPOINT || undefined;
+  if (req.scout) { opts.scout = true; if (req.us) opts.us = req.us; }
   if (req.mode === 'frames' || Array.isArray(req.frames)) {
     const w = req.w || engine.WORK_W, h = req.h || engine.WORK_H;
     const frames = (req.frames || []).map(f => Array.isArray(f) ? f : (f && f.data) || []);
@@ -97,6 +98,8 @@ async function runEngine(req) {
     const vp = path.join(VIDEO_DIR, req.videoRef.replace(/[^\w.\-]/g, ''));
     if (!fs.existsSync(vp)) { const e = new Error('video-not-found'); e.code = 'video-not-found'; throw e; }
     opts.ffmpeg = process.env.FFMPEG;
+    // auto-scout = the WHOLE video (chunked), not a 2.5 s window
+    if (req.scout) return engine.videoToScout(vp, req.calibration, opts);
     return engine.videoToResult(vp, req.calibration, opts);
   }
   const e = new Error('no-input'); e.code = 'no-input'; throw e;
@@ -139,6 +142,15 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { url: out.url, provider: cfg.provider });
       } catch (e) { return send(res, 502, { error: e.code === 'provider-error' ? e.message : ('provider-failed: ' + (e.message || 'error')) }); }
     }
+    // upload a video once → { videoRef }; then enqueue { videoRef, calibration, scout:true } on /api/jobs
+    if (req.method === 'POST' && p === '/api/upload') {
+      const body = await readBody(req);
+      if (!body.length) return send(res, 400, { error: 'empty-body' });
+      const ref = uid() + '.mp4';
+      fs.writeFileSync(path.join(VIDEO_DIR, ref), body);
+      return send(res, 200, { videoRef: ref, bytes: body.length });
+    }
+
     // anonymous learning — accepts ONLY identifier-free pattern features, stores counts, reports k-anonymously
     if (req.method === 'POST' && p === '/api/insights') {
       const body = await readBody(req);

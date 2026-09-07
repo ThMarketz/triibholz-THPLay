@@ -452,6 +452,54 @@ const FILM = (() => {
       if (out) out.innerHTML = `<div class="muted">Analysis failed — ${msg}.</div>`;
     } finally { btn.disabled = false; }
   }
+  /* ---- Auto-scout: whole video → possessions → tactics → summary → playbook ---- */
+  const scoutBase = () => { try { return ((typeof ANALYSIS !== 'undefined' && ANALYSIS.getEndpoint && ANALYSIS.getEndpoint()) || localStorage.getItem('thplay.calendar.feed') || `${location.protocol === 'https:' ? 'https:' : 'http:'}//${location.hostname || 'localhost'}:4200`).replace(/\/api\/.*$/, '').replace(/\/+$/, ''); } catch (e) { return 'http://localhost:4200'; } };
+  function setScoutStatus(txt, cls) { const c = root && root.querySelector('#scout-status'); if (c) { c.textContent = txt; c.className = 'cloud-status ' + (cls || 'offline'); } }
+  async function runAutoScout(btn) {
+    const out = root && root.querySelector('#scout-out');
+    if (!vHomography) { ctx.toast('Calibrate the pool first (Position tracking → Calibrate)'); return; }
+    const base = scoutBase(); const us = (root.querySelector('#scout-us') || {}).value || 'white';
+    btn.disabled = true; setScoutStatus('● uploading…', 'cloud');
+    if (out) out.innerHTML = '<div class="muted">Uploading the video to the analysis backend… ⏳</div>';
+    try {
+      const blob = await getVideo('film-' + cur.id); if (!blob) throw new Error('video-missing');
+      const up = await fetch(base + '/api/upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: blob });
+      if (!up.ok) throw new Error('upload-' + up.status);
+      const { videoRef } = await up.json();
+      const job = await fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, calibration: { H: vHomography }, scout: true, us, opts: { fps: 6, chunkSec: 20 } }) });
+      if (!job.ok) throw new Error('job-' + job.status);
+      const { id } = await job.json();
+      setScoutStatus('● scouting…', 'cloud'); if (out) out.innerHTML = `<div class="muted">Scouting the whole video… ⏳ (job ${esc(id)}). A full match can take a few minutes.</div>`;
+      let st = 'queued', tries = 0, j;
+      while (st !== 'done' && st !== 'error' && tries++ < 900) { await new Promise(r => setTimeout(r, 2000)); j = await (await fetch(base + '/api/jobs/' + id)).json(); st = j.status; }
+      if (st !== 'done') throw new Error(j && j.error ? 'scout-' + j.error : 'timed-out');
+      const result = await (await fetch(base + '/api/jobs/' + id + '/result')).json();
+      renderScout(result.scout, result);
+      setScoutStatus('● done', 'cloud'); ctx.toast('Scouting report ready');
+    } catch (e) {
+      setScoutStatus('● failed', 'offline');
+      if (out) out.innerHTML = `<div class="muted">Auto-scout failed — ${esc(/upload|job|Failed to fetch|NetworkError/.test(e.message) ? 'the analysis backend at ' + base + ' didn’t respond (docker compose up -d analysis)' : e.message)}.</div>`;
+    } finally { btn.disabled = false; }
+  }
+  function renderScout(sc, result) {
+    const out = root && root.querySelector('#scout-out'); if (!out) return;
+    if (!sc || !sc.possessions) { out.innerHTML = '<div class="muted">No possessions could be read from this video — check the calibration and cap colours.</div>'; return; }
+    const meta = result && result.meta ? ` · ${Math.round(result.meta.seconds)}s analysed` : '';
+    const teamRows = Object.keys(sc.profile || {}).map(k => { const t = sc.profile[k]; return `<div class="scout-team"><strong>${k === 'att' ? 'White caps' : 'Dark caps'}</strong> — ${t.possessions} possessions · ${Math.round(t.shotRate * 100)}% shots · ${t.avgPasses} passes/poss
+      <div class="scout-tend">${(t.tendencies || []).slice(0, 4).map(x => `<span class="tag">${esc(x.name)} ${x.pct}%</span>`).join('') || '<span class="muted">no recognised tactics yet</span>'}</div></div>`; }).join('');
+    out.innerHTML = `<div class="scout-box">
+      <div class="ef-label">Scouting summary — ${sc.possessions} possessions${meta}</div>
+      <div class="scout-summary">${(sc.summary || []).map(l => `<div class="ins-row">${esc(l)}</div>`).join('')}</div>
+      ${teamRows}
+      <div class="ef-label" style="margin-top:10px">Recognised plays (${sc.playbook.length})</div>
+      <div class="scout-plays">${sc.playbook.map((p, i) => `<div class="scout-play"><span class="sp-t">${esc(p.title)}</span><span class="muted">${esc(p.situation)} · ${Math.round(p.confidence * 100)}%${p.needsReview ? ' · needs review' : ''}</span><span class="muted">${esc(p.description)}</span></div>`).join('') || '<div class="muted">No play reached the confidence bar (50%).</div>'}</div>
+      ${sc.playbook.length ? `<button class="btn-primary sm" id="scout-add">＋ Add ${sc.playbook.length} play${sc.playbook.length > 1 ? 's' : ''} to my playbook</button>` : ''}
+      <p class="fa-note">Every play stays editable; plays under 80% confidence are marked <em>needs review</em>. Accuracy depends on what the detector sees.</p>
+    </div>`;
+    const add = out.querySelector('#scout-add');
+    if (add) add.onclick = () => { if (typeof ctx.addPlays === 'function') { const n = ctx.addPlays(sc.playbook, cur.title); ctx.toast(`${n} plays added to the playbook`); add.disabled = true; } };
+  }
+
   function renderReview(result) {
     const out = root && root.querySelector('#cloud-out'); if (!out) return;
     const model = ANALYSIS.buildReview(result);
@@ -615,6 +663,14 @@ const FILM = (() => {
           <span class="fa-note">Reads the caps (white / dark / red&nbsp;keeper) and the orange ball and maps them onto your board. Calibrate once by clicking the four corners of the field of play. <strong>Hardened</strong> tracks a short passage from the current time and bridges occlusion. Offline &amp; private.</span></div>
         <div id="film-track-out"></div>
       </div>
+      <div class="film-auto" id="film-scout">
+        <div class="fa-head"><strong>🧠 Auto-scout <span class="fa-beta">Tier 3</span></strong>
+          <button class="btn-primary sm" id="scout-run">Scout this video</button>
+          <select id="scout-us" class="focus-select" title="Which caps are us?"><option value="white">We are white caps</option><option value="dark">We are dark caps</option></select>
+          <span class="cloud-status offline" id="scout-status">● idle</span>
+          <span class="fa-note">The system watches the <strong>whole</strong> video, cuts it into possessions, recognises each tactic, and writes a scouting summary + a playbook — no tagging by hand. Calibrate the pool first. Long videos run in the background.</span></div>
+        <div id="scout-out"></div>
+      </div>
       <div class="film-auto" id="film-cloud">
         <div class="fa-head"><strong>☁️ Cloud analysis <span class="fa-beta">Tier 3</span></strong>
           <button class="btn-ghost sm" id="cloud-run">Run analysis</button>
@@ -677,6 +733,8 @@ const FILM = (() => {
     if (odChip && typeof WEBDETECTOR !== 'undefined') { const st = WEBDETECTOR.status(); odChip.textContent = st.hasModel ? `● model: ${st.name}` : '● colour'; odChip.className = 'cloud-status ' + (st.hasModel ? 'cloud' : 'offline'); }
     const posBtn = main.querySelector('#film-scanpos');
     if (posBtn) { posBtn.disabled = !vHomography; posBtn.onclick = () => trackPositions(posBtn); }
+    const scoutBtn = main.querySelector('#scout-run');
+    if (scoutBtn) scoutBtn.onclick = () => runAutoScout(scoutBtn);
     if (main.querySelector('#film-cloud') && typeof ANALYSIS !== 'undefined') {
       const ep = main.querySelector('#cloud-endpoint'); if (ep) ep.value = ANALYSIS.getEndpoint();
       updateCloudStatus();

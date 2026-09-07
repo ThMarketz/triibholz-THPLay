@@ -128,6 +128,22 @@
     if (view==='film' && typeof FILM!=='undefined') FILM.render($('view-film'), {
       user: state.user, canEdit: canEdit(), toast,
       // a tagged video moment becomes a play on the tactics board
+      // auto-scout → real plays in the library (Team visibility, flagged for review when unsure)
+      addPlays: (plays, source) => {
+        let n = 0;
+        (plays || []).forEach(p => {
+          if (!p || !p.frames || !p.frames.length) return;
+          const sc = DATA.newScenario(p.situation || '6v6', p.phase || 'offense');
+          sc.id = 'usr-' + Math.abs(hash('scout' + (source || '') + p.title + JSON.stringify(p.frames[0]).slice(0, 60)));
+          sc.title = p.title; sc.description = (p.needsReview ? '⚠ needs review · ' : '') + (p.description || '');
+          sc.frames = DATA.clone(p.frames); sc.notes = DATA.clone(p.notes || {});
+          sc.author = 'Auto-scout' + (source ? ' · ' + source : ''); sc.builtIn = false; sc.visibility = 'team'; sc.owner = state.user && state.user.email;
+          if (!state.scenarios.some(x => x.id === sc.id)) { state.scenarios.push(sc); n++; }
+          try { if (typeof PRIVACY !== 'undefined') PRIVACY.learnFrom(sc); } catch (e) {}
+        });
+        if (n) { DATA.save(state.scenarios); DATA.logActivity('play', `Auto-scout added ${n} play${n > 1 ? 's' : ''} from “${source || 'video'}”`, 'Auto-scout'); renderLibrary(); }
+        return n;
+      },
       rebuild: (situation, phase, title, desc, frame) => {
         const sc = DATA.newScenario(situation, phase);
         sc.title = title; sc.description = desc;

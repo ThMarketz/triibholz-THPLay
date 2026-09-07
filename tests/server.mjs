@@ -157,6 +157,21 @@ function frame(w, h) {
     const leak = await fetch(base + '/api/insights', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ features: { title: 'SECRET', notes: { 1: 'x' }, situation: '6v6' } }) });
     ok('identifying payload → 400 not-anonymous', leak.status === 400 && (await leak.json()).error === 'not-anonymous');
 
+    console.log('\n[3g] Auto-scout — frames mode with scout:true, upload → job lifecycle');
+    const scoutBody = Object.assign({}, body, { scout: true, us: 'white', frames: Array.from({ length: 8 }, () => frame(w, hh)) });
+    const sr = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(scoutBody) });
+    const sres = await sr.json();
+    ok('scout:true → result carries a scout block', sr.status === 200 && sres.scout && typeof sres.scout.possessions === 'number' && Array.isArray(sres.scout.summary) && Array.isArray(sres.scout.playbook) && Array.isArray(sres.scout.plays));
+    ok('without scout:true → no scout block', !result.scout);
+    const up = await fetch(base + '/api/upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: Buffer.from('not-really-a-video-but-bytes') });
+    const upj = await up.json();
+    ok('POST /api/upload → { videoRef, bytes }', up.status === 200 && typeof upj.videoRef === 'string' && upj.bytes === 28);
+    const sj = await (await fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef: upj.videoRef, calibration: { corners }, scout: true, us: 'dark', opts: { fps: 6, chunkSec: 20 } }) })).json();
+    ok('scout job enqueued from a videoRef', !!sj.id && sj.status === 'queued');
+    let sjob; for (let i = 0; i < 60; i++) { await wait(100); sjob = await (await fetch(base + '/api/jobs/' + sj.id)).json(); if (sjob.status === 'done' || sjob.status === 'error') break; }
+    ok('job finishes (done, or a clean ffmpeg/no-frames error on a host without ffmpeg)', sjob.status === 'done' || (sjob.status === 'error' && /ffmpeg|no-frames|bad-calibration/.test(sjob.error || '')));
+    ok('empty upload → 400', (await fetch(base + '/api/upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: '' })).status === 400);
+
     console.log('\n[4] Error handling');
     ok('bad JSON → 400', (await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{oops' })).status === 400);
     const noInput = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });

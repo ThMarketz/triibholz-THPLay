@@ -57,6 +57,16 @@ const HELP = (() => {
       'Every answer’s rules follow the current World Aquatics laws (5 m penalty, 18 s exclusion, keeper limits).',
     ]},
 
+    autoscout: { icon:'🧠', title:'Auto-scout — the system builds the playbook from a video', steps:[
+      'In the Film Room, on an uploaded match video, calibrate the pool once, then press <strong>🧠 Scout this video</strong>. The backend watches the <em>whole</em> video (a minute or a full match — long videos run as a background job you can poll).',
+      'It cuts the match into <strong>possessions</strong>, boils each one down to a clean play (start → passes → drives → shot), and <strong>recognises the tactic</strong>: drive &amp; kick, hole entry, pick &amp; roll, perimeter swing, wing isolation, counter-attack, man-up 4-2 / 3-3, and the defence it met (press / drop / zone).',
+      'You get a <strong>scouting summary</strong> in plain sentences (tendencies with percentages, shot zones, tempo, man-up count) for <em>both</em> teams — so it works to study your own movements or to read what the opponent is trying to play.',
+      'Press <strong>Add plays to my playbook</strong> — the distinct recognised plays land as real, editable plays (Team visibility). Anything below 80% confidence is flagged <em>needs review</em>; nothing is invented below 50%.',
+    ], tips:[
+      'Accuracy is bounded by what the detector can see: clean cap colours and a steady camera give the best results today; the trained model (see docs) raises it further — the tactic layer itself doesn’t change.',
+      'Pick which caps are “us” with the White / Dark switch so the summary reads from your side.',
+    ]},
+
     privacy: { icon:'🔒', title:'Confidential tactics &amp; anonymous learning', steps:[
       'Every play has a <strong>Who can see it</strong> setting: <strong>👥 Team</strong> (your team only, the default), <strong>🌐 Club</strong> (everyone in the club) or <strong>🔒 Private</strong> (only you — for confidential tactics). Others simply never see private plays in their library.',
       '<strong>The system still learns from private plays — anonymously.</strong> It reduces a play to a handful of pattern features (situation, number of steps, passes, shot zone, a coarse formation shape) and strips the title, description, notes, owner and club. The play itself never leaves the device.',

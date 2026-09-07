@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -129,7 +129,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     kb('ArrowRight'); await wait(20);
     ok('ArrowRight steps forward', q('#frame-label').textContent!==lbl);
   }
-  ok('13 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===13);
+  ok('14 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===14);
   q('#help-btn').click(); await wait(15);
   ok('topbar ？ is context-aware (paused board → Adjust guide)', !!q('.help-backdrop:not([hidden])') &&
      /Adjust/i.test(q('#help-title').textContent));
@@ -575,6 +575,41 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('review has a confirmable item with a frame', rev.items.length===1 && rev.items[0].state==='pending' && !!rev.items[0].frame);
     ANALYSIS.setItemState(rev, rev.items[0].id, 'confirmed');
     ok('confirming updates the counts', rev.counts.confirmed===1 && rev.counts.pending===0);
+  }
+
+  console.log('\n[6q] Auto-scout — TACTICS: possessions → plays → tactics → summary → playbook');
+  {
+    const { TACTICS, ANALYSIS, HELP } = window.__T;
+    const mk=(t,att,def,ball)=>({ t, boardFrame:{ att, def, gk:{x:292,y:110}, ball } });
+    const A={1:{x:200,y:80},2:{x:200,y:140},3:{x:230,y:150},4:{x:230,y:70},5:{x:180,y:110},6:{x:268,y:110}};
+    const D={1:{x:240,y:80},2:{x:240,y:140},3:{x:250,y:150},4:{x:250,y:70},5:{x:220,y:110},6:{x:280,y:110}};
+    const cl=o=>JSON.parse(JSON.stringify(o)); const ser=[], evs=[]; let t=0;
+    for(let i=0;i<3;i++){ ser.push(mk(t,cl(A),cl(D),{x:202,y:82})); t+=0.5; }                       // 1 holds
+    for(let i=0;i<2;i++){ const a=cl(A); a[1].x=240; ser.push(mk(t,a,cl(D),{x:242,y:82})); t+=0.5; }   // 1 drives in
+    for(let i=0;i<2;i++){ const a=cl(A); a[1].x=240; ser.push(mk(t,a,cl(D),{x:232,y:152})); t+=0.5; }  // pass to 3
+    { const a=cl(A); a[1].x=240; ser.push(mk(t,a,cl(D),{x:293,y:120})); evs.push({t,type:'shot',conf:0.7}); t+=0.5; } // 3 shoots
+    for(let i=0;i<6;i++){ ser.push(mk(t,cl(A),cl(D),null)); t+=0.5; }                              // ball lost
+    for(let i=0;i<4;i++){ ser.push(mk(t,cl(A),cl(D),{x:222,y:112})); t+=0.5; }                     // dark possession
+    const poss = TACTICS.segment(ser, evs, {});
+    ok('segment: two possessions (white then dark)', poss.length===2 && poss[0].team==='att' && poss[1].team==='def');
+    ok('segment: first possession ends in the shot', poss[0].endsInShot===true && poss[1].endsInShot===false);
+    const play = TACTICS.distill(poss[0], {});
+    ok('distill: ≤6 keyframes, 6v6, one pass, stable labels', play.frames.length<=6 && play.situation==='6v6' && play.passes===1 && Object.keys(play.frames[0].att).length===6);
+    ok('distill: chronological steps (has ball → drives → passes → shoots)', /has the ball → \d drives in → \d passes to \d → \d shoots/.test(play.steps.join(' → ')));
+    ok('distill: last keyframe puts the ball at the goal line', play.frames[play.frames.length-1].ball.carrier===null && play.frames[play.frames.length-1].ball.x===293);
+    const rec = TACTICS.recognize(play, {});
+    ok('recognize: drive & kick @ 0.8', rec.tactic==='drive-and-kick' && rec.confidence===0.8 && rec.features.driveThenKick===true);
+    ok('recognize: shot zone + defence read from the frames', rec.features.shotZone==='B' && rec.features.defence==='press');
+    const low = TACTICS.recognize({ frames:[{att:{1:{x:200,y:80}},def:{},ball:{carrier:'A1'}},{att:{1:{x:200,y:80}},def:{},ball:{carrier:'A1'}}], passes:0, duration:12, endsInShot:false, attackers:1, defenders:0, situation:'GK' }, {});
+    ok('recognize: below threshold → unclassified, never a guess', low.tactic==='unclassified');
+    const sc = TACTICS.scout(ser, evs, { names:{att:'Us (white caps)', def:'Opponent (dark caps)'} });
+    ok('scout(): shape {possessions, plays, profile, summary, playbook}', sc.possessions===2 && sc.plays.length===2 && sc.profile.att && sc.profile.def && Array.isArray(sc.summary) && Array.isArray(sc.playbook));
+    ok('profile: white 100% shot rate, tendency = drive & kick 100%', sc.profile.att.shotRate===1 && sc.profile.att.tendencies[0].tactic==='drive-and-kick' && sc.profile.att.tendencies[0].pct===100);
+    ok('summary: plain sentences with the team names', sc.summary.some(l=>/^Us \(white caps\): 1 possessions, 1 shots \(100%\)/.test(l)) && sc.summary.some(l=>/favour drive & kick — 100%/.test(l)));
+    ok('summary never says "favour unclassified"', !sc.summary.some(l=>/unclassified/i.test(l)));
+    ok('playbook: one ready-to-save scenario, confidence-gated, not flagged at 0.8', sc.playbook.length===1 && /Drive & kick · seen 1× \(auto-scout\)/.test(sc.playbook[0].title) && sc.playbook[0].needsReview===false && sc.playbook[0].source==='auto-scout' && sc.playbook[0].frames.length>=3);
+    { const nr=ANALYSIS.normalizeResult({engine:'server',version:1,tracks:[],events:[],frames:[],scout:sc,meta:{seconds:61.5,fps:6,chunks:4}}); ok('normalizeResult keeps the scout block + job meta', !!nr.scout && nr.meta.seconds===61.5 && nr.meta.chunks===4); }
+    ok('help has an auto-scout topic', !!HELP.TOPICS.autoscout);
   }
 
   console.log('\n[7] Basics + i18n');

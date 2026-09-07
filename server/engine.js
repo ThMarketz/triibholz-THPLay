@@ -22,7 +22,8 @@ global.TRACK = require('../js/track.js');
 global.ANALYSIS = require('../js/analysis.js');
 global.BYTETRACK = require('../js/bytetrack.js');
 global.EVENTS = require('../js/events.js');
-const VISION = global.VISION, ANALYSIS = global.ANALYSIS, BYTETRACK = global.BYTETRACK, EVENTS = global.EVENTS;
+global.TACTICS = require('../js/tactics.js');
+const VISION = global.VISION, ANALYSIS = global.ANALYSIS, BYTETRACK = global.BYTETRACK, EVENTS = global.EVENTS, TACTICS = global.TACTICS;
 const { makeDetector } = require('./detector.js');
 
 const WORK_W = 320, WORK_H = 180;   // analysis resolution
@@ -61,12 +62,14 @@ async function framesToResult(frames, w, h, cal, opts) {
   let rep = seriesFrames[0] || { t: start, boardFrame: VISION.toBoardFrame({}, H).frame }, best = -1;
   seriesFrames.forEach(sf => { const c = Object.keys(sf.boardFrame.att).length + Object.keys(sf.boardFrame.def).length; if (c > best) { best = c; rep = sf; } });
   const final = snaps.length ? snaps[snaps.length - 1] : { white: [], dark: [], keeper: [], ball: [] };
-  return ANALYSIS.normalizeResult({
+  const out = {
     engine: 'server', version: ANALYSIS.VERSION,
     tracks: tracksFrom(final),
     frames: seriesFrames.length ? seriesFrames : [{ t: start, boardFrame: rep.boardFrame }],
     events: [{ t: rep.t, type: 'formation', conf: 0.72, frame: rep.boardFrame }].concat(detected),
-  });
+  };
+  if (opts.scout) out.scout = scoutSeries(seriesFrames, detected, opts);
+  return ANALYSIS.normalizeResult(out);
 }
 
 /* decode a video with ffmpeg → raw RGBA frames, then framesToResult */
@@ -96,4 +99,56 @@ function videoToResult(path, cal, opts) {
   });
 }
 
-module.exports = { framesToResult, videoToResult, homographyOf, WORK_W, WORK_H };
+/* Auto-scout: possessions → distilled plays → recognised tactics → team
+   profile → summary → playbook. Pure (TACTICS) — accuracy is bounded by
+   the detector feeding it. */
+function scoutSeries(seriesFrames, events, opts) {
+  opts = opts || {};
+  const names = opts.us === 'dark' ? { att: 'Opponent (white caps)', def: 'Us (dark caps)' }
+              : opts.us === 'white' ? { att: 'Us (white caps)', def: 'Opponent (dark caps)' } : undefined;
+  return TACTICS.scout(seriesFrames, events, { names, maxKeyframes: 6, minConf: 0.5 });
+}
+
+/* decode a WHOLE video in chunks (bounded memory), keep timestamps continuous,
+   detect+track per chunk, run events on the joined series, then scout it.
+   A 1-minute clip or a 1-hour match both go through here (as a background job). */
+async function videoToScout(path, cal, opts) {
+  opts = opts || {};
+  const w = opts.w || WORK_W, h = opts.h || WORK_H, fps = opts.fps || 6, chunkSec = opts.chunkSec || 20;
+  const H = homographyOf(cal);
+  if (!H) { const e = new Error('bad-calibration'); e.code = 'bad-calibration'; throw e; }
+  const durSec = await probeDuration(path, opts.ffmpeg);
+  const total = Math.max(0.5, (opts.winSec ? Math.min(opts.winSec, durSec - (opts.start || 0)) : durSec - (opts.start || 0)));
+  const detector = opts.detector || makeDetector({ modelEndpoint: opts.modelEndpoint, step: opts.step, minArea: opts.minArea });
+  const series = []; const start = opts.start || 0;
+  for (let t0 = 0; t0 < total; t0 += chunkSec) {
+    const frames = await decodeChunk(path, start + t0, Math.min(chunkSec, total - t0), w, h, fps, opts.ffmpeg);
+    if (!frames.length) continue;
+    const perFrame = []; for (const f of frames) perFrame.push(await detector.detect(f, w, h));
+    const snaps = BYTETRACK.series(perFrame, { minHits: 2, maxAge: 4, gate: Math.max(w, h) / 8 });
+    snaps.forEach((snap, i) => series.push({ t: +(start + t0 + i / fps).toFixed(2), boardFrame: VISION.toBoardFrame(snap, H).frame }));
+    if (typeof opts.onProgress === 'function') opts.onProgress(Math.min(1, (t0 + chunkSec) / total));
+  }
+  const events = EVENTS.detect(series, {});
+  const scout = scoutSeries(series, events, opts);
+  return ANALYSIS.normalizeResult({ engine: 'server', version: ANALYSIS.VERSION, tracks: [], frames: series.filter((_, i) => i % Math.max(1, Math.round(fps)) === 0), events, scout, meta: { seconds: total, fps, chunks: Math.ceil(total / chunkSec) } });
+}
+function probeDuration(path, ffmpegBin) {
+  return new Promise((resolve) => {
+    const ff = spawn(ffmpegBin || 'ffmpeg', ['-i', path]); let err = '';
+    ff.stderr.on('data', d => err += d.toString());
+    ff.on('close', () => { const m = err.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/); resolve(m ? (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]) : 0); });
+    ff.on('error', () => resolve(0));
+  });
+}
+function decodeChunk(path, startSec, lenSec, w, h, fps, ffmpegBin) {
+  return new Promise((resolve, reject) => {
+    const args = ['-ss', String(startSec), '-t', String(lenSec), '-i', path, '-vf', `fps=${fps},scale=${w}:${h}`, '-f', 'rawvideo', '-pix_fmt', 'rgba', '-'];
+    const ff = spawn(ffmpegBin || 'ffmpeg', args); const chunks = [];
+    ff.stdout.on('data', d => chunks.push(d)); ff.stderr.on('data', () => {});
+    ff.on('error', e => reject(Object.assign(new Error('ffmpeg-spawn: ' + e.message), { code: 'ffmpeg' })));
+    ff.on('close', () => { const buf = Buffer.concat(chunks), fb = w * h * 4, n = Math.floor(buf.length / fb); const out = []; for (let i = 0; i < n; i++) out.push(buf.subarray(i * fb, (i + 1) * fb)); resolve(out); });
+  });
+}
+
+module.exports = { framesToResult, videoToResult, videoToScout, scoutSeries, homographyOf, WORK_W, WORK_H };
