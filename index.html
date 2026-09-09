@@ -235,6 +235,7 @@
                 <button data-fmt="video"><strong>Video</strong><span>.webm/.mp4 — the animation as a clip</span></button>
               </div></span>
             <button class="btn-ghost" id="share-btn" hidden title="Share a link that opens this play animated on any phone or laptop">🔗 <span data-i18n="share.share">Share</span></button>
+            <button class="btn-ghost" id="tpl-btn" hidden title="Mark this play as a template: it shows in “New play → start from a template” and as a personal audible">⭐ Template</button>
             <button class="btn-ghost" id="edit-btn" hidden>Edit</button>
           </div>
         </div>
@@ -271,6 +272,7 @@
               <button class="as-x" id="as-close" title="Close">✕</button>
             </div>
             <div class="cmd-groups" id="as-groups"></div>
+            <div class="cmd-groups cmd-mine" id="as-mine"></div>
             <div class="cmd-info" id="as-info">Hover a command to see when to call it and why it works.</div>
             <p class="as-foot">The board pauses and runs the call — drag to tweak, then <strong>Save as new ⑂</strong>.</p>
           </div>
@@ -343,6 +345,16 @@
   </section>
 
   <!-- ===================== EDITOR MODAL ===================== -->
+  <div class="modal-backdrop" id="tpl-modal" hidden>
+    <div class="modal modal-sm">
+      <div class="modal-head"><h3>New play — start from…</h3><span class="spacer"></span><button class="modal-x" id="tpl-close">✕</button></div>
+      <div class="modal-body">
+        <p class="muted" style="margin:0 0 8px">Your ⭐ templates and the samples for this situation. The copy opens in the editor — change what you like, then save.</p>
+        <div class="tpl-list" id="tpl-list"></div>
+      </div>
+      <div class="modal-foot"><button class="btn-ghost" id="tpl-blank">Blank play</button></div>
+    </div>
+  </div>
   <div class="modal-backdrop" id="paste-modal" hidden>
     <div class="modal modal-sm">
       <div class="modal-head"><h3>Paste a play</h3><span class="spacer"></span><button class="modal-x" id="paste-close">✕</button></div>
@@ -362,6 +374,7 @@
       <div class="modal-head">
         <h3 id="editor-title">New scenario</h3>
         <span class="spacer"></span>
+        <button class="btn-ghost sm" id="ed-from-tpl" title="Replace this new play with a copy of one of your ⭐ templates or a sample">⭐ Start from template…</button>
         <button class="help-chip" data-help="editor" title="How to record a movement">？</button>
         <button class="modal-x" id="editor-close">✕</button>
       </div>
@@ -451,6 +464,7 @@
               <span class="cmd-target-note">Team-wide moves affect the whole unit; single-player calls use this pick.</span>
             </div>
             <div class="cmd-groups" id="cmd-groups"></div>
+            <div class="cmd-groups cmd-mine" id="cmd-mine"></div>
             <div class="cmd-info" id="cmd-info">Hover a command to see when to call it and why it works.</div>
           </div>
         </details>

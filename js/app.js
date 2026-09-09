@@ -711,7 +711,7 @@
       card.innerHTML = `${selecting?`<span class="scn-check">${selected.has(scn.id)?'☑':'☐'}</span>`:''}
         <div class="scn-card-top">
           <span class="scn-title">${escapeHtml(scn.title||'Untitled play')}</span>
-          ${scn.builtIn?'<span class="tag tag-sample">sample</span>':'<span class="tag tag-yours">saved</span>'}${(typeof PRIVACY!=='undefined' && !scn.builtIn && PRIVACY.levelOf(scn)!=='team')?`<span class="tag vis-${PRIVACY.levelOf(scn)}">${PRIVACY.levelOf(scn)==='private'?'🔒':'🌐'}</span>`:''}
+          ${scn.builtIn?'<span class="tag tag-sample">sample</span>':'<span class="tag tag-yours">saved</span>'}${scn.template?'<span class="tag tag-tpl">⭐ template</span>':''}${(typeof PRIVACY!=='undefined' && !scn.builtIn && PRIVACY.levelOf(scn)!=='team')?`<span class="tag vis-${PRIVACY.levelOf(scn)}">${PRIVACY.levelOf(scn)==='private'?'🔒':'🌐'}</span>`:''}
         </div>
         <div class="scn-desc">${escapeHtml(scn.description||'')}</div>
         <div class="scn-meta"><span>${scn.frames.length} step${scn.frames.length>1?'s':''}</span><span>${escapeHtml(scn.author||'')}</span></div>`;
@@ -723,7 +723,7 @@
       const plus = document.createElement('button');
       plus.className = 'scn-card scn-new';
       plus.innerHTML = '<span class="scn-new-plus">＋</span> Create a new play';
-      plus.onclick = () => openEditor(DATA.newScenario(state.situation, state.phase), true);
+      plus.onclick = () => newPlayFlow();
       list.appendChild(plus);
     }
   }
@@ -740,6 +740,7 @@
     $('scenario-desc').textContent = ''; $('scenario-desc').style.display = '';
     $('edit-btn').hidden = true;
     if ($('dl-btn')) { $('dl-btn').hidden = true; $('share-btn').hidden = true; }
+    if ($('tpl-btn')) $('tpl-btn').hidden = true;
     if ($('shared-banner')) $('shared-banner').hidden = true;
     $('assign-list').innerHTML = ''; POOL.render($('pool'));
   }
@@ -754,6 +755,7 @@
     $('scenario-desc').textContent = scn.description || '';
     $('edit-btn').hidden = !canEdit();
     if ($('dl-btn')) { $('dl-btn').hidden = false; $('share-btn').hidden = false; }
+    if ($('tpl-btn')) { $('tpl-btn').hidden = !(canEdit() && !scn.builtIn && !scn.shared); $('tpl-btn').textContent = scn.template ? '⭐ Template ✓' : '☆ Template'; $('tpl-btn').classList.toggle('active', !!scn.template); }
     if ($('shared-banner')) $('shared-banner').hidden = !scn.shared;
     state.focus = (state.viewMode==='me') ? defaultFocus() : null;
     buildViewer(0, false);
@@ -1393,6 +1395,7 @@
     const df = $('draft-feedback'); if (df) df.querySelectorAll('.draft-line').forEach(n=>n.remove());
     const dp = $('draft-panel'); if (dp) dp.open = isNew;   // invite drafting on new plays
     buildCommandGroups('cmd-groups', applyCommandToEditor);
+    buildMineGroup('cmd-mine', applyTemplateToEditor, edit.scenario.situation);
     const cp = $('cmd-panel'); if (cp) cp.open = false;
     const ct = $('cmd-target'); if (ct) ct.value = 'team';
     wireVideoPanel();
@@ -1428,6 +1431,83 @@
   }
   /* ---- Tactical commands (audibles): call a play, board runs it ---- */
   const SIDE_LABEL = { offense:'Offense', defense:'Defense', transition:'Transition / special' };
+  /* ======================================================
+     TEMPLATES — the coach's own saved situation plays as the base for
+     new plays, and as personal audibles in the command sheet.
+     ====================================================== */
+  function toggleTemplate() {
+    const sc = currentScenario(); if (!sc || sc.builtIn || sc.shared) return;
+    sc.template = !sc.template; sc.updated = Date.now();
+    DATA.save(state.scenarios); renderLibrary(); openScenario(sc.id);
+    toast(sc.template ? '⭐ Template — it now shows under “New play” and as a personal audible' : 'No longer a template');
+  }
+  const myTemplates = () => state.scenarios.filter(sc => sc.template && !sc.builtIn && !sc.shared);
+  function templatesFor(situation, phase) {
+    const mine = myTemplates().filter(sc => sc.situation === situation && sc.phase === phase);
+    const samples = state.scenarios.filter(sc => sc.builtIn && sc.situation === situation && sc.phase === phase);
+    return { mine, samples };
+  }
+  function cloneAsNew(src) {
+    const sc = DATA.newScenario(src.situation, src.phase);
+    sc.title = (src.title || 'Play') + ' — copy'; sc.description = src.description || '';
+    sc.frames = DATA.clone(src.frames); sc.notes = DATA.clone(src.notes || {});
+    sc.fromTemplate = src.id;
+    return sc;
+  }
+  function newPlayFlow(force) {
+    const { mine, samples } = templatesFor(state.situation, state.phase);
+    // the chooser only appears when the coach has ⭐ templates of their own (or from the editor button); plain New play stays instant
+    if (!force && !mine.length) { openEditor(DATA.newScenario(state.situation, state.phase), true); return; }
+    if (!mine.length && !samples.length) { openEditor(DATA.newScenario(state.situation, state.phase), true); return; }
+    const list = $('tpl-list'); list.innerHTML = '';
+    const row = (sc, kind) => { const b = document.createElement('button'); b.className = 'tpl-item'; b.dataset.tpl = sc.id;
+      b.innerHTML = `<span class="tpl-kind">${kind}</span><strong>${escapeHtml(sc.title || 'Untitled')}</strong><span class="muted">${sc.frames.length} step${sc.frames.length > 1 ? 's' : ''}${sc.description ? ' · ' + escapeHtml(sc.description.slice(0, 80)) : ''}</span>`;
+      b.onclick = () => { $('tpl-modal').hidden = true; openEditor(cloneAsNew(sc), true); };
+      list.appendChild(b); };
+    mine.forEach(sc => row(sc, '⭐ mine')); samples.forEach(sc => row(sc, 'sample'));
+    $('tpl-modal').hidden = false;
+  }
+  /* a template play as an audible: its movement is appended to the current board */
+  function playAsSteps(tpl, base) {
+    const frames = DATA.clone(tpl.frames);
+    // start from the template's first frame so the movement is exactly the coach's; keep the current keeper if the template has none
+    frames.forEach(f => { if (!f.gk && base && base.gk) f.gk = DATA.clone(base.gk); });
+    return { steps: frames, notes: DATA.clone(tpl.notes || {}), name: tpl.title || 'Template' };
+  }
+  function buildMineGroup(containerId, onPickTpl, situation) {
+    const wrap = $(containerId); if (!wrap) return;
+    const mine = myTemplates().filter(sc => sc.situation === situation);
+    wrap.innerHTML = '';
+    if (!mine.length) return;
+    const grp = document.createElement('div'); grp.className = 'cmd-group cmd-mineg';
+    grp.innerHTML = '<div class="cmd-group-h">⭐ My plays (templates)</div>';
+    const rowEl = document.createElement('div'); rowEl.className = 'cmd-btns';
+    mine.forEach(sc => { const b = document.createElement('button'); b.className = 'cmd-btn'; b.type = 'button'; b.dataset.tpl = sc.id; b.title = sc.description || sc.title;
+      b.innerHTML = `<span class="cmd-ic">⭐</span><span class="cmd-name">${escapeHtml(sc.title || 'Untitled')}</span><span class="cmd-scope">${sc.frames.length} steps</span>`;
+      b.onclick = () => onPickTpl(sc.id); rowEl.appendChild(b); });
+    grp.appendChild(rowEl); wrap.appendChild(grp);
+  }
+  function applyTemplateToEditor(id) {
+    const tpl = state.scenarios.find(x => x.id === id); if (!edit.scenario || !tpl) return;
+    const r = playAsSteps(tpl, edit.scenario.frames[edit.scenario.frames.length - 1]);
+    edit.scenario.frames.push(...r.steps);
+    Object.keys(r.notes).forEach(p => { if (!r.notes[p]) return; edit.scenario.notes[p] = edit.scenario.notes[p] ? edit.scenario.notes[p] + ' ' + r.notes[p] : r.notes[p]; });
+    edit.idx = edit.scenario.frames.length - 1; buildNotesGrid(); editorRender();
+    toast(`⭐ ${r.name} added — ${r.steps.length} step${r.steps.length > 1 ? 's' : ''}`);
+  }
+  function applyTemplateAudible(id) {
+    const tpl = state.scenarios.find(x => x.id === id); if (!tpl) return;
+    if (!canPausedEdit()) { toast('Open a play first to call an audible'); return; }
+    if (state.viewer) state.viewer.stop(); enterPausedEdit(); if (!adjust.scn) return;
+    const r = playAsSteps(tpl, adjust.scn.frames[adjust.scn.frames.length - 1]);
+    adjust.undo.push(JSON.parse(JSON.stringify(adjust.scn.frames))); if (adjust.undo.length > 25) adjust.undo.shift();
+    adjust.scn.frames.push(...r.steps); adjust.scn.notes = adjust.scn.notes || {};
+    Object.keys(r.notes).forEach(p => { if (!r.notes[p]) return; adjust.scn.notes[p] = adjust.scn.notes[p] ? adjust.scn.notes[p] + ' ' + r.notes[p] : r.notes[p]; });
+    adjust.dirty = true; if (typeof renderAdjustBoard === 'function') renderAdjustBoard();
+    const bar = $('adjust-bar'); if (bar) bar.hidden = false;
+    const sheet = $('audible-sheet'); if (sheet) sheet.hidden = true;
+    toast(`⭐ ${r.name} called — ${r.steps.length} step${r.steps.length > 1 ? 's' : ''}; drag to tweak, then save`);
+  }
   function buildCommandGroups(containerId, onPick) {
     const wrap = $(containerId); if (!wrap || typeof COMMANDS==='undefined') return;
     wrap.innerHTML = '';
@@ -1493,6 +1573,7 @@
   function openAudible() {
     if (!canPausedEdit()) return;
     buildCommandGroups('as-groups', applyAudible);
+    { const cur = state.scenarios.find(x => x.id === state.selectedId); buildMineGroup('as-mine', applyTemplateAudible, cur ? cur.situation : state.situation); }
     $('as-target').value = state.focus || 'team';
     $('audible-sheet').hidden = false;
   }
@@ -2151,7 +2232,11 @@
     $('adj-save').onclick = ()=> adjustSave(false);
     $('adj-save-new').onclick = ()=> adjustSave(true);
 
-    $('new-scenario-btn').onclick = ()=> { if(canEdit()) openEditor(DATA.newScenario(state.situation, state.phase), true); };
+    $('new-scenario-btn').onclick = ()=> { if(canEdit()) newPlayFlow(); };
+    $('tpl-btn').onclick = toggleTemplate;
+    if ($('ed-from-tpl')) $('ed-from-tpl').onclick = () => { $('editor-modal').hidden = true; newPlayFlow(true); };
+    $('tpl-close').onclick = () => { $('tpl-modal').hidden = true; };
+    $('tpl-blank').onclick = () => { $('tpl-modal').hidden = true; openEditor(DATA.newScenario(state.situation, state.phase), true); };
     $('edit-btn').onclick = ()=>{ const s=state.scenarios.find(x=>x.id===state.selectedId); if(s&&canEdit()) openEditor(s,false); };
     $('editor-close').onclick = closeEditor; $('ed-cancel').onclick = closeEditor;
     $('ed-save').onclick = saveScenario; $('ed-saveas').onclick = saveScenarioAs; $('ed-delete').onclick = deleteScenario;

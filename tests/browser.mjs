@@ -68,6 +68,18 @@ const cardsBeforeTxt = await page.locator('.scn-card:not(.scn-new)').count();
 await page.setInputFiles('#import-file', { name:'drive.txt', mimeType:'text/plain', buffer: Buffer.from('# Drive and dump\n3 has the ball\n2 drives to 2 m on the right\n3 passes to 2\n2 shoots far corner') });
 await page.waitForTimeout(500);
 ok('.txt written steps imported as a play (+1)', (await page.locator('.scn-card:not(.scn-new)').count())===cardsBeforeTxt+1 && /Drive and dump/.test(await page.locator('#scenario-title').textContent()));
+await page.locator('.scn-card:has-text("Drive and dump")').first().click(); await page.waitForTimeout(300);
+// ⭐ templates: star my written play → New play chooser → copy opens in the editor
+await page.click('#tpl-btn'); await page.waitForTimeout(200);
+ok('☆ Template stars my play', /✓/.test(await page.locator('#tpl-btn').textContent()) && await page.locator('.tag-tpl').count()>=1);
+await page.click('#new-scenario-btn'); await page.waitForTimeout(200);
+ok('New play → start from a template (mine + samples)', await page.locator('#tpl-modal:not([hidden])').count()===1 && await page.locator('#tpl-list .tpl-item').count()>=2);
+await page.locator('#tpl-list .tpl-item').first().click(); await page.waitForTimeout(300);
+ok('template copy opens in the editor', await page.locator('#editor-modal:not([hidden])').count()===1 && /copy/.test(await page.locator('#ed-title').inputValue()));
+await page.click('#ed-cancel'); await page.waitForTimeout(150);
+await page.locator('.scn-card:has-text("Drive and dump")').first().click(); await page.waitForTimeout(200);
+await page.click('#tpl-btn'); await page.waitForTimeout(200);   // unstar so plain New play stays instant for the sections below
+ok('unstar removes the template tag', await page.locator('.tag-tpl').count()===0);
 await page.locator('.scn-card:has-text("Drive & kick")').first().click(); await page.waitForTimeout(300);
 // ⬇ Download a play file · ☑ Select → 🎬 Reel of several plays (one real video) · 🔗 share link
 const dlFmt = async (fmt) => { const w = page.waitForEvent('download', { timeout: 15000 }); await page.click('#dl-btn'); await page.click(`#dl-menu [data-fmt="${fmt}"]`); const f = await w.catch(()=>null); return f ? f.suggestedFilename() : null; };

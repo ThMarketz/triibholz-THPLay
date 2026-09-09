@@ -804,6 +804,40 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('backup all → toast with the count', /saved as a backup/.test(q('#toast').textContent));
   }
 
+  console.log('\n[6x] Templates — my saved plays as the base for new plays and as personal audibles');
+  {
+    const { DATA } = window.__T;
+    q('.nav-btn[data-view="playbook"]').click(); await wait(30);
+    // make a saved play of our own in 6v6 offense (samples are builtIn)
+    const mine = qa('#scenario-list .scn-card').find(c=>/saved/.test(c.textContent) && !/template/.test(c.textContent));
+    ok('a saved play of our own exists to star', !!mine); mine.click(); await wait(40);
+    ok('☆ Template button shows on our own play', !q('#tpl-btn').hidden && /Template/.test(q('#tpl-btn').textContent));
+    q('#tpl-btn').click(); await wait(40);
+    const starred = DATA.load().find(x=>x.template);
+    ok('starring stores template=true and tags the card', !!starred && qa('.tag-tpl').length>=1 && /✓/.test(q('#tpl-btn').textContent));
+    // New play → chooser with ⭐ mine + samples
+    q('#new-scenario-btn').click(); await wait(30);
+    ok('New play opens the template chooser', !q('#tpl-modal').hidden && qa('#tpl-list .tpl-item').length>=2 && /mine/.test(q('#tpl-list .tpl-item').textContent));
+    q('#tpl-list .tpl-item').click(); await wait(40);
+    ok('picking a template opens the editor with a copy (frames + title)', !q('#editor-modal').hidden && /— copy$/.test(q('#ed-title').value) && q('#frame-chips').children.length===starred.frames.length);
+    ok('editor palette lists My plays', qa('#cmd-mine .cmd-btn[data-tpl]').length>=1);
+    const fb = q('#frame-chips').children.length; q('#cmd-mine .cmd-btn[data-tpl]').click(); await wait(20);
+    ok('a template appends its steps in the editor', q('#frame-chips').children.length===fb+starred.frames.length);
+    q('#ed-cancel').click(); await wait(20);
+    // audible sheet: My plays group + call it on the board
+    qa('#scenario-list .scn-card').find(c=>/sample/.test(c.textContent)).click(); await wait(40);
+    q('#audible-btn').click(); await wait(20);
+    ok('audible sheet shows ⭐ My plays', qa('#as-mine .cmd-btn[data-tpl]').length>=1);
+    q('#as-mine .cmd-btn[data-tpl]').click(); await wait(40);
+    ok('calling my play on the board → dirty paused edit (save bar)', q('#adjust-bar').hidden===false);
+    q('#adj-cancel').click(); await wait(20);
+    // blank still possible; unstar
+    q('#new-scenario-btn').click(); await wait(20); q('#tpl-blank').click(); await wait(20);
+    ok('Blank play still opens a fresh editor', !q('#editor-modal').hidden && q('#frame-chips').children.length===1); q('#ed-cancel').click(); await wait(10);
+    qa('#scenario-list .scn-card').find(c=>/template/.test(c.textContent)).click(); await wait(30); q('#tpl-btn').click(); await wait(30);
+    ok('unstar removes the template', !DATA.load().some(x=>x.template));
+  }
+
   console.log('\n[7] Basics + i18n');
   q('.nav-btn[data-view="basics"]').click(); await wait(25);
   ok('10 basics cards incl. responsibilities', qa('#view-basics .basics-card').length===10);

@@ -882,3 +882,11 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .cmd-info{margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(31,192,212,.08);font-size:.84rem;line-height:1.4;color:var(--muted)}
 .cmd-info strong,.cmd-info b{color:var(--text)}
 #paste-text{background:var(--surface-2,rgba(255,255,255,.04));color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font:inherit}
+
+/* ---- templates (v1.29) ---- */
+.tag-tpl{background:rgba(255,196,0,.16);color:#ffd766}
+#tpl-btn.active{border-color:#ffd766;color:#ffd766}
+.tpl-list{display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto}
+.tpl-item{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:transparent;color:var(--text);cursor:pointer;font:inherit}
+.tpl-item:hover{border-color:var(--accent)}.tpl-kind{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:#ffd766}
+.cmd-mineg .cmd-btn .cmd-ic{color:#ffd766}
