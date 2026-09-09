@@ -200,6 +200,7 @@
           <span class="sb-count" id="sb-count">0 selected</span>
           <button class="btn-ghost sm" id="sb-all">All here</button>
           <button class="btn-ghost sm" id="sb-download" title="One .thplay.json with every selected play">⬇ Set</button>
+          <button class="btn-ghost sm" id="sb-print" title="Print the selected plays — one per page — or save as PDF">🖨 PDF</button>
           <button class="btn-primary sm" id="sb-reel" title="One video: title card + animation for each selected play">🎬 Reel</button>
           <button class="btn-ghost sm" id="sb-close" title="Leave select mode">✕</button>
           <div class="sb-out" id="sb-out"></div>
@@ -220,7 +221,14 @@
               <button class="mode-btn" data-mode="problem" data-i18n="mode.problem">Problem</button>
               <button class="mode-btn active" data-mode="solution" data-i18n="mode.solution">Solution</button>
             </span>
-            <button class="btn-ghost" id="dl-btn" hidden title="Download this play as a file (.thplay.json) — another coach imports it with ⬆ Import">⬇ <span data-i18n="share.download">Download</span></button>
+            <span class="dl-wrap"><button class="btn-ghost" id="dl-btn" hidden title="Download this play — several formats">⬇ <span data-i18n="share.download">Download</span> ▾</button>
+              <div class="dl-menu" id="dl-menu" hidden>
+                <button data-fmt="json"><strong>Play file</strong><span>.thplay.json — import it in another Triibholz</span></button>
+                <button data-fmt="png"><strong>Image sheet</strong><span>.png — every step on one picture</span></button>
+                <button data-fmt="svg"><strong>Vector board</strong><span>.svg — the current step, scales to any size</span></button>
+                <button data-fmt="pdf"><strong>Print / PDF</strong><span>steps + notes on paper or as a PDF</span></button>
+                <button data-fmt="video"><strong>Video</strong><span>.webm/.mp4 — the animation as a clip</span></button>
+              </div></span>
             <button class="btn-ghost" id="share-btn" hidden title="Share a link that opens this play animated on any phone or laptop">🔗 <span data-i18n="share.share">Share</span></button>
             <button class="btn-ghost" id="edit-btn" hidden>Edit</button>
           </div>

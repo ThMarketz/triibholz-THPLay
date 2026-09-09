@@ -85,3 +85,23 @@ the multi‑club tenancy layer from the rollout roadmap takes over later.
 **Synthetic demo clip:** `docs/demo/triibholz-demo-attack.mp4` (20 s, white drive & kick
 then a dark possession) is generated, not filmed — it proves the pipeline end‑to‑end and
 produces a recognised drive & kick, not a benchmark of real‑footage accuracy.
+
+## v1.26 — Team analysis by situation is the default (and both goals count)
+
+Two engine fixes, found while scouting real footage:
+1. **Both goals.** A match attacks both ends; the engine used to judge every possession against
+   the right‑hand goal, so the team attacking left never "ended in a shot" and its tactics were
+   read against the wrong end. Now each possession gets a direction (`dir`) from where the ball
+   travels, and its frames are mirrored into a canonical right‑attacking frame before any tactic
+   logic runs. `EVENTS.detect` reports shots/goals at both goals (`side: 'left' | 'right'`).
+2. **Who has the ball, with patience.** Possession changes hands only after 3 consecutive frames
+   say so (`holderSeries`), a lost ball keeps the last holder for a few frames, and a possession
+   can only *start* on a real holder — no more phantom possessions on ball‑less frames.
+
+On top: **situation** (6 on 6 / 6 on 5 man‑up / 5 on 6 man‑down) from who is in the attacking
+half (median over the possession, 60 % agreement required), **counter** flag, and **patterns** =
+the ball's zone path (`point > left wing > 2 m > shot`) repeated by the same team in the same
+situation. `TACTICS.scout()` now returns `teams` (per team × situation: possessions, shots,
+goals, patterns with an example, ball heat, tactics %, formation, defence met) and `narrative`
+(plain sentences). The Film Room shows this first; the older summary / plan / attacks sit under
+"Go further".

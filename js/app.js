@@ -1467,6 +1467,64 @@
     const what = conf.length === 1 ? `“${conf[0].title || 'this play'}” is` : `${conf.length} of these plays are`;
     return askConfirm(`${what} marked ${allPriv ? 'private' : 'team-only'}. Once downloaded or shared, the file leaves the app and you can’t take it back. Continue?`, 'Yes, export');
   }
+  /* ---- more formats: PNG step sheet, SVG board, printable PDF ---- */
+  const playOf = sc => ({ situation: sc.situation, phase: sc.phase, title: sc.title || 'Play', description: sc.description || '', frames: sc.frames, notes: sc.notes || {} });
+  function stepCanvas(play, i, W, H) {
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d'); if (!ctx) return null;
+    const t = i * VIDEOGEN.SEC_PER_STEP;   // the exact keyframe time
+    VIDEOGEN.drawScene(ctx, play, t, W, H, { caption: `Step ${i + 1} / ${play.frames.length}` });
+    return c;
+  }
+  function sheetCanvas(sc, opts) {
+    if (typeof VIDEOGEN === 'undefined') return null;
+    const play = playOf(sc), n = play.frames.length, cols = n <= 2 ? n : n <= 4 ? 2 : 3, rows = Math.ceil(n / cols);
+    const W = (opts && opts.w) || 640, H = Math.round(W * 9 / 16), pad = 16, head = 64;
+    const sheet = document.createElement('canvas'); sheet.width = cols * W + (cols + 1) * pad; sheet.height = head + rows * H + (rows + 1) * pad;
+    const g = sheet.getContext('2d'); if (!g) return null;
+    g.fillStyle = '#0b1b25'; g.fillRect(0, 0, sheet.width, sheet.height);
+    g.fillStyle = '#e8f6f8'; g.font = '700 26px system-ui, -apple-system, Segoe UI, sans-serif'; g.fillText(String(sc.title || 'Play').slice(0, 60), pad, 34);
+    g.fillStyle = '#7fd4de'; g.font = '500 15px system-ui, sans-serif'; g.fillText(`${DATA.sit(sc.situation).label} · ${sc.phase} · ${n} step${n > 1 ? 's' : ''} · Triibholz THPLAY`, pad, 56);
+    for (let i = 0; i < n; i++) { const c = stepCanvas(play, i, W, H); if (!c) return null; g.drawImage(c, pad + (i % cols) * (W + pad), head + pad + Math.floor(i / cols) * (H + pad)); }
+    return sheet;
+  }
+  function svgOfBoard() {
+    const svg = $('pool'); if (!svg) return null;
+    const clone = svg.cloneNode(true);
+    // bake the computed styles in, so the file looks right outside the app
+    const src = svg.querySelectorAll('*'), dst = clone.querySelectorAll('*');
+    const props = ['fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'opacity', 'font-size', 'font-family', 'font-weight', 'text-anchor', 'stroke-linecap', 'fill-opacity', 'stroke-opacity'];
+    for (let i = 0; i < src.length && i < dst.length; i++) { try { const cs = getComputedStyle(src[i]); props.forEach(pn => { const v = cs.getPropertyValue(pn); if (v && v !== 'none' || pn === 'fill') dst[i].style.setProperty(pn, v); }); } catch (e) {} }
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); clone.setAttribute('width', '960'); clone.setAttribute('height', '786');
+    clone.removeAttribute('id');
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+  }
+  function printHtml(scns) {
+    const esc = escapeHtml;
+    const page = sc => { const sheet = sheetCanvas(sc, { w: 520 }); const img = sheet ? `<img src="${sheet.toDataURL('image/png')}" alt="">` : '';
+      const notes = Object.keys(sc.notes || {}).filter(k => (sc.notes[k] || '').trim()).map(k => `<li><b>${esc(k)}</b> ${esc(sc.notes[k])}</li>`).join('');
+      return `<section class="play"><h1>${esc(sc.title || 'Play')}</h1><p class="sub">${esc(DATA.sit(sc.situation).label)} · ${esc(sc.phase)} · ${sc.frames.length} steps${sc.author ? ' · ' + esc(sc.author) : ''}</p>${sc.description ? `<p>${esc(sc.description)}</p>` : ''}${img}${notes ? `<h2>What each position does</h2><ul>${notes}</ul>` : ''}</section>`; };
+    return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(scns.length === 1 ? (scns[0].title || 'Play') : scns.length + ' plays')} — Triibholz</title>
+      <style>body{font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;color:#111;margin:0;padding:18mm 16mm}.play{page-break-after:always}.play:last-child{page-break-after:auto}h1{margin:0 0 2px;font-size:22px}h2{font-size:14px;margin:14px 0 4px}.sub{color:#555;margin:0 0 8px}img{width:100%;max-width:720px;display:block;border-radius:6px;margin:8px 0}ul{padding-left:18px}li{margin:2px 0}@media print{body{padding:0}}</style></head>
+      <body>${scns.map(page).join('')}<script>setTimeout(function(){window.print();},350);<\/script></body></html>`;
+  }
+  function openPrint(scns) {
+    const html = printHtml(scns);
+    let w = null; try { w = window.open('', '_blank'); } catch (e) {}
+    if (!w) { downloadBlob(html, SHARE.filename((scns.length === 1 ? scns[0].title : 'plays') + ' print', 'html'), 'text/html'); toast('Pop-ups are blocked — the print page was downloaded instead; open it and print / save as PDF'); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+  }
+  async function exportPlayAs(fmt) {
+    const sc = currentScenario(); if (!sc) return;
+    if (fmt === 'json') return downloadPlay();
+    if (!await guardConfidential([sc])) return;
+    if (fmt === 'png') { const sheet = sheetCanvas(sc); if (!sheet) { toast('Image export needs a canvas-capable browser'); return; }
+      sheet.toBlob(b => { if (!b) { toast('Could not render the image'); return; } const url = URL.createObjectURL(b); const a = document.createElement('a'); a.href = url; a.download = SHARE.filename(sc.title, 'png'); document.body.appendChild(a); a.click(); setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1500); toast('Image sheet downloaded'); }, 'image/png'); return; }
+    if (fmt === 'svg') { const svg = svgOfBoard(); if (!svg) return; downloadBlob(svg, SHARE.filename(sc.title + ' step ' + ((state.viewer ? state.viewer.currentStep() : 0) + 1), 'svg'), 'image/svg+xml'); toast('Board saved as SVG (current step)'); return; }
+    if (fmt === 'pdf') { openPrint([sc]); return; }
+    if (fmt === 'video') { const d = $('video-panel'); if (d) { d.open = true; if (typeof d.scrollIntoView === 'function') d.scrollIntoView({ behavior: 'smooth', block: 'start' }); const b = $('vid-generate'); if (b) b.focus(); } return; }
+  }
+  function toggleDlMenu(force) { const m = $('dl-menu'); if (!m) return; m.hidden = force == null ? !m.hidden : !force; }
   async function downloadPlay() {
     const sc = currentScenario(); if (!sc || typeof SHARE === 'undefined') return;
     if (!await guardConfidential([sc])) return;
@@ -1525,7 +1583,7 @@
   function updateSelectBar() {
     const c = $('sb-count'); if (!c) return;
     c.textContent = `${selected.size} selected`;
-    $('sb-download').disabled = !selected.size; $('sb-reel').disabled = !selected.size;
+    $('sb-download').disabled = !selected.size; $('sb-reel').disabled = !selected.size; if ($('sb-print')) $('sb-print').disabled = !selected.size;
   }
   const pickedScenarios = () => Array.from(selected).map(id => state.scenarios.find(sc => sc.id === id)).filter(Boolean);
   const setName = () => `${DATA.sit(state.situation).label} ${state.phase}`;
@@ -1578,7 +1636,11 @@
   }
   function wireShare() {
     if (!$('dl-btn')) return;
-    $('dl-btn').onclick = downloadPlay; $('share-btn').onclick = sharePlay;
+    $('dl-btn').onclick = e => { e.stopPropagation(); toggleDlMenu(); };
+    $('dl-menu').querySelectorAll('[data-fmt]').forEach(b => b.onclick = e => { e.stopPropagation(); toggleDlMenu(false); exportPlayAs(b.dataset.fmt); });
+    document.addEventListener('click', () => toggleDlMenu(false));
+    $('share-btn').onclick = sharePlay;
+    $('sb-print').onclick = async () => { const scns = pickedScenarios(); if (!scns.length) return; if (!await guardConfidential(scns)) return; openPrint(scns); };
     $('select-btn').onclick = () => toggleSelectMode();
     $('sb-close').onclick = () => toggleSelectMode(false);
     $('sb-all').onclick = () => { currentList().forEach(sc => selected.add(sc.id)); renderLibrary(); };

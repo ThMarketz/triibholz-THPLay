@@ -59,7 +59,8 @@ const HELP = (() => {
 
     autoscout: { icon:'🧠', title:'Auto-scout — the system builds the playbook from a video', steps:[
       'In the Film Room, on an <strong>uploaded video file</strong> (Upload video — a YouTube or Veo link can’t be read by the analyser; download the match first), calibrate the pool once, then press <strong>🧠 Scout this video</strong>. The backend watches the <em>whole</em> video (a minute or a full match — long videos run as a background job you can poll).',
-      'It cuts the match into <strong>possessions</strong>, boils each one down to a clean play (start → passes → drives → shot), and <strong>recognises the tactic</strong>: drive &amp; kick, hole entry, pick &amp; roll, perimeter swing, wing isolation, counter-attack, man-up 4-2 / 3-3, and the defence it met (press / drop / zone).',
+      'The default view is <strong>what each team was trying to play, by situation</strong>: for the white caps and the blue caps, in 6 on 6, 6 on 5 (man-up) and 5 on 6 (man-down) — possessions, shots, goals, the repeated <em>ball paths</em> (e.g. point → left wing → 2 m → shot, seen 4×), where the ball lived, the recognised tactics and the defence they met. Possession follows <strong>who has the ball</strong>, with a few frames of patience before it changes hands, and each team is judged against the goal it attacks.',
+      'Below that, “Go further”: the scouting summary, plan vs reality, every attack with clip + board, and the shared debrief. Tactics recognised: drive &amp; kick, hole entry, pick &amp; roll, perimeter swing, wing isolation, counter-attack, man-up 4-2 / 3-3; defence: press / drop / zone.',
       'You get a <strong>scouting summary</strong> in plain sentences (tendencies with percentages, shot zones, tempo, man-up count) for <em>both</em> teams — so it works to study your own movements or to read what the opponent is trying to play.',
       'Press <strong>Add plays to my playbook</strong> — the distinct recognised plays land as real, editable plays (Team visibility). Anything below 80% confidence is flagged <em>needs review</em>; nothing is invented below 50%.',
     ], tips:[
@@ -78,7 +79,7 @@ const HELP = (() => {
     ]},
 
     share: { icon:'📤', title:'Download, import &amp; share plays — sets and video reels', steps:[
-      '<strong>⬇ Download</strong> (top right of an open play) saves it as a small <em>.thplay.json</em> file — send it to another coach, keep it as a backup, or move it to your other device.',
+      '<strong>⬇ Download ▾</strong> (top right of an open play) offers formats: <em>Play file</em> (.thplay.json, importable), <em>Image sheet</em> (.png, every step on one picture), <em>Vector board</em> (.svg, current step), <em>Print / PDF</em> (steps + notes, one play per page) and <em>Video</em>. In select mode, <strong>🖨 PDF</strong> prints all selected plays as a booklet.',
       '<strong>⬆ Import</strong> (left, above the play list) reads such files — or drop a file onto the list. Plays already in your playbook are skipped, not duplicated.',
       '<strong>🔗 Share</strong> makes a link that carries the whole play: whoever opens it sees it animated and can press <em>Save to my playbook</em>. On a phone it opens the share sheet (WhatsApp, Mail, AirDrop…).',
       '<strong>☑ Select</strong> lets you pick several plays — e.g. all your defense scenarios — then <strong>⬇ Set</strong> downloads them as one file, and <strong>🎬 Reel</strong> renders them into ONE video: a title card and the animation for each play, ready to send to the team.',

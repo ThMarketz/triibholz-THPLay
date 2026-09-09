@@ -54,22 +54,28 @@ const EVENTS = (() => {
       }
     }
 
-    // shots + goals from the ball trajectory
-    let lastShotT = -1e9;
-    for (let i = 1; i < series.length; i++) {
-      const b0 = ballAt(series[i - 1].boardFrame), b1 = ballAt(series[i].boardFrame);
-      if (!b0 || !b1) continue;
-      const dt = (series[i].t - series[i - 1].t) || 0.1;
-      const vx = (b1.x - b0.x) / dt;
-      if (b1.x >= GOAL_X - 2 && b1.y >= GOAL_TOP && b1.y <= GOAL_BOT) {
-        evts.push({ t: series[i].t, type: 'goal', zone: zoneOf(b1.y), origin: { x: +b0.x.toFixed(1), y: +b0.y.toFixed(1) }, conf: 0.55, frame: series[i].boardFrame });
-        lastShotT = series[i].t; continue;
+    // shots + goals from the ball trajectory — at BOTH goals (a real match attacks both ends;
+    // the left goal is judged on the mirrored ball path, x → 320 − x)
+    const mx = x => 320 - x;
+    [{ side: 'right', f: b => b }, { side: 'left', f: b => ({ x: mx(b.x), y: b.y }) }].forEach(({ side, f }) => {
+      let lastShotT = -1e9;
+      for (let i = 1; i < series.length; i++) {
+        const r0 = ballAt(series[i - 1].boardFrame), r1 = ballAt(series[i].boardFrame);
+        if (!r0 || !r1) continue;
+        const b0 = f(r0), b1 = f(r1);
+        const dt = (series[i].t - series[i - 1].t) || 0.1;
+        const vx = (b1.x - b0.x) / dt;
+        const origin = { x: +r0.x.toFixed(1), y: +r0.y.toFixed(1) };
+        if (b1.x >= GOAL_X - 2 && b1.y >= GOAL_TOP && b1.y <= GOAL_BOT) {
+          evts.push({ t: series[i].t, type: 'goal', side, zone: zoneOf(b1.y), origin, conf: 0.55, frame: series[i].boardFrame });
+          lastShotT = series[i].t; continue;
+        }
+        if (vx > shotSpeed && b1.x > 200 && (series[i].t - lastShotT) > 0.35) {
+          evts.push({ t: series[i].t, type: 'shot', side, zone: zoneOf(b1.y), origin, conf: 0.5, frame: series[i].boardFrame });
+          lastShotT = series[i].t;
+        }
       }
-      if (vx > shotSpeed && b1.x > 200 && (series[i].t - lastShotT) > 0.35) {
-        evts.push({ t: series[i].t, type: 'shot', zone: zoneOf(b1.y), origin: { x: +b0.x.toFixed(1), y: +b0.y.toFixed(1) }, conf: 0.5, frame: series[i].boardFrame });
-        lastShotT = series[i].t;
-      }
-    }
+    });
 
     return evts.sort((a, b) => a.t - b.t);
   }

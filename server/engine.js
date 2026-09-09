@@ -104,8 +104,8 @@ function videoToResult(path, cal, opts) {
    the detector feeding it. */
 function scoutSeries(seriesFrames, events, opts) {
   opts = opts || {};
-  const names = opts.us === 'dark' ? { att: 'Opponent (white caps)', def: 'Us (dark caps)' }
-              : opts.us === 'white' ? { att: 'Us (white caps)', def: 'Opponent (dark caps)' } : undefined;
+  const names = opts.us === 'dark' ? { att: 'Opponent (white caps)', def: 'Us (blue caps)' }
+              : opts.us === 'white' ? { att: 'Us (white caps)', def: 'Opponent (blue caps)' } : undefined;
   return TACTICS.scout(seriesFrames, events, { names, maxKeyframes: 6, minConf: 0.5 });
 }
 

@@ -697,6 +697,44 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     window.location.hash = '';
   }
 
+  console.log('\n[6u] Scout v2 — both goals, ball-driven possession, situations, patterns, team analysis');
+  {
+    const { TACTICS, EVENTS } = window.__T;
+    const mk=(t,att,def,ball,gk)=>({ t, boardFrame:{ att, def, gk: gk||{x:292,y:110}, ball } }); const cl=o=>JSON.parse(JSON.stringify(o));
+    const A={1:{x:200,y:60},2:{x:200,y:160},3:{x:230,y:150},4:{x:230,y:70},5:{x:190,y:110},6:{x:268,y:110}};
+    const D={1:{x:240,y:80},2:{x:240,y:140},3:{x:250,y:150},4:{x:250,y:70},5:{x:220,y:110},6:{x:280,y:110}};
+    let t=0; const ser=[], evs=[];
+    const white=()=>{ for(let i=0;i<3;i++){ ser.push(mk(t,cl(A),cl(D),{x:192,y:112})); t+=0.5; } ser.push(mk(t,cl(A),cl(D),{x:243,y:82})); t+=0.5; /* one frame where a DEFENDER is nearest */ for(let i=0;i<2;i++){ ser.push(mk(t,cl(A),cl(D),{x:202,y:62})); t+=0.5; } for(let i=0;i<2;i++){ ser.push(mk(t,cl(A),cl(D),{x:270,y:112})); t+=0.5; } ser.push(mk(t,cl(A),cl(D),{x:293,y:110})); evs.push({t,type:'goal',side:'right'}); t+=0.5; };
+    const gap=n=>{ for(let i=0;i<n;i++){ ser.push(mk(t,cl(A),cl(D),null)); t+=0.5; } };
+    const A2={1:{x:80,y:60},2:{x:80,y:160},3:{x:60,y:150},4:{x:60,y:70},5:{x:130,y:110}};
+    const D2={1:{x:100,y:60},2:{x:100,y:160},3:{x:70,y:150},4:{x:70,y:70},5:{x:120,y:110},6:{x:52,y:110}};
+    const dark=()=>{ for(let i=0;i<3;i++){ ser.push(mk(t,cl(A2),cl(D2),{x:122,y:112},{x:28,y:110})); t+=0.5; } for(let i=0;i<2;i++){ ser.push(mk(t,cl(A2),cl(D2),{x:102,y:162},{x:28,y:110})); t+=0.5; } for(let i=0;i<2;i++){ ser.push(mk(t,cl(A2),cl(D2),{x:54,y:112},{x:28,y:110})); t+=0.5; } ser.push(mk(t,cl(A2),cl(D2),{x:27,y:110},{x:28,y:110})); t+=0.5; };
+    white(); gap(6); white(); gap(6); dark(); gap(6);
+    const det = EVENTS.detect(ser, {});
+    ok('EVENTS sees the goal at the LEFT end too (side tagged)', det.some(e=>e.type==='goal'&&e.side==='left') && det.some(e=>e.type==='goal'&&e.side==='right'));
+    const hs = TACTICS.holderSeries(ser, {});
+    ok('one noisy frame does not change hands (3-frame patience)', hs[3].team==='att' && hs[3].raw && hs[3].raw.team==='def');
+    const sc = TACTICS.scout(ser, evs.concat(det.filter(e=>e.type==='goal'&&e.side==='left')), {});
+    ok('exactly 3 possessions — no phantom possessions on ball-less frames', sc.possessions===3);
+    const dk = sc.plays.find(p=>p.offense==='def');
+    ok('blue caps attacking LEFT: direction read, frames mirrored, shot + goal counted', dk && dk.dir==='left' && dk.endsInShot && dk.goal && dk.frames[dk.frames.length-1].ball.x===293);
+    ok('situation from who is in the attacking half: blue man-up 6v5, white even 6v6', dk.situation==='6v5' && sc.plays.filter(p=>p.offense==='att').every(p=>p.situation==='6v6'));
+    ok('ball path signature (flicker-free) + readable name', sc.plays[0].signature==='PT>LW>HOLE>SHOT' && sc.plays[0].pathName==='point → left wing → 2 m → shot');
+    const w6 = sc.teams.att.bySituation['6v6'];
+    ok('team analysis: white 6v6 = 2 possessions, one pattern seen 2× with 2 shots / 2 goals + example', w6.possessions===2 && w6.patterns.length===1 && w6.patterns[0].n===2 && w6.patterns[0].goals===2 && typeof w6.patterns[0].example.index==='number' && w6.patterns[0].frames.length>=2);
+    ok('team analysis: blue only in 6v5, ball heat + tactic % present', Object.keys(sc.teams.def.bySituation).join()==='6v5' && sc.teams.def.bySituation['6v5'].ballHeat.length>=3 && sc.teams.def.bySituation['6v5'].tactics[0].tactic==='hole-entry');
+    ok('narrative reads per team × situation', sc.narrative.some(l=>/^White caps in 6 on 6 \(2\): they mostly worked point → left wing → 2 m → shot \(2×, 2 shots, 2 goals\)/.test(l)) && sc.narrative.some(l=>/^Blue caps in 6 on 5 \(man-up\) \(1\)/.test(l)));
+    ok('legacy summary still present; playbook built', Array.isArray(sc.summary) && sc.summary.length>=2 && sc.playbook.length>=1);
+    // ⬇ Download menu formats
+    q('.nav-btn[data-view="playbook"]').click(); await wait(30);
+    qa('#scenario-list .scn-card').find(c=>!c.classList.contains('scn-new')).click(); await wait(40);
+    q('#dl-btn').click(); await wait(10);
+    ok('Download ▾ opens a menu with 5 formats', !q('#dl-menu').hidden && qa('#dl-menu [data-fmt]').map(b=>b.dataset.fmt).join()==='json,png,svg,pdf,video');
+    q('#dl-menu [data-fmt="video"]').click(); await wait(10);
+    ok('Video → opens the video panel; menu closes', q('#dl-menu').hidden && q('#video-panel').open===true);
+    ok('select mode has 🖨 PDF booklet', !!q('#sb-print'));
+  }
+
   console.log('\n[7] Basics + i18n');
   q('.nav-btn[data-view="basics"]').click(); await wait(25);
   ok('10 basics cards incl. responsibilities', qa('#view-basics .basics-card').length===10);

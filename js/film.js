@@ -507,10 +507,12 @@ const FILM = (() => {
     lastScout = { sc, result, sessionId: cur && cur.id };
     if (!sc || !sc.possessions) { out.innerHTML = '<div class="muted">No possessions could be read from this video — check the calibration and cap colours.</div>'; return; }
     const meta = result && result.meta ? ` · ${Math.round(result.meta.seconds)}s analysed` : '';
-    const teamRows = Object.keys(sc.profile || {}).map(k => { const t = sc.profile[k]; return `<div class="scout-team"><strong>${k === 'att' ? 'White caps' : 'Dark caps'}</strong> — ${t.possessions} possessions · ${Math.round(t.shotRate * 100)}% shots · ${t.avgPasses} passes/poss
+    const teamRows = Object.keys(sc.profile || {}).map(k => { const t = sc.profile[k]; return `<div class="scout-team"><strong>${k === 'att' ? 'White caps' : 'Blue caps'}</strong> — ${t.possessions} possessions · ${Math.round(t.shotRate * 100)}% shots · ${t.avgPasses} passes/poss
       <div class="scout-tend">${(t.tendencies || []).slice(0, 4).map(x => `<span class="tag">${esc(x.name)} ${x.pct}%</span>`).join('') || '<span class="muted">no recognised tactics yet</span>'}</div></div>`; }).join('');
     out.innerHTML = `<div class="scout-box">
-      <div class="ef-label">Scouting summary — ${sc.possessions} possessions${meta}</div>
+      ${teamAnalysisHtml(sc, result)}
+      <details class="scout-more"><summary>Go further — scouting summary, plan vs reality, every attack, share</summary>
+      <div class="ef-label" style="margin-top:8px">Scouting summary — ${sc.possessions} possessions${meta}</div>
       <div class="scout-summary">${(sc.summary || []).map(l => `<div class="ins-row">${esc(l)}</div>`).join('')}</div>
       ${teamRows}
       <div class="ef-label" style="margin-top:10px">Recognised plays (${sc.playbook.length})</div>
@@ -520,11 +522,47 @@ const FILM = (() => {
       ${planReportHtml(sc)}
       ${attacksHtml(sc, result)}
       ${ctx.canEdit ? `<div class="scout-share"><button class="btn-primary sm" id="scout-share">📣 Share debrief with the team</button><span class="muted" id="scout-share-status"> — plan vs reality, every attack as a clip + board play, open for comments</span></div>` : ''}
+      </details>
     </div>`;
-    wireAttacks(out, sc, result);
+    wireAttacks(out, sc, result); wireTeamAnalysis(out, sc, result);
     const share = out.querySelector('#scout-share'); if (share) share.onclick = () => shareDebrief(share, sc, result);
     const add = out.querySelector('#scout-add');
     if (add) add.onclick = () => { if (typeof ctx.addPlays === 'function') { const n = ctx.addPlays(sc.playbook, cur.title); ctx.toast(`${n} plays added to the playbook`); add.disabled = true; } };
+  }
+
+  /* ---------- Team analysis by situation — the default view ----------
+     "What were the white caps trying to play in 6 on 6? in 6 on 5? Same for the blue caps."
+     Driven by who has the ball and where it travels; one card per team × situation. */
+  function teamAnalysisHtml(sc, result) {
+    const T = sc.teams; if (!T) return '';
+    const us = (root.querySelector('#scout-us') || {}).value || 'white';
+    const label = k => (k === 'att' ? 'White caps' : 'Blue caps') + ((k === 'att') === (us === 'white') ? ' · us' : ' · opponent');
+    const hasVideo = !!(result && result.meta && result.meta.videoRef);
+    const heatGrid = heat => { const H = {}; (heat || []).forEach(h => H[h.zone] = h.pct); const cell = (z, name) => `<span class="hz ${H[z] ? 'on' : ''}" style="--p:${(H[z] || 0) / 100}" title="${name}: ${H[z] || 0}%">${H[z] ? H[z] + '%' : ''}</span>`;
+      return `<div class="heat" title="Where the ball lived (share of ball zones)">${cell('LW', 'left wing')}${cell('LP', 'left post')}<span class="hz goal">🥅</span>${cell('PT', 'point')}${cell('HOLE', '2 m')}<span class="hz goal"></span>${cell('RW', 'right wing')}${cell('RP', 'right post')}<span class="hz goal"></span></div>`; };
+    const card = (k, sit, b) => `<div class="ta-card">
+        <div class="ta-head"><strong>${esc(b.label)}</strong> <span class="muted">${b.possessions} possession${b.possessions === 1 ? '' : 's'} · ${b.shots} shot${b.shots === 1 ? '' : 's'} (${Math.round(b.shotRate * 100)}%) · ${b.goals} goal${b.goals === 1 ? '' : 's'} · ${b.avgPasses} passes · ${b.avgDuration}s${b.unread ? ` · ${b.unread} unread` : ''}</span></div>
+        <div class="ta-body">
+          <div class="ta-pats">${b.patterns.length ? b.patterns.map(x => `<div class="ta-pat"><span class="tp-name">${esc(x.name)}</span><span class="muted">${x.n}× · ${x.shots} shot${x.shots === 1 ? '' : 's'}${x.goals ? ` · ${x.goals} goal${x.goals > 1 ? 's' : ''}` : ''}${x.tactic !== 'unclassified' ? ` · ${esc(x.tacticName)} ${Math.round(x.confidence * 100)}%` : ''}</span>
+            <span class="ar-actions">${hasVideo ? `<button class="btn-ghost sm" data-pclip="${x.example.index}">▶ Example</button>` : ''}<button class="btn-ghost sm" data-board="${x.example.index}">Board ⚡</button></span><div class="ar-clip" hidden></div></div>`).join('') : '<div class="muted">No ball path could be read in this situation.</div>'}</div>
+          <div class="ta-side">${heatGrid(b.ballHeat)}${b.tactics.length ? `<div class="scout-tend">${b.tactics.slice(0, 3).map(t => `<span class="tag">${esc(t.name)} ${t.pct}%</span>`).join('')}</div>` : ''}${sit === '6v5' && b.topFormation && b.topFormation !== 'set' ? `<span class="tag">${esc(b.topFormation)} set-up</span>` : ''}${b.topDefence ? `<span class="muted">vs ${esc(b.topDefence)} defence</span>` : ''}</div>
+        </div></div>`;
+    const teamBlock = k => { const r = T[k]; if (!r) return '';
+      const sits = Object.keys(r.bySituation);
+      return `<div class="ta-team ${k}"><h4>${esc(label(k))} <span class="muted">— ${r.possessions} possession${r.possessions === 1 ? '' : 's'}, ${r.shots} shot${r.shots === 1 ? '' : 's'}, ${r.goals} goal${r.goals === 1 ? '' : 's'}${r.counters ? `, ${r.counters} counter${r.counters > 1 ? 's' : ''}` : ''}</span></h4>
+        ${sits.length ? sits.map(sit => card(k, sit, r.bySituation[sit])).join('') : '<div class="muted">No possessions could be read for this team — check the calibration and the cap colours.</div>'}</div>`; };
+    return `<div class="ef-label">What each team was trying to play — by situation</div>
+      <div class="scout-summary">${(sc.narrative || []).map(l => `<div class="ins-row">${esc(l)}</div>`).join('')}</div>
+      <div class="ta-grid">${teamBlock(us === 'white' ? 'att' : 'def')}${teamBlock(us === 'white' ? 'def' : 'att')}</div>
+      <p class="fa-note">Possession = who has the ball (with a few frames of patience before it changes hands); each team is judged against the goal it attacks. A <em>pattern</em> is the ball's path — wing → point → 2 m → shot — repeated in the same situation. Player tracking can be noisy; the ball path is what survives.</p>`;
+  }
+  function wireTeamAnalysis(out, sc, result) {
+    out.querySelectorAll('[data-pclip]').forEach(b => b.onclick = async () => {
+      const p = sc.plays[+b.dataset.pclip], holder = b.closest('.ta-pat').querySelector('.ar-clip');
+      b.disabled = true; holder.hidden = false; holder.innerHTML = '<span class="muted">Cutting the clip… ⏳</span>';
+      try { const url = await cutClip(result.meta.videoRef, p.tStart, p.tEnd); holder.innerHTML = `<video controls playsinline preload="metadata" src="${esc(scoutBase() + url)}"></video>`; }
+      catch (e) { holder.innerHTML = `<span class="muted">Clip failed (${esc(e.message)}).</span>`; b.disabled = false; }
+    });
   }
 
   /* ---------- Game plan: what we asked for ---------- */
@@ -568,7 +606,7 @@ const FILM = (() => {
       <div class="attack-list">${plays.map((p, i) => `<div class="attack-row" data-i="${i}">
         <span class="ar-t">${fmt(p.tStart)}–${fmt(p.tEnd)}</span>
         <span class="ar-who ${p.offense === usSide ? 'us' : 'them'}">${p.offense === usSide ? 'us' : 'them'}</span>
-        <span class="ar-main"><strong>${esc(p.name)}</strong> <span class="muted">${esc(p.situation)} · ${Math.round(p.confidence * 100)}% · ${p.passes} pass${p.passes === 1 ? '' : 'es'}${p.defence ? ' · vs ' + esc(p.defence) : ''}</span></span>
+        <span class="ar-main"><strong>${esc(p.name)}</strong> <span class="muted">${esc(p.situation)}${p.counter ? ' · counter' : ''} · ${Math.round(p.confidence * 100)}% · ${p.passes} pass${p.passes === 1 ? '' : 'es'}${p.defence ? ' · vs ' + esc(p.defence) : ''}${p.pathName ? ' · ' + esc(p.pathName) : ''}</span></span>
         <span class="ar-res">${resultOf(p)}</span>
         <span class="ar-actions">${hasVideo ? `<button class="btn-ghost sm" data-clip="${i}">▶ Clip</button>` : ''}<button class="btn-ghost sm" data-board="${i}">Board ⚡</button></span>
         <div class="ar-clip" hidden></div>
@@ -608,7 +646,7 @@ const FILM = (() => {
         items.push({ t0: p.tStart, t1: p.tEnd, title: `${fmt(p.tStart)} · ${p.offense === usSide ? 'us' : 'them'} · ${p.name}`, note: (p.steps || []).join(' → '), result: resultOf(p), asked, followed, clipUrl, frames: p.frames, notes: p.notes });
       }
       if (st) st.textContent = ' — publishing…';
-      const body = { team: teamOf(), title: `Debrief: ${cur.title}`, matchTitle: cur.title, author: ctx.user && ctx.user.name, us, summary: sc.summary, plan: rows, items };
+      const body = { team: teamOf(), title: `Debrief: ${cur.title}`, matchTitle: cur.title, author: ctx.user && ctx.user.name, us, summary: (sc.narrative || []).concat(sc.summary || []).slice(0, 12), plan: rows, items };
       const r = await fetch(scoutBase() + '/api/debriefs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       if (!r.ok) throw new Error('debrief-' + r.status);
       if (st) st.textContent = ' — shared ✓ (see Team debriefs below)'; ctx.toast('Debrief shared with the team');
@@ -841,7 +879,7 @@ const FILM = (() => {
       <div class="film-auto" id="film-scout">
         <div class="fa-head"><strong>🧠 Auto-scout <span class="fa-beta">Tier 3</span></strong>
           <button class="btn-primary sm" id="scout-run">Scout this video</button>
-          <select id="scout-us" class="focus-select" title="Which caps are us?"><option value="white">We are white caps</option><option value="dark">We are dark caps</option></select>
+          <select id="scout-us" class="focus-select" title="Which caps are us?"><option value="white">We are white caps</option><option value="dark">We are blue (dark) caps</option></select>
           <span class="cloud-status offline" id="scout-status">● idle</span>
           <span class="fa-note">The system watches the <strong>whole</strong> video, cuts it into possessions, recognises each tactic, and writes a scouting summary + a playbook — no tagging by hand. Calibrate the pool first. Long videos run in the background.</span></div>
         <div id="scout-out"></div>

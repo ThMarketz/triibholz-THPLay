@@ -50,28 +50,84 @@ const TACTICS = (() => {
     return map;
   }
 
-  /* ---------- 1) possessions ---------- */
+  /* ---------- 1) possessions — driven by WHO HAS THE BALL ---------- */
+  const mirrorPt = p => p ? { x: +(320 - p.x).toFixed(1), y: p.y } : p;
+  function mirrorFrame(f) {
+    const m = { att: {}, def: {}, gk: mirrorPt(f.gk), ball: null };
+    Object.keys(f.att || {}).forEach(k => m.att[k] = mirrorPt(f.att[k]));
+    Object.keys(f.def || {}).forEach(k => m.def[k] = mirrorPt(f.def[k]));
+    m.ball = f.ball && f.ball.x != null ? { x: +(320 - f.ball.x).toFixed(1), y: f.ball.y } : (f.ball || null);
+    return m;
+  }
+  /* per-frame holder with hysteresis: the ball changes hands only after `k` consecutive
+     frames say so; a ball in flight / briefly lost keeps the last holder's team */
+  function holderSeries(series, opts) {
+    opts = opts || {}; const R = opts.possR || 24, k = opts.stableN || 3, maxGap = opts.maxGap || 4;
+    const raw = series.map(s => holderAt(s.boardFrame, R));
+    const out = []; let team = null, cand = null, run = 0, gap = 0;
+    for (let i = 0; i < raw.length; i++) {
+      const h = raw[i];
+      if (!h) { gap++; out.push({ team: gap > maxGap ? null : team, key: null, raw: null, lost: gap > maxGap }); if (gap > maxGap) { team = null; cand = null; run = 0; } continue; }
+      gap = 0;
+      if (h.team === team) { cand = null; run = 0; }
+      else { if (cand === h.team) run++; else { cand = h.team; run = 1; } if (run >= k || team === null) { team = h.team; cand = null; run = 0; } }
+      out.push({ team, key: h.team === team ? h.key : null, raw: h, lost: false });
+    }
+    return out;
+  }
+  /* which goal is this possession attacking? the one the ball (and the offence) moves toward */
+  function dirOf(frames, team) {
+    const bx = frames.map(s => ballOf(s.boardFrame)).filter(Boolean).map(b => b.x);
+    const late = bx.slice(Math.floor(bx.length * 0.6)), early = bx.slice(0, Math.max(1, Math.floor(bx.length * 0.4)));
+    const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 160;
+    const mLate = mean(late), mEarly = mean(early);
+    if (Math.abs(mLate - 160) > 25) return mLate > 160 ? 'right' : 'left';
+    if (Math.abs(mLate - mEarly) > 12) return mLate > mEarly ? 'right' : 'left';
+    const last = frames[frames.length - 1].boardFrame; const pts = vals(last[team]);
+    return mean(pts.map(p => p.x)) >= 160 ? 'right' : 'left';
+  }
   function segment(series, events, opts) {
     opts = opts || {};
-    const R = opts.possR || 24, minFrames = opts.minFrames || 3, maxGap = opts.maxGap || 4;
-    const shotT = new Set((events || []).filter(e => e.type === 'shot' || e.type === 'goal').map(e => +e.t.toFixed(2)));
-    const goalT = new Set((events || []).filter(e => e.type === 'goal').map(e => +e.t.toFixed(2)));
-    const out = []; let cur = null, gap = 0;
-    const close = (i) => { if (cur && cur.frames.length >= minFrames) { cur.tEnd = series[i - 1].t; out.push(cur); } cur = null; gap = 0; };
+    const minFrames = opts.minFrames || 3, maxGap = opts.maxGap || 4;
+    const shots = (events || []).filter(e => e.type === 'shot' || e.type === 'goal');
+    const shotAt = t => shots.find(e => Math.abs(e.t - t) < 0.01);
+    const hs = holderSeries(series, opts);
+    const out = []; let cur = null;
+    const close = (i) => { if (cur && cur.frames.length >= minFrames) { cur.tEnd = series[Math.max(0, i - 1)].t; out.push(cur); } cur = null; };
     for (let i = 0; i < series.length; i++) {
-      const f = series[i].boardFrame, h = holderAt(f, R), t = series[i].t;
-      if (shotT.has(+t.toFixed(2))) { if (cur) { cur.frames.push(series[i]); cur.events.push({ t, type: goalT.has(+t.toFixed(2)) ? 'goal' : 'shot' }); close(i + 1); } continue; }
-      if (h && h.key === 'GK' && cur && cur.team !== h.team) { cur.frames.push(series[i]); cur.events.push({ t, type: 'shot' }); close(i + 1); continue; }
-      const team = h ? h.team : null;
-      if (!team) { if (cur && ++gap > maxGap) close(i); else if (cur) cur.frames.push(series[i]); continue; }
-      gap = 0;
-      if (cur && team !== cur.team) close(i);
-      if (!cur) cur = { team, tStart: t, frames: [], events: [] };
+      const f = series[i].boardFrame, t = series[i].t, h = hs[i], rawH = h.raw;
+      const ev = shotAt(t);
+      if (ev && cur) { cur.frames.push(series[i]); cur.events.push({ t, type: ev.type === 'goal' ? 'goal' : 'shot', side: ev.side }); close(i + 1); continue; }
+      if (rawH && rawH.key === 'GK' && cur && rawH.team !== cur.team) { cur.frames.push(series[i]); cur.events.push({ t, type: 'shot', saved: true }); close(i + 1); continue; }
+      if (h.lost || !h.team) { if (cur && h.lost) close(i); else if (cur) cur.frames.push(series[i]); continue; }
+      if (cur && h.team !== cur.team) close(i);
+      if (!cur) { if (!rawH) continue; cur = { team: h.team, tStart: t, frames: [], events: [] }; }   // a possession starts with a real holder, never on a lost ball
       cur.frames.push(series[i]);
     }
     if (cur && cur.frames.length >= minFrames) { cur.tEnd = series[series.length - 1].t; out.push(cur); }
-    out.forEach(p => { p.goal = p.events.some(e => e.type === 'goal'); p.endsInShot = p.events.some(e => e.type === 'shot' || e.type === 'goal') || !!(ballOf(p.frames[p.frames.length - 1].boardFrame) && ballOf(p.frames[p.frames.length - 1].boardFrame).x >= GOAL_X - 6); p.duration = +((p.tEnd - p.tStart) || 0).toFixed(2); });
+    out.forEach(p => {
+      p.dir = dirOf(p.frames, p.team);
+      if (p.dir === 'left') p.frames = p.frames.map(s => ({ t: s.t, boardFrame: mirrorFrame(s.boardFrame) }));   // canonical: attack → right goal
+      const lastB = ballOf(p.frames[p.frames.length - 1].boardFrame);
+      p.goal = p.events.some(e => e.type === 'goal');
+      p.endsInShot = p.events.some(e => e.type === 'shot' || e.type === 'goal') || !!(lastB && lastB.x >= GOAL_X - 6);
+      p.duration = +((p.tEnd - p.tStart) || 0).toFixed(2);
+      Object.assign(p, situationOf(p));
+    });
     return out;
+  }
+  /* even / man-up / man-down from who is in the attacking half (median over the possession), plus counter */
+  function situationOf(p) {
+    const O = p.team, D = O === 'att' ? 'def' : 'att';
+    const inHalf = pts => pts.filter(q => q.x > 150).length;
+    const diffs = p.frames.map(s => inHalf(vals(s.boardFrame[O])) - inHalf(vals(s.boardFrame[D])));
+    const mid = diffs.slice(Math.floor(diffs.length * 0.2), Math.max(1, Math.ceil(diffs.length * 0.85)));
+    const agree = v => mid.filter(d => d === v || (v > 0 ? d > 0 : d < 0)).length / Math.max(1, mid.length);
+    const up = agree(1) >= 0.6, down = agree(-1) >= 0.6;
+    const situation = up ? '6v5' : down ? '5v6' : '6v6';
+    const bx = p.frames.map(s => ballOf(s.boardFrame)).filter(Boolean);
+    const counter = bx.length > 2 && bx[0].x < 130 && bx.some(b => b.x > 230) && p.duration <= 8;
+    return { situation, manUp: up, manDown: down, counter };
   }
 
   /* ---------- 2) distill a possession into a clean play ---------- */
@@ -116,8 +172,8 @@ const TACTICS = (() => {
       frames.push({ att, def, gk: f.gk ? { x: f.gk.x, y: f.gk.y } : { x: 292, y: CY }, ball, extra: [] });
     });
     const nAtt = Object.keys(frames[0].att).length, nDef = Object.keys(frames[0].def).length;
-    const situation = nAtt >= 6 && nDef >= 6 ? '6v6' : nAtt >= 6 && nDef === 5 ? '6v5' : nAtt === 5 && nDef === 4 ? '5v4' : nAtt === 4 && nDef === 3 ? '4v3' : nAtt === 3 && nDef === 2 ? '3v2' : nAtt === 2 && nDef === 1 ? '2v1' : nAtt >= 6 ? '6v6' : nAtt === 1 ? 'GK' : '6v6';
-    return { situation, phase: 'offense', offense, frames, notes, steps, passes, endsInShot: !!poss.endsInShot, goal: !!poss.goal, duration: poss.duration, tStart: poss.tStart, tEnd: poss.tEnd, attackers: nAtt, defenders: nDef };
+    const situation = poss.situation === '6v5' ? '6v5' : poss.situation === '5v6' ? '5v6' : (nAtt >= 6 && nDef >= 6 ? '6v6' : nAtt >= 6 && nDef === 5 ? '6v5' : nAtt === 5 && nDef === 4 ? '5v4' : nAtt === 4 && nDef === 3 ? '4v3' : nAtt === 3 && nDef === 2 ? '3v2' : nAtt === 2 && nDef === 1 ? '2v1' : nAtt >= 6 ? '6v6' : nAtt === 1 ? 'GK' : '6v6');
+    return { situation, phase: 'offense', offense, frames, notes, steps, passes, endsInShot: !!poss.endsInShot, goal: !!poss.goal, duration: poss.duration, tStart: poss.tStart, tEnd: poss.tEnd, attackers: nAtt, defenders: nDef, dir: poss.dir || 'right', manUp: !!poss.manUp, manDown: !!poss.manDown, counter: !!poss.counter, signature: ballSignature(poss.frames.map(s => s.boardFrame)) };
   }
 
   /* ---------- 3) tactic signatures ---------- */
@@ -135,8 +191,8 @@ const TACTICS = (() => {
     const rollAfterScreen = screen && drives.length > 0 && play.passes >= 1;
     const wingHold = (() => { let c = 0; holders.forEach((h, i) => { if (h && fr[i].att[h] && Math.abs(fr[i].att[h].y - CY) > 40) c++; }); return c >= 2 && play.passes <= 1; })();
     const ys = receivers.map(r => r.p ? r.p.y : CY); const swing = play.passes >= 3 && ys.length >= 2 && (Math.max(...ys) - Math.min(...ys)) > 70;
-    const counter = startX < 150 && play.duration <= 8 && play.passes <= 2 && (last.ball && (last.ball.x != null ? last.ball.x : 0) > 230 || play.endsInShot);
-    const manUp = play.attackers > play.defenders && play.attackers >= 5;
+    const counter = play.counter || (startX < 150 && play.duration <= 8 && play.passes <= 2 && (last.ball && (last.ball.x != null ? last.ball.x : 0) > 230 || play.endsInShot));
+    const manUp = play.manUp || (play.attackers > play.defenders && play.attackers >= 5);
     // formation of the attack at the start (6 attackers)
     let formation = 'set';
     const ax = vals(first.att); if (ax.length >= 6) { const top = ax.filter(p => p.y < CY - 12).length, bot = ax.filter(p => p.y > CY + 12).length, deep = ax.filter(p => p.x > HOLE_X).length; if (deep >= 2 && ax.length - deep >= 4) formation = '4-2'; else if (top >= 3 && bot >= 3) formation = '3-3'; else if (deep === 1) formation = 'set'; else formation = 'umbrella'; }
@@ -210,15 +266,105 @@ const TACTICS = (() => {
     });
   }
 
-  /* one-shot: series + events → everything */
+  /* ---------- 7) team analysis by situation — "what were they trying to play?" ----------
+     The ball is the key: where it travels (wing → point → 2 m → shot) is a robust
+     signature of a play even when player tracking is noisy. Possessions with the
+     same ball path, for the same team in the same situation, are one PATTERN. */
+  const ZONES = { BACK: 'back court', LW: 'left wing', RW: 'right wing', PT: 'point', HOLE: '2 m', LP: 'left post', RP: 'right post', SHOT: 'shot' };
+  function zoneOfBall(b) {
+    if (!b) return null;
+    if (b.x >= GOAL_X - 6 && Math.abs(b.y - CY) < 22) return 'SHOT';
+    if (b.x < 160) return 'BACK';
+    if (b.x >= HOLE_X - 5) return Math.abs(b.y - CY) < 28 ? 'HOLE' : (b.y < CY ? 'LP' : 'RP');
+    if (b.y < 78) return 'LW'; if (b.y > 142) return 'RW';
+    return 'PT';
+  }
+  function ballSignature(frames) {
+    const seq = []; let cand = null, run = 0;
+    (frames || []).forEach(f => {   // a zone counts once the ball has really been there (2 frames) — no single-frame flicker; a shot is instant
+      const z = zoneOfBall(ballOf(f)); if (!z) return;
+      if (z === cand) run++; else { cand = z; run = 1; }
+      if ((run >= 2 || z === 'SHOT') && seq[seq.length - 1] !== z) seq.push(z);
+    });
+    while (seq.length && seq[0] === 'BACK') seq.shift();
+    return seq.slice(0, 7).join('>');
+  }
+  const signatureName = sig => (sig || '').split('>').filter(Boolean).map(z => ZONES[z] || z).join(' → ') || 'no clear ball path';
+  const SIT_LABEL = { '6v6': '6 on 6', '6v5': '6 on 5 (man-up)', '5v6': '5 on 6 (man-down)' };
+  function patterns(plays) {
+    const g = {};
+    plays.forEach((p, i) => { if (!p.signature) return; const key = p.offense + '|' + p.situation + '|' + p.signature; (g[key] || (g[key] = [])).push(i); });
+    return Object.keys(g).map(key => {
+      const idx = g[key], ps = idx.map(i => plays[i]);
+      const best = ps.reduce((b, x) => (x.rec.confidence > b.rec.confidence || (x.rec.confidence === b.rec.confidence && x.endsInShot && !b.endsInShot)) ? x : b, ps[0]);
+      const shots = ps.filter(x => x.endsInShot).length, goals = ps.filter(x => x.goal).length;
+      return { team: ps[0].offense, situation: ps[0].situation, signature: ps[0].signature, name: signatureName(ps[0].signature), n: ps.length, shots, goals, shotRate: +(shots / ps.length).toFixed(2), avgPasses: +(ps.reduce((s, x) => s + x.passes, 0) / ps.length).toFixed(1),
+        tactic: best.rec.tactic, tacticName: best.rec.name, confidence: best.rec.confidence, example: { tStart: best.tStart, tEnd: best.tEnd, index: plays.indexOf(best) }, frames: best.frames, notes: best.notes, steps: best.steps };
+    }).sort((a, b) => b.n - a.n || b.shots - a.shots);
+  }
+  function teamReport(plays) {
+    const pats = patterns(plays);
+    const T = {};
+    ['att', 'def'].forEach(team => {
+      const mine = plays.filter(p => p.offense === team);
+      const rep = { possessions: mine.length, shots: mine.filter(p => p.endsInShot).length, goals: mine.filter(p => p.goal).length, counters: mine.filter(p => p.counter).length, unread: mine.filter(p => p.rec.tactic === 'unclassified').length, bySituation: {} };
+      rep.shotRate = rep.possessions ? +(rep.shots / rep.possessions).toFixed(2) : 0;
+      ['6v6', '6v5', '5v6'].forEach(sit => {
+        const ps = mine.filter(p => p.situation === sit); if (!ps.length) return;
+        const heat = {}; ps.forEach(p => (p.signature || '').split('>').filter(Boolean).forEach(z => heat[z] = (heat[z] || 0) + 1));
+        const heatTotal = Object.values(heat).reduce((a, b) => a + b, 0) || 1;
+        const tac = {}; ps.forEach(p => { if (p.rec.tactic !== 'unclassified') tac[p.rec.tactic] = (tac[p.rec.tactic] || 0) + 1; });
+        const zones = { T: 0, M: 0, B: 0 }; ps.forEach(p => { if (p.endsInShot && p.rec.features.shotZone) zones[p.rec.features.shotZone]++; });
+        const forms = {}; ps.forEach(p => { forms[p.rec.features.formation] = (forms[p.rec.features.formation] || 0) + 1; });
+        const defs = {}; ps.forEach(p => { if (p.rec.features.defence) defs[p.rec.features.defence] = (defs[p.rec.features.defence] || 0) + 1; });
+        const top = o => Object.entries(o).sort((a, b) => b[1] - a[1])[0];
+        rep.bySituation[sit] = { label: SIT_LABEL[sit], possessions: ps.length, shots: ps.filter(p => p.endsInShot).length, goals: ps.filter(p => p.goal).length,
+          shotRate: +(ps.filter(p => p.endsInShot).length / ps.length).toFixed(2), avgPasses: +(ps.reduce((s, p) => s + p.passes, 0) / ps.length).toFixed(1), avgDuration: +(ps.reduce((s, p) => s + (p.duration || 0), 0) / ps.length).toFixed(1),
+          patterns: pats.filter(x => x.team === team && x.situation === sit).slice(0, 6),
+          ballHeat: Object.keys(heat).map(z => ({ zone: z, label: ZONES[z], pct: Math.round(100 * heat[z] / heatTotal) })).sort((a, b) => b.pct - a.pct),
+          tactics: Object.entries(tac).sort((a, b) => b[1] - a[1]).map(([id, n]) => ({ tactic: id, name: (SIGNATURES.find(x => x.id === id) || {}).name || id, n, pct: Math.round(100 * n / ps.length) })),
+          shotZones: zones, topFormation: top(forms) ? top(forms)[0] : null, topDefence: top(defs) ? top(defs)[0] : null, unread: ps.filter(p => p.rec.tactic === 'unclassified').length };
+      });
+      T[team] = rep;
+    });
+    return T;
+  }
+  function narrative(teams, opts) {
+    const who = (opts && opts.names) || { att: 'White caps', def: 'Blue caps' };
+    const Z = { T: 'top corners', M: 'the centre', B: 'bottom corners' };
+    const lines = [];
+    ['att', 'def'].forEach(team => {
+      const r = teams[team]; if (!r || !r.possessions) { lines.push(`${who[team]}: no possessions could be read.`); return; }
+      lines.push(`${who[team]}: ${r.possessions} possessions, ${r.shots} shot${r.shots === 1 ? '' : 's'} (${Math.round(r.shotRate * 100)}%), ${r.goals} goal${r.goals === 1 ? '' : 's'}${r.counters ? `, ${r.counters} counter-attack${r.counters > 1 ? 's' : ''}` : ''}${r.unread ? ` — ${r.unread} unread` : ''}.`);
+      Object.keys(r.bySituation).forEach(sit => {
+        const b = r.bySituation[sit];
+        const pats = b.patterns.filter(x => x.n >= 2).slice(0, 3);
+        let l = `${who[team]} in ${b.label} (${b.possessions}): `;
+        if (pats.length) l += `they mostly worked ${pats.map(x => `${x.name} (${x.n}×, ${x.shots} shot${x.shots === 1 ? '' : 's'}${x.goals ? `, ${x.goals} goal${x.goals > 1 ? 's' : ''}` : ''})`).join('; ')}`;
+        else if (b.patterns.length) l += `no repeated ball path yet — the most promising was ${b.patterns[0].name}`;
+        else l += 'no clear ball path was read';
+        if (b.tactics[0]) l += `; tactics: ${b.tactics.slice(0, 2).map(t => `${t.name.toLowerCase()} ${t.pct}%`).join(', ')}`;
+        if (sit === '6v5' && b.topFormation && b.topFormation !== 'set') l += `; set up as a ${b.topFormation}`;
+        const z = Object.entries(b.shotZones).sort((a, c) => c[1] - a[1])[0]; if (z && z[1]) l += `; shots go to ${Z[z[0]]}`;
+        if (b.topDefence) l += `; met mostly a ${b.topDefence} defence`;
+        lines.push(l + '.');
+      });
+    });
+    return lines;
+  }
+
+  /* one-shot: series + events → everything (team analysis by situation is the default view) */
   function scout(series, events, opts) {
     const poss = segment(series, events, opts);
     const plays = poss.map(p => { const d = distill(p, opts); if (!d) return null; d.rec = recognize(d, opts); return d; }).filter(Boolean);
     const prof = profile(plays);
-    return { possessions: poss.length, plays: plays.map(p => ({ tStart: p.tStart, tEnd: p.tEnd, offense: p.offense, situation: p.situation, tactic: p.rec.tactic, name: p.rec.name, confidence: p.rec.confidence, passes: p.passes, endsInShot: p.endsInShot, goal: !!p.goal, shotZone: p.rec.features.shotZone || null, defence: p.rec.features.defence || null, manUp: !!p.rec.features.manUp, steps: p.steps, frames: p.frames, notes: p.notes })), profile: prof, summary: summary(prof, opts), playbook: buildPlaybook(plays, opts) };
+    const teams = teamReport(plays);
+    return { possessions: poss.length,
+      plays: plays.map(p => ({ tStart: p.tStart, tEnd: p.tEnd, offense: p.offense, situation: p.situation, dir: p.dir, counter: !!p.counter, signature: p.signature, pathName: signatureName(p.signature), tactic: p.rec.tactic, name: p.rec.name, confidence: p.rec.confidence, passes: p.passes, endsInShot: p.endsInShot, goal: !!p.goal, shotZone: p.rec.features.shotZone || null, defence: p.rec.features.defence || null, manUp: !!p.rec.features.manUp, steps: p.steps, frames: p.frames, notes: p.notes })),
+      teams, narrative: narrative(teams, opts), profile: prof, summary: summary(prof, opts), playbook: buildPlaybook(plays, opts) };
   }
 
-  return { segment, distill, features, recognize, profile, summary, buildPlaybook, scout, SIGNATURES, holderAt, matchSets };
+  return { segment, distill, features, recognize, profile, summary, buildPlaybook, scout, SIGNATURES, holderAt, matchSets, holderSeries, mirrorFrame, dirOf, situationOf, ballSignature, signatureName, zoneOfBall, patterns, teamReport, narrative, ZONES, SIT_LABEL };
 })();
 
 // Node/CommonJS interop (no-op in the browser)
