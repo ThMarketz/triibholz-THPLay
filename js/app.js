@@ -889,14 +889,78 @@
     document.querySelectorAll('#speed-seg [data-speed], #fsb-speed [data-speed]').forEach(b => b.classList.toggle('active', +b.dataset.speed === v));
     if (state.viewer && state.viewer.setSpeed) state.viewer.setSpeed(v);
   }
-  /* floating controls on the full-screen board: appear on hover / tap, fade after 2.5 s */
-  let fsHideTimer = null;
-  function fsBarShow() {
-    const bar = $('fs-bar'); if (!bar || !$('view-playbook').classList.contains('stage-full')) return;
-    bar.hidden = false; bar.classList.add('show');
-    clearTimeout(fsHideTimer); fsHideTimer = setTimeout(() => { if (!bar.matches(':hover')) bar.classList.remove('show'); }, 2500);
+  /* Floating controls on the full-screen board.
+     Free-flow: grab them anywhere (or by the ⠿ grip) and drop them where you want;
+     the spot is remembered as a fraction of the board, so it survives a resize.
+     They fade out whenever you are not touching them. */
+  let fsHideTimer = null, fsDragging = false;
+  const FSBAR_KEY = 'thplay.fsbar';
+  function fsBarPos() { try { const p = JSON.parse(localStorage.getItem(FSBAR_KEY) || 'null'); return (p && isFinite(p.fx) && isFinite(p.fy)) ? p : null; } catch (e) { return null; } }
+  const fsClamp01 = v => Math.max(0, Math.min(1, isFinite(v) ? v : 0.5));
+  function fsBarPlace(fx, fy, save) {
+    const bar = $('fs-bar'), wrap = document.querySelector('#view-playbook .pool-wrap'); if (!bar || !wrap) return;
+    fx = fsClamp01(fx); fy = fsClamp01(fy);
+    const w = wrap.clientWidth || 0, h = wrap.clientHeight || 0, bw = bar.offsetWidth || 0, bh = bar.offsetHeight || 0;
+    const x = Math.max(0, Math.min(Math.max(0, w - bw), fx * w - bw / 2));
+    const y = Math.max(0, Math.min(Math.max(0, h - bh), fy * h - bh / 2));
+    bar.style.left = x + 'px'; bar.style.top = y + 'px';
+    bar.classList.add('placed');
+    if (save) { try { localStorage.setItem(FSBAR_KEY, JSON.stringify({ fx: +fx.toFixed(4), fy: +fy.toFixed(4) })); } catch (e) {} }
   }
-  function fsBarHide() { const bar = $('fs-bar'); if (!bar) return; clearTimeout(fsHideTimer); bar.classList.remove('show'); bar.hidden = true; }
+  function fsBarReset() {
+    const bar = $('fs-bar'); if (!bar) return;
+    bar.classList.remove('placed'); bar.style.left = ''; bar.style.top = '';
+    try { localStorage.removeItem(FSBAR_KEY); } catch (e) {}
+    toast('Controls back at the bottom');
+  }
+  function fsBarApplyStored() { const p = fsBarPos(); if (p) fsBarPlace(p.fx, p.fy, false); }
+  function fsBarShow(persist) {
+    const bar = $('fs-bar'); if (!bar || !$('view-playbook').classList.contains('stage-full')) return;
+    bar.hidden = false; bar.classList.add('show'); fsBarApplyStored();
+    clearTimeout(fsHideTimer);
+    if (persist) return;                                   // stay while a finger / the mouse is on the bar
+    fsHideTimer = setTimeout(() => { if (!fsDragging && !fsBarHovered()) bar.classList.remove('show'); }, 2500);
+  }
+  function fsBarHovered() { const bar = $('fs-bar'); try { return !!(bar && bar.matches(':hover')); } catch (e) { return false; } }
+  function fsBarFade() { const bar = $('fs-bar'); if (!bar || fsDragging) return; clearTimeout(fsHideTimer); bar.classList.remove('show'); }
+  function fsBarHide() { const bar = $('fs-bar'); if (!bar) return; clearTimeout(fsHideTimer); fsDragging = false; bar.classList.remove('show'); bar.hidden = true; }
+  function wireFsDrag() {
+    const bar = $('fs-bar'), wrap = document.querySelector('#view-playbook .pool-wrap'); if (!bar || !wrap) return;
+    let dx = 0, dy = 0, fx = 0.5, fy = 0.9;
+    // the move/up listeners live on the document, so a fast drag never "escapes" the bar
+    const move = e => {
+      if (!fsDragging) return;
+      const wr = wrap.getBoundingClientRect(), bw = bar.offsetWidth, bh = bar.offsetHeight;
+      fx = wr.width ? (e.clientX - wr.left - dx + bw / 2) / wr.width : 0.5;
+      fy = wr.height ? (e.clientY - wr.top - dy + bh / 2) / wr.height : 0.9;
+      fsBarPlace(fx, fy, false);
+      if (e.cancelable) e.preventDefault();
+    };
+    const drop = () => {
+      if (!fsDragging) return;
+      fsDragging = false; bar.classList.remove('dragging');
+      document.removeEventListener('pointermove', move, true);
+      document.removeEventListener('pointerup', drop, true);
+      document.removeEventListener('pointercancel', drop, true);
+      fsBarPlace(fx, fy, true);
+      fsBarShow();
+    };
+    bar.addEventListener('pointerdown', e => {
+      if (e.target.closest('button')) return;              // buttons still click
+      const r = bar.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+      dx = e.clientX - r.left; dy = e.clientY - r.top; fsDragging = true;
+      fx = wr.width ? (r.left + r.width / 2 - wr.left) / wr.width : 0.5;
+      fy = wr.height ? (r.top + r.height / 2 - wr.top) / wr.height : 0.9;
+      bar.classList.add('dragging'); fsBarShow(true);
+      document.addEventListener('pointermove', move, true);
+      document.addEventListener('pointerup', drop, true);
+      document.addEventListener('pointercancel', drop, true);
+      if (e.cancelable) e.preventDefault();
+    });
+    bar.addEventListener('pointerenter', () => fsBarShow(true));
+    bar.addEventListener('pointerleave', () => { if (!fsDragging) fsBarShow(); });
+    const grip = $('fsb-grip'); if (grip) grip.addEventListener('dblclick', e => { e.stopPropagation(); fsBarReset(); fsBarShow(); });
+  }
   function toggleFull(force) {
     const lay = $('view-playbook'); if (!lay) return;
     const on = force == null ? !lay.classList.contains('stage-full') : !!force;
@@ -2205,7 +2269,12 @@
     document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) toggleFull(false); });
     // full-screen bar: hover / tap shows it, buttons delegate to the main controls
     const pw = document.querySelector('#view-playbook .pool-wrap');
-    if (pw) { ['mousemove', 'touchstart', 'pointerdown'].forEach(ev => pw.addEventListener(ev, fsBarShow, { passive: true })); }
+    if (pw) {
+      ['mousemove', 'touchstart', 'pointerdown'].forEach(ev => pw.addEventListener(ev, () => fsBarShow(), { passive: true }));
+      pw.addEventListener('pointerleave', fsBarFade);       // hand off the board → the controls go away
+    }
+    wireFsDrag();
+    window.addEventListener('resize', () => { if ($('view-playbook').classList.contains('stage-full')) fsBarApplyStored(); });
     $('fsb-play').onclick = () => $('play-btn').click();
     $('fsb-fwd').onclick = () => $('step-fwd').click();
     $('fsb-back').onclick = () => $('step-back').click();

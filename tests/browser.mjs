@@ -62,6 +62,16 @@ await page.click('#fs-btn'); await page.waitForTimeout(300);
 ok('⛶ full-screen board: sidebar hidden, board still there', await page.locator('#view-playbook.stage-full').count()===1 && !(await page.locator('.sidebar').first().isVisible()) && await page.locator('#pool').isVisible());
 await page.mouse.move(400, 300); await page.waitForTimeout(150);
 ok('hover shows the floating bar with play / steps / speed / exit', await page.locator('#fs-bar.show').count()===1 && await page.locator('#fsb-play').isVisible());
+// free-flow: grab the bar by its grip and drop it top-left of the board
+const barBefore = await page.locator('#fs-bar').boundingBox();
+const gripBox = await page.locator('#fsb-grip').boundingBox();
+await page.mouse.move(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2);
+await page.mouse.down(); await page.mouse.move(360, 220, { steps: 8 }); await page.mouse.up();
+await page.waitForTimeout(200);
+const barAfter = await page.locator('#fs-bar').boundingBox();
+ok('the bar can be grabbed and placed anywhere ('+Math.round(barBefore.y-barAfter.y)+'px up)', await page.locator('#fs-bar.placed').count()===1 && Math.abs(barAfter.y - barBefore.y) > 60);
+ok('the spot is remembered on the device', !!(await page.evaluate(() => localStorage.getItem('thplay.fsbar'))));
+await page.mouse.move(400, 300); await page.waitForTimeout(150);
 await page.click('#fsb-restart'); await page.waitForTimeout(150);
 await page.click('#fsb-fwd'); await page.waitForTimeout(200);
 ok('⏮ then ⏩ on the bar: step 1 → step 2', /Step 2/.test(await page.locator('#fsb-label').textContent()));

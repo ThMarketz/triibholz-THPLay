@@ -780,6 +780,26 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     q('#fs-btn').click(); await wait(10);
     ok('⛶ full-screen board (stage fills the screen, sidebars hidden)', q('#view-playbook').classList.contains('stage-full'));
     ok('floating control bar appears on entering full screen', !q('#fs-bar').hidden && q('#fs-bar').classList.contains('show'));
+    ok('the bar has a ⠿ grip to grab it', !!q('#fsb-grip'));
+    {
+      const bar = q('#fs-bar');
+      const md = new window.MouseEvent('pointerdown', { clientX: 100, clientY: 100, bubbles: true });
+      bar.dispatchEvent(md);
+      ok('grabbing the bar starts a drag (buttons untouched)', bar.classList.contains('dragging'));
+      document.dispatchEvent(new window.MouseEvent('pointermove', { clientX: 240, clientY: 60, bubbles: true }));
+      document.dispatchEvent(new window.MouseEvent('pointerup', { clientX: 240, clientY: 60, bubbles: true }));
+      ok('dropping places it free-flow and remembers the spot', bar.classList.contains('placed') && !bar.classList.contains('dragging') && !!window.localStorage.getItem('thplay.fsbar'));
+      q('#fsb-grip').dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true }));
+      ok('double-click on the grip puts it back', !bar.classList.contains('placed') && !window.localStorage.getItem('thplay.fsbar'));
+      const pw = document.querySelector('#view-playbook .pool-wrap');
+      pw.dispatchEvent(new window.MouseEvent('pointerleave', { bubbles: false }));
+      ok('leaving the board fades the controls away', !bar.classList.contains('show'));
+      pw.dispatchEvent(new window.MouseEvent('mousemove', { bubbles: true }));
+      ok('touching the board again brings them back', bar.classList.contains('show'));
+    }
+    // a button press must NOT start a drag
+    q('#fsb-play').dispatchEvent(new window.MouseEvent('pointerdown', { clientX: 10, clientY: 10, bubbles: true }));
+    ok('pressing a button does not drag the bar', !q('#fs-bar').classList.contains('dragging'));
     q('#fsb-fwd').click(); await wait(10);
     ok('⏩ on the bar steps the play (label follows)', /Step 2/.test(q('#fsb-label').textContent) && /Step 2/.test(q('#frame-label').textContent));
     document.dispatchEvent(new window.KeyboardEvent('keydown', { key:'ArrowLeft', bubbles:true })); await wait(10);
