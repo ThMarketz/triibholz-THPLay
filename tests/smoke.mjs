@@ -197,32 +197,32 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
   console.log('\n[6e] Tactical commands (audibles) — call a play, board runs it');
   {
     const { COMMANDS } = window.__T;
-    ok('20 commands defined', COMMANDS.list.length===20);
+    ok('22 commands defined', COMMANDS.list.length===22);
     ok('both sides covered', COMMANDS.list.some(c=>c.side==='offense') && COMMANDS.list.some(c=>c.side==='defense'));
     ok('every command has id/name/cue/build', COMMANDS.list.every(c=>c.id&&c.name&&c.cue&&typeof c.build==='function'));
     // the classics the coach asked for exist
-    ['pick-roll','double-hole','goalie-out','collapse','tactical-foul'].forEach(id=>
+    ['point-pick','crash','gk-out','help-recover','foul-reset','manup-42','zone-mandown','press','drop-m'].forEach(id=>
       ok('command present: '+id, !!COMMANDS.byId[id]));
     // pure-transform behaviour on a 6v6
     const scn = { situation:'6v6', frames:[DATA.defaultFrame('6v6')] };
     const before = scn.frames[0];
     const gk0 = before.gk.x;
-    ok('goalie-out brings the keeper off the line', COMMANDS.apply(scn,'goalie-out',{target:'team'}).steps[0].gk.x < gk0);
-    ok('tactical-foul note names an ordinary foul', /foul/i.test(Object.values(COMMANDS.apply(scn,'tactical-foul',{target:'team'}).notes).join(' ')));
-    ok('double-hole sandwiches with 2 defenders', (()=>{ const hp=before.att[Object.keys(before.att).sort((a,b)=>before.att[b].x-before.att[a].x)[0]];
-      const d=COMMANDS.apply(scn,'double-hole',{target:'team'}).steps[0].def;
+    ok('gk-out brings the keeper off the line', COMMANDS.apply(scn,'gk-out',{target:'team'}).steps[0].gk.x < gk0);
+    ok('foul-reset note names the foul', /foul/i.test(Object.values(COMMANDS.apply(scn,'foul-reset',{target:'team'}).notes).join(' ')));
+    ok('crash puts 2 defenders on the centre', (()=>{ const hp=before.att[Object.keys(before.att).sort((a,b)=>before.att[b].x-before.att[a].x)[0]];
+      const d=COMMANDS.apply(scn,'crash',{target:'team'}).steps[0].def;
       return Object.keys(d).filter(k=>Math.hypot(d[k].x-hp.x,d[k].y-hp.y)<14).length===2; })());
-    ok('pick & roll makes 2 steps + roller holds the ball', (()=>{ const r=COMMANDS.apply(scn,'pick-roll',{target:'team'}); return r.steps.length===2 && /^A\d/.test(r.steps[1].ball.carrier); })());
+    ok('pick at the top makes 2 steps + the driver holds the ball', (()=>{ const r=COMMANDS.apply(scn,'point-pick',{target:'team'}); return r.steps.length===2 && /^A\d/.test(r.steps[1].ball.carrier); })());
     ok('every command builds without throwing across situations', DATA.SITUATIONS.every(sit=>
       COMMANDS.list.every(c=>{ try{ COMMANDS.apply({situation:sit.id,frames:[DATA.defaultFrame(sit.id)]}, c.id, {target:'team'}); return true; }catch(e){ return false; } })));
 
     // UI wiring: editor palette adds a step + fills assignments
     q('#new-scenario-btn').click(); await wait(25);
-    ok('command palette present & grouped', qa('#cmd-groups .cmd-group').length===3 && qa('#cmd-groups .cmd-btn').length===20);
+    ok('command palette present & grouped', qa('#cmd-groups .cmd-group').length===3 && qa('#cmd-groups .cmd-btn').length===22);
     const framesBefore = q('#frame-chips').children.length;
-    qa('#cmd-groups .cmd-btn').find(b=>b.dataset.cmd==='set-hole').click(); await wait(20);
+    qa('#cmd-groups .cmd-btn').find(b=>b.dataset.cmd==='hole-entry').click(); await wait(20);
     ok('editor command added a step', q('#frame-chips').children.length>framesBefore);
-    ok('command filled an assignment', qa('#notes-grid input').some(i=>/2m|post|seal/i.test(i.value)));
+    ok('command filled an assignment', qa('#notes-grid input').some(i=>/2 m|seal|entry/i.test(i.value)));
     q('#ed-title').value='Audible play'; q('#ed-title').dispatchEvent(new window.Event('input'));
     const beforeCmd = DATA.load().length;
     q('#ed-save').click(); await wait(40);
@@ -232,8 +232,8 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     qa('.scn-card').find(c=>c.textContent.includes('slip to the hole')).click(); await wait(20);
     ok('⚡ Audible button visible on an open play', q('#audible-btn').hidden===false);
     q('#audible-btn').click(); await wait(10);
-    ok('audible sheet opens with 20 calls', q('#audible-sheet').hidden===false && qa('#as-groups .cmd-btn').length===20);
-    qa('#as-groups .cmd-btn').find(b=>b.dataset.cmd==='collapse').click(); await wait(20);
+    ok('audible sheet opens with 22 calls', q('#audible-sheet').hidden===false && qa('#as-groups .cmd-btn').length===22);
+    qa('#as-groups .cmd-btn').find(b=>b.dataset.cmd==='help-recover').click(); await wait(20);
     ok('audible marks the board dirty (save bar shows)', q('#adjust-bar').hidden===false);
     const beforeAud = DATA.load().length;
     q('#adj-save-new').click(); await wait(40);
@@ -751,6 +751,57 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     const tl = FIELD.timeline([{t:0,det},{t:1,det},{t:2,det:none},{t:3,det:none},{t:4,det:none},{t:5,det:none},{t:6,det:none},{t:7,det:none},{t:8,det}],{});
     ok('moving camera: weak seconds hold the last field with decaying confidence, then go unread', tl[2].held && tl[2].H && tl[2].confidence<det.confidence && tl[7].H===null && tl[8].H && !tl[8].held);
     ok('track stats + lookup by time', FIELD.stats(tl).readPct===Math.round(100*8/9) && FIELD.at(tl, 3.5).t===3);
+  }
+
+  console.log('\n[6w] Audibles v2 (valid tactics) · speed · my cue · full screen · import formats');
+  {
+    const { COMMANDS, DATA } = window.__T;
+    const f66 = DATA.defaultFrame('6v6'), f65 = DATA.defaultFrame('6v5');
+    ok('22 commands, each with cue + when + why + source', COMMANDS.list.length===22 && COMMANDS.list.every(c=>c.cue && c.when && c.why && c.source));
+    const R = COMMANDS.roles(f66);
+    ok('roles read from geometry: 6 centre, 1/5 wings, 3 point, 2/4 flats', R.hole==='6' && R.lw==='1' && R.rw==='5' && R.point==='3' && R.lf==='2' && R.rf==='4');
+    const inb = p => p.x>=28 && p.x<=292 && p.y>=34 && p.y<=186;
+    ok('every command produces in-bounds steps on the default sets', COMMANDS.list.every(c=>{ const mu=/manup|mandown/.test(c.id); const r=COMMANDS.apply({situation:mu?'6v5':'6v6',frames:[DATA.clone(mu?f65:f66)]}, c.id, {target:'team'}); return r && r.steps.length && r.steps.every(st=>Object.values(st.att).concat(Object.values(st.def)).every(inb)); }));
+    const dm = COMMANDS.apply({situation:'6v6',frames:[DATA.clone(f66)]},'drop-m',{}).steps[0];
+    ok('M-drop: flat defenders sink between 2 m and 5 m, point defender stays up', dm.def[2].x>250 && dm.def[2].x<271 && dm.def[4].x>250 && dm.def[4].x<271 && dm.def[3].x<235);
+    const m42 = COMMANDS.apply({situation:'6v5',frames:[DATA.clone(f65)]},'manup-42',{}).steps[0];
+    ok('man-up 4-2: two posts on the 2 m line, four on the arc', Object.values(m42.att).filter(p=>p.x>=275).length===2 && Object.values(m42.att).filter(p=>p.x<255).length===4);
+    const pen = COMMANDS.apply({situation:'6v6',frames:[DATA.clone(f66)]},'penalty',{}).steps[0];
+    ok('penalty: shooter on the 5 m line, everyone else behind the ball, keeper on the line', pen.att[3].x===248 && Object.entries(pen.att).filter(([k])=>k!=='3').every(([,p])=>p.x<248) && pen.gk.x>=292);
+    const fd = COMMANDS.apply({situation:'6v6',frames:[DATA.clone(f66)]},'flat-drive',{target:'2'});
+    ok('flat drive: driver 2 ends at 2 m with the ball, wing 1 rotates into the flat', fd.steps[1].att[2].x>=265 && fd.steps[1].ball.carrier==='A2' && Math.abs(fd.steps[0].att[1].x-f66.att[2].x)<2);
+    const pr = COMMANDS.apply({situation:'6v6',frames:[DATA.clone(f66)]},'press',{}).steps[0];
+    ok('press: every defender within 10 of an attacker, centre defender behind the centre', Object.values(pr.def).every(d=>Object.values(f66.att).some(a=>Math.hypot(a.x-d.x,a.y-d.y)<=10)) && pr.def[6].x>f66.att[6].x);
+    q('.nav-btn[data-view="playbook"]').click(); await wait(30);
+    qa('#scenario-list .scn-card').find(c=>!c.classList.contains('scn-new')).click(); await wait(40);
+    q('#speed-seg [data-speed="0.5"]').click(); await wait(10);
+    ok('½× speed selected and remembered', q('#speed-seg [data-speed="0.5"]').classList.contains('active') && window.localStorage.getItem('thplay.speed')==='0.5');
+    q('#speed-seg [data-speed="1"]').click();
+    q('#fs-btn').click(); await wait(10);
+    ok('⛶ full-screen board (stage fills the screen, sidebars hidden)', q('#view-playbook').classList.contains('stage-full'));
+    q('#fs-btn').click(); await wait(10);
+    ok('⛶ again leaves full screen', !q('#view-playbook').classList.contains('stage-full'));
+    q('#focus-pos').value='3'; q('#focus-pos').dispatchEvent(new window.Event('change')); await wait(20);
+    ok('focus a player → “what do I do now?” cue on the board', !q('#my-cue').hidden && /\(3\) · step 1/.test(q('#mc-who').textContent) && q('#mc-text').textContent.length>3);
+    q('#focus-pos').value=''; q('#focus-pos').dispatchEvent(new window.Event('change')); await wait(20);
+    ok('no focus → cue hidden', q('#my-cue').hidden);
+    q('#audible-btn').click(); await wait(20);
+    const cmdBtn = q('#as-groups .cmd-btn[data-cmd="drop-m"]'); cmdBtn.dispatchEvent(new window.Event('mouseenter'));
+    ok('audible sheet explains when + why on hover', /When:/.test(q('#as-info').textContent) && /Why:/.test(q('#as-info').textContent));
+    q('#as-close').click(); await wait(10);
+    const before = DATA.load().length;
+    const txt = new window.File(['# Drive and dump\n3 has the ball\n2 drives to 2 m on the right\n3 passes to 2\n2 shoots far corner'], 'drive.txt', { type:'text/plain' });
+    const inp = q('#import-file'); Object.defineProperty(inp, 'files', { value:[txt], configurable:true }); inp.dispatchEvent(new window.Event('change')); await wait(150);
+    ok('.txt written steps import as a play (title from # line)', DATA.load().length===before+1 && DATA.load().some(x=>x.title==='Drive and dump' && x.frames.length>=2));
+    q('#import-btn').click(); await wait(10);
+    ok('Import ▾ menu: files · paste · backup', !q('#import-menu').hidden && qa('#import-menu [data-imp]').map(b=>b.dataset.imp).join()==='file,paste,backup');
+    q('#import-menu [data-imp="paste"]').click(); await wait(10);
+    const { SHARE } = window.__T;
+    const link = SHARE.shareUrl('http://x/', await SHARE.encode(SHARE.pack({ title:'Pasted link play', situation:'6v6', phase:'offense', frames:[f66, Object.assign(DATA.clone(f66), { ball:{carrier:'A6'} })], notes:{} })));
+    q('#paste-text').value = link; q('#paste-import').click(); await wait(150);
+    ok('pasting a share link imports the play (+1)', DATA.load().length===before+2 && DATA.load().some(x=>x.title==='Pasted link play') && q('#paste-modal').hidden);
+    q('#import-btn').click(); q('#import-menu [data-imp="backup"]').click(); await wait(20);
+    ok('backup all → toast with the count', /saved as a backup/.test(q('#toast').textContent));
   }
 
   console.log('\n[7] Basics + i18n');

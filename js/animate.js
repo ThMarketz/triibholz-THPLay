@@ -258,7 +258,7 @@ const ANIM = (() => {
 
   /* ---------- Player: drives a Renderer over time ---------- */
   function Player(renderer, scenario, onFrame) {
-    let raf=null, playing=false, t=0, dur=0, startTs=0, baseT=0;
+    let raf=null, playing=false, t=0, dur=0, startTs=0, baseT=0, speed=1;
     let focusPos=null, showPaths=true;
 
     function segCount(){ return Math.max(1, scenario.frames.length-1); }
@@ -288,7 +288,7 @@ const ANIM = (() => {
       if (scenario.frames.length<2){ render(); return; }
       if (t>=0.999) t=0;
       playing=true; baseT=t; startTs=null;
-      dur = 1100 * segCount();      // ~1.1s per step
+      dur = 1100 * segCount() / speed;      // ~1.1s per step at 1×; slow-motion for learning
       const tick=(ts)=>{
         if(!playing) return;
         if(startTs==null) startTs=ts;
@@ -305,9 +305,11 @@ const ANIM = (() => {
     function stop(){ pause(); }
     function toggle(){ playing?pause():play(); }
     let onState=null; function setOnState(fn){ onState=fn; }
+    function setSpeed(v){ const was=playing; if(was) pause(); speed=Math.max(0.1, Math.min(4, +v||1)); if(was) play(); }
+    function getSpeed(){ return speed; }
 
     render();
-    return { play, pause, toggle, stop, seek, stepFwd, stepBack, gotoStep, currentStep, segCount, setScenario, setFocus, setPaths, setOnState, get playing(){return playing;}, get t(){return t;} };
+    return { play, pause, toggle, stop, seek, stepFwd, stepBack, gotoStep, currentStep, segCount, setScenario, setFocus, setPaths, setOnState, setSpeed, getSpeed, get playing(){return playing;}, get t(){return t;} };
   }
 
   return { Renderer, Player, stateAt, ballPoint, drawTactics };

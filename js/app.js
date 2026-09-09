@@ -795,6 +795,8 @@
     state.viewer.setOnState(onPlayState);
     state.viewer.setFocus(state.focus);
     applySteps();
+    if (state.viewer.setSpeed) state.viewer.setSpeed(savedSpeed());
+    updateMyCue();
     if (t0) state.viewer.seek(t0);
     if (andPlay) state.viewer.play();
   }
@@ -834,6 +836,61 @@
     $('scrub').value = Math.round(t*1000);
     const total = (segCount!=null?segCount:(state.viewer?state.viewer.segCount():0)) + 1;
     $('frame-label').textContent = `Step ${Math.min(total, step+1)} / ${total}`;
+    updateMyCue(step, total);
+  }
+  /* ---- "what do I do now?" — one line for the focused player, per step ---- */
+  function cueFor(scn, pos, step) {
+    const fr = scn.frames, n = fr.length, i = Math.max(0, Math.min(step, n - 1));
+    const a = fr[i], b = fr[Math.min(i + 1, n - 1)];
+    const pa = pos === 'GK' ? a.gk : a.att[pos], pb = pos === 'GK' ? b.gk : b.att[pos];
+    const parts = [];
+    if (pa && pb && i < n - 1) {
+      const dx = pb.x - pa.x, dy = pb.y - pa.y, d = Math.hypot(dx, dy);
+      if (d >= 14) {
+        const toGoal = dx > 8, deep = pb.x >= 265, lateral = Math.abs(dy) > Math.abs(dx);
+        if (pos === 'GK') parts.push(toGoal ? 'drop back to the line' : 'come out to close the angle');
+        else if (deep && toGoal) parts.push('drive to 2 m');
+        else if (toGoal) parts.push('drive towards the goal');
+        else if (lateral) parts.push(dy < 0 ? 'slide to the left wing side' : 'slide to the right wing side');
+        else parts.push('move out to the top');
+      }
+    }
+    const me = pos === 'GK' ? 'GK' : 'A' + pos, ca = a.ball && a.ball.carrier, cb = b.ball && b.ball.carrier;
+    if (i < n - 1) {
+      if (cb === me && ca !== me) parts.push('receive the pass');
+      if (ca === me && cb && cb !== me) parts.push('pass to ' + String(cb).replace(/^A/, ''));
+      if (ca === me && !cb && b.ball && b.ball.x != null && b.ball.x >= 285) parts.push('shoot');
+      if (ca === me && cb === me && !parts.length) parts.push('keep the ball, read the defence');
+    }
+    if (!parts.length) parts.push(i >= n - 1 ? 'finish — hold your position' : 'hold your position, stay ready');
+    const title = parts.map((x, k) => k ? x : x.charAt(0).toUpperCase() + x.slice(1)).join(', then ');
+    return { title, note: ((scn.notes && scn.notes[pos]) || '').trim() };
+  }
+  function updateMyCue(step, total) {
+    const box = $('my-cue'); if (!box) return;
+    const scn = state.scenarios.find(x => x.id === state.selectedId);
+    const pos = state.focus;
+    if (!scn || !pos || state.mode === 'problem') { box.hidden = true; return; }
+    const st = step != null ? step : (state.viewer ? state.viewer.currentStep() : 0);
+    const tot = total != null ? total : ((state.viewer ? state.viewer.segCount() : Math.max(0, scn.frames.length - 1)) + 1);
+    const c = cueFor(scn, pos, st);
+    $('mc-who').textContent = `${pos === state.user.position ? 'You' : 'Player'} (${pos}) · step ${Math.min(tot, st + 1)} / ${tot}`;
+    $('mc-text').textContent = c.title; $('mc-note').textContent = c.note; $('mc-note').hidden = !c.note;
+    box.hidden = false;
+  }
+  /* ---- playback speed (remembered) + full-screen board ---- */
+  function savedSpeed() { try { return +(localStorage.getItem('thplay.speed') || 1) || 1; } catch (e) { return 1; } }
+  function applySpeed(v) {
+    v = +v || 1; try { localStorage.setItem('thplay.speed', String(v)); } catch (e) {}
+    document.querySelectorAll('#speed-seg [data-speed]').forEach(b => b.classList.toggle('active', +b.dataset.speed === v));
+    if (state.viewer && state.viewer.setSpeed) state.viewer.setSpeed(v);
+  }
+  function toggleFull(force) {
+    const lay = $('view-playbook'); if (!lay) return;
+    const on = force == null ? !lay.classList.contains('stage-full') : !!force;
+    lay.classList.toggle('stage-full', on);
+    const b = $('fs-btn'); if (b) { b.classList.toggle('active', on); b.title = on ? 'Leave full screen (Esc)' : 'Full-screen board (Esc to leave)'; }
+    try { if (on && document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); else if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {}
   }
   function syncFocusUI() {
     $('view-team').classList.toggle('active', state.viewMode==='team');
@@ -1383,9 +1440,12 @@
         const b = document.createElement('button');
         b.className = 'cmd-btn'; b.type='button';
         b.dataset.cmd = c.id;
-        b.title = c.cue;
+        b.title = c.cue + (c.when ? `\n\nWhen: ${c.when}` : '') + (c.why ? `\nWhy: ${c.why}` : '');
         b.innerHTML = `<span class="cmd-ic">${c.icon||'▸'}</span><span class="cmd-name">${escapeHtml(c.name)}</span><span class="cmd-scope">${c.scope}</span>`;
-        b.onclick = () => onPick(c.id);
+        const info = $(containerId === 'as-groups' ? 'as-info' : 'cmd-info');
+        const showInfo = () => { if (info) info.innerHTML = `<strong>${escapeHtml(c.name)}</strong> — ${escapeHtml(c.cue)}${c.when ? `<br><b>When:</b> ${escapeHtml(c.when)}` : ''}${c.why ? `<br><b>Why:</b> ${escapeHtml(c.why)}` : ''}`; };
+        b.onmouseenter = showInfo; b.onfocus = showInfo;
+        b.onclick = () => { showInfo(); onPick(c.id); };
         row.appendChild(b);
       });
       grp.appendChild(row); wrap.appendChild(grp);
@@ -1558,19 +1618,46 @@
     state.scenarios.push(sc);
     return sc;
   }
+  /* any text → plays: a share link, JSON (file / set / backup), or written steps (DRAFT) */
+  async function playsFromText(txt) {
+    txt = String(txt || '').trim(); if (!txt) return [];
+    const code = SHARE.fromHash(txt.replace(/\s+/g, ''));
+    if (code) { try { const r = SHARE.unpack(await SHARE.decode(code)); return r.plays; } catch (e) { return []; } }
+    if (/^[\[{]/.test(txt)) return SHARE.unpack(txt).plays;
+    if (typeof DRAFT === 'undefined') return [];
+    const lines = txt.split(/\r?\n/); let title = '', sit = state.situation;
+    while (lines.length && (/^\s*(#|title\s*:)/i.test(lines[0]) || /^\s*situation\s*:/i.test(lines[0]) || !lines[0].trim())) {
+      const l = lines.shift(); const t = /^\s*(?:#+|title\s*:)\s*(.+)$/i.exec(l); const st = /^\s*situation\s*:\s*(\S+)/i.exec(l);
+      if (t) title = t[1].trim(); if (st && DATA.sit(st[1])) sit = st[1];
+    }
+    const body = lines.join('\n').trim(); if (!body) return [];
+    const d = DRAFT.parse(body, sit); if (!d || !d.frames || d.frames.length < 2 || !(d.report || []).some(l => l.ok)) return [];
+    return SHARE.unpack({ title: title || (body.split('\n')[0] || 'Written play').slice(0, 60), description: body.replace(/\s+/g, ' ').slice(0, 300), situation: sit, phase: state.phase, frames: d.frames, notes: d.notes || {}, author: state.user && state.user.name, visibility: 'team' }).plays;
+  }
   async function importFiles(files) {
     if (typeof SHARE === 'undefined' || !files || !files.length) return;
     const read = f => f.text ? f.text() : new Promise(r => { const fr = new FileReader(); fr.onload = () => r(String(fr.result || '')); fr.readAsText(f); });
     const texts = await Promise.all(Array.from(files).map(read));
+    return importTexts(texts);
+  }
+  async function importTexts(texts) {
     let added = 0, dup = 0, bad = 0, first = null;
-    texts.forEach(txt => {
-      const r = SHARE.unpack(txt); if (!r.plays.length) { bad++; return; }
-      r.plays.forEach(p => { if (SHARE.isDuplicate(p, state.scenarios)) { dup++; return; } const sc = addImported(p, 'imported'); added++; first = first || sc; });
-    });
+    for (const txt of texts) {
+      const plays = await playsFromText(txt); if (!plays.length) { bad++; continue; }
+      plays.forEach(p => { if (SHARE.isDuplicate(p, state.scenarios)) { dup++; return; } const sc = addImported(p, 'imported'); added++; first = first || sc; });
+    }
     if (added) { DATA.save(state.scenarios); DATA.logActivity('play', `Imported ${added} play${added > 1 ? 's' : ''}`, state.user && state.user.name); }
     if (first) { state.situation = first.situation; state.phase = first.phase; buildSituationTabs(); refreshTabs(); renderLibrary(); openScenario(first.id); }
-    toast(`${added} play${added === 1 ? '' : 's'} imported${dup ? ` · ${dup} skipped (already in your playbook)` : ''}${bad ? ` · ${bad} file${bad > 1 ? 's' : ''} not a play` : ''}`);
+    toast(`${added} play${added === 1 ? '' : 's'} imported${dup ? ` · ${dup} skipped (already in your playbook)` : ''}${bad ? ` · ${bad} item${bad > 1 ? 's' : ''} not understood` : ''}`);
     return { added, dup, bad };
+  }
+  function toggleImportMenu(force) { const m = $('import-menu'); if (!m) return; m.hidden = force == null ? !m.hidden : !force; }
+  function openPaste() { const m = $('paste-modal'); if (!m) return; m.hidden = false; $('paste-text').value = ''; setTimeout(() => $('paste-text').focus(), 30); }
+  async function backupAll() {
+    const mine = state.scenarios.filter(sc => !sc.builtIn && !sc.shared);
+    if (!mine.length) { toast('No plays of your own yet — samples are always there'); return; }
+    downloadBlob(JSON.stringify(SHARE.packMany(mine, { name: 'Triibholz backup ' + new Date().toISOString().slice(0, 10) }), null, 1), SHARE.filename('triibholz-backup-' + new Date().toISOString().slice(0, 10), 'thplay.json'), 'application/json');
+    toast(`${mine.length} play${mine.length > 1 ? 's' : ''} saved as a backup — import the file on any device`);
   }
   // ---- multi-select → set download / video reel
   function toggleSelectMode(on) {
@@ -1646,8 +1733,12 @@
     $('sb-all').onclick = () => { currentList().forEach(sc => selected.add(sc.id)); renderLibrary(); };
     $('sb-download').onclick = () => downloadSet(pickedScenarios(), setName() + ' set');
     $('sb-reel').onclick = makeReel;
-    $('import-btn').onclick = () => $('import-file').click();
+    $('import-btn').onclick = e => { e.stopPropagation(); toggleImportMenu(); };
+    document.addEventListener('click', () => toggleImportMenu(false));
+    $('import-menu').querySelectorAll('[data-imp]').forEach(b => b.onclick = e => { e.stopPropagation(); toggleImportMenu(false); if (b.dataset.imp === 'file') $('import-file').click(); else if (b.dataset.imp === 'paste') openPaste(); else backupAll(); });
     $('import-file').onchange = e => { importFiles(e.target.files); e.target.value = ''; };
+    $('paste-close').onclick = $('paste-cancel').onclick = () => { $('paste-modal').hidden = true; };
+    $('paste-import').onclick = async () => { const t = $('paste-text').value; $('paste-modal').hidden = true; await importTexts([t]); };
     const list = $('scenario-list');
     list.addEventListener('dragover', e => { if (canEdit()) { e.preventDefault(); list.classList.add('drop'); } });
     list.addEventListener('dragleave', () => list.classList.remove('drop'));
@@ -2012,9 +2103,14 @@
     $('scrub').onchange = ()=> {   // released the slider while paused → draggable again
       if (!adjust.live && state.viewer && !state.viewer.playing) enterPausedEdit();
     };
-    const afterFocusChange = ()=>{ if(state.viewer)state.viewer.setFocus(state.focus); if(adjust.live)renderAdjustBoard(); syncFocusUI(); const s=state.scenarios.find(x=>x.id===state.selectedId); if(s)renderAssignments(s); };
+    const afterFocusChange = ()=>{ if(state.viewer)state.viewer.setFocus(state.focus); if(adjust.live)renderAdjustBoard(); syncFocusUI(); const s=state.scenarios.find(x=>x.id===state.selectedId); if(s)renderAssignments(s); updateMyCue(); };
     $('view-team').onclick = ()=>{ state.viewMode='team'; state.focus=null; afterFocusChange(); };
     $('steps-toggle').onclick = toggleSteps;
+    document.querySelectorAll('#speed-seg [data-speed]').forEach(b => b.onclick = () => applySpeed(b.dataset.speed));
+    applySpeed(savedSpeed());
+    $('fs-btn').onclick = () => toggleFull();
+    document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) toggleFull(false); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('view-playbook').classList.contains('stage-full')) toggleFull(false); });
     wireShare();
     $('view-me').onclick = ()=>{ state.viewMode='me'; state.focus=defaultFocus()||(state.user.position||'1'); afterFocusChange(); };
     $('focus-pos').onchange = (e)=>{ state.focus=e.target.value||null; state.viewMode=state.focus?'me':'team'; afterFocusChange(); };

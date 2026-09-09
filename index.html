@@ -193,8 +193,13 @@
         <div class="sidebar-sub" id="library-sub">Pick a situation above</div>
         <div class="lib-tools">
           <button class="btn-ghost sm" id="select-btn" title="Select several plays — download them as one set or render them into one video reel">☑ <span data-i18n="share.select">Select</span></button>
-          <button class="btn-ghost sm" id="import-btn" title="Import plays from a .thplay.json file (or drop the file on the list)" hidden>⬆ <span data-i18n="share.import">Import</span></button>
-          <input type="file" id="import-file" accept=".json,application/json" multiple hidden />
+          <span class="dl-wrap"><button class="btn-ghost sm" id="import-btn" title="Bring plays in: files from earlier sessions, a pasted share link, or written steps" hidden>⬆ <span data-i18n="share.import">Import</span> ▾</button>
+            <div class="dl-menu" id="import-menu" hidden>
+              <button data-imp="file"><strong>From files…</strong><span>.thplay.json · plain .json · .txt / .md written steps · a saved backup</span></button>
+              <button data-imp="paste"><strong>Paste a link or steps…</strong><span>a 🔗 share link, JSON, or lines like “3 drives to 2 m”</span></button>
+              <button data-imp="backup"><strong>💾 Backup all my plays</strong><span>one file with every play you made — import it on another device</span></button>
+            </div></span>
+          <input type="file" id="import-file" accept=".json,.thplay.json,.txt,.md,application/json,text/plain" multiple hidden />
         </div>
         <div class="select-bar" id="select-bar" hidden>
           <span class="sb-count" id="sb-count">0 selected</span>
@@ -248,6 +253,7 @@
             </div>
           </div>
           <div class="pool-drag-hint" id="pool-drag-hint" hidden>✋ Paused — drag players &amp; the ball to adjust</div>
+          <div class="my-cue" id="my-cue" hidden><span class="mc-who" id="mc-who">You (3) · step 1/4</span><strong id="mc-text">Drive to 2 m</strong><span class="mc-note" id="mc-note"></span></div>
           <button class="audible-btn" id="audible-btn" hidden title="Call a tactical command">⚡ Audible</button>
           <div class="audible-sheet" id="audible-sheet" hidden>
             <div class="as-head">
@@ -265,6 +271,7 @@
               <button class="as-x" id="as-close" title="Close">✕</button>
             </div>
             <div class="cmd-groups" id="as-groups"></div>
+            <div class="cmd-info" id="as-info">Hover a command to see when to call it and why it works.</div>
             <p class="as-foot">The board pauses and runs the call — drag to tweak, then <strong>Save as new ⑂</strong>.</p>
           </div>
           <div class="problem-overlay" id="problem-overlay" hidden>
@@ -304,6 +311,10 @@
               <button class="vt-btn active" id="view-team" data-i18n="view.team">Team</button>
               <button class="vt-btn" id="view-me" data-i18n="view.me">My position</button>
             </div>
+            <span class="speed-seg" id="speed-seg" title="Playback speed — slow it down to learn the moves">
+              <button class="vt-btn" data-speed="0.25">¼×</button><button class="vt-btn" data-speed="0.5">½×</button><button class="vt-btn active" data-speed="1">1×</button><button class="vt-btn" data-speed="1.5">1½×</button>
+            </span>
+            <button class="vt-btn" id="fs-btn" title="Full-screen board (Esc to leave)">⛶</button>
             <button class="vt-btn steps-btn active" id="steps-toggle" title="Show or hide the step notes and arrows — hide them to watch the pure movement" aria-pressed="true"><span data-i18n="view.steps">Steps</span> 👁</button>
             <select id="focus-pos" class="focus-select" title="Focus a position">
               <option value="" data-i18n="view.focus">Focus…</option>
@@ -332,6 +343,14 @@
   </section>
 
   <!-- ===================== EDITOR MODAL ===================== -->
+  <div class="modal-backdrop" id="paste-modal" hidden>
+    <div class="modal modal-sm">
+      <div class="modal-head"><h3>Paste a play</h3><span class="spacer"></span><button class="modal-x" id="paste-close">✕</button></div>
+      <div class="modal-body"><p class="muted" style="margin:0 0 8px">A 🔗 share link, a play file’s JSON, or written steps — one per line, e.g. <em>3 has the ball · 2 drives to 2 m on the right · 3 passes to 2 · 2 shoots</em>. Start with <em># Title</em> to name it.</p>
+        <textarea id="paste-text" rows="8" style="width:100%" placeholder="# Drive and dump&#10;3 has the ball&#10;2 drives to 2 m on the right&#10;3 passes to 2&#10;2 shoots far corner"></textarea></div>
+      <div class="modal-foot"><button class="btn-ghost" id="paste-cancel">Cancel</button><button class="btn-primary" id="paste-import">⬆ Import</button></div>
+    </div>
+  </div>
   <div class="modal-backdrop" id="confirm-modal" hidden>
     <div class="modal modal-sm">
       <div class="modal-body"><p id="confirm-text"></p></div>
@@ -432,6 +451,7 @@
               <span class="cmd-target-note">Team-wide moves affect the whole unit; single-player calls use this pick.</span>
             </div>
             <div class="cmd-groups" id="cmd-groups"></div>
+            <div class="cmd-info" id="cmd-info">Hover a command to see when to call it and why it works.</div>
           </div>
         </details>
 

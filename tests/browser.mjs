@@ -52,6 +52,23 @@ ok('steps off → notes bar hidden, fewer marks on the board', !(await page.loca
 await page.screenshot({ path:OUT+'/qa_27_steps_off.png' });
 await page.click('#steps-toggle'); await page.waitForTimeout(200);
 ok('steps back on', await page.locator('#rightbar').isVisible());
+// speed · full screen · my cue · import written steps
+await page.click('#speed-seg [data-speed="0.5"]'); await page.waitForTimeout(100);
+ok('½× speed button active', await page.locator('#speed-seg [data-speed="0.5"].active').count()===1);
+await page.click('#speed-seg [data-speed="1"]');
+await page.selectOption('#focus-pos', '3'); await page.waitForTimeout(200);
+ok('“what do I do now?” cue shows for player 3', await page.locator('#my-cue:not([hidden])').count()===1 && /\(3\)/.test(await page.locator('#mc-who').textContent()));
+await page.click('#fs-btn'); await page.waitForTimeout(300);
+ok('⛶ full-screen board: sidebar hidden, board still there', await page.locator('#view-playbook.stage-full').count()===1 && !(await page.locator('.sidebar').first().isVisible()) && await page.locator('#pool').isVisible());
+await page.screenshot({ path:OUT+'/qa_30_fullscreen_cue.png' });
+await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+ok('Esc leaves full screen', await page.locator('#view-playbook.stage-full').count()===0);
+await page.selectOption('#focus-pos', '');
+const cardsBeforeTxt = await page.locator('.scn-card:not(.scn-new)').count();
+await page.setInputFiles('#import-file', { name:'drive.txt', mimeType:'text/plain', buffer: Buffer.from('# Drive and dump\n3 has the ball\n2 drives to 2 m on the right\n3 passes to 2\n2 shoots far corner') });
+await page.waitForTimeout(500);
+ok('.txt written steps imported as a play (+1)', (await page.locator('.scn-card:not(.scn-new)').count())===cardsBeforeTxt+1 && /Drive and dump/.test(await page.locator('#scenario-title').textContent()));
+await page.locator('.scn-card:has-text("Drive & kick")').first().click(); await page.waitForTimeout(300);
 // ⬇ Download a play file · ☑ Select → 🎬 Reel of several plays (one real video) · 🔗 share link
 const dlFmt = async (fmt) => { const w = page.waitForEvent('download', { timeout: 15000 }); await page.click('#dl-btn'); await page.click(`#dl-menu [data-fmt="${fmt}"]`); const f = await w.catch(()=>null); return f ? f.suggestedFilename() : null; };
 const fJson = await dlFmt('json'); ok('⬇ Download → Play file saves .thplay.json', !!fJson && /\.thplay\.json$/.test(fJson));
@@ -66,8 +83,9 @@ await page.click('#select-btn'); await page.waitForTimeout(150);
 await page.click('#sb-all'); await page.waitForTimeout(150);
 const picked = await page.locator('.scn-card.picked').count();
 ok('select mode picks every play in the list ('+picked+')', picked>=2);
-await page.click('#sb-reel');
-await page.waitForFunction(() => { const o = document.querySelector('#sb-out'); return o && (o.querySelector('video') || /Couldn/i.test(o.textContent)); }, { timeout: 90000 });
+await page.click('#sb-reel'); await page.waitForTimeout(200);
+if (await page.locator('#confirm-modal:not([hidden])').count()) { ok('team-only play in the set → confirmation asked before it leaves the app', true); await page.click('#confirm-yes'); }
+await page.waitForFunction(() => { const o = document.querySelector('#sb-out'); return o && (o.querySelector('video') || /Couldn/i.test(o.textContent)); }, null, { timeout: 150000 });
 const reelSrc = await page.locator('#sb-out video').getAttribute('src').catch(()=>null);
 ok('🎬 Reel rendered ONE video for all selected plays', !!reelSrc && reelSrc.startsWith('blob:') && await page.locator('#sb-reel-download').count()===1);
 await page.screenshot({ path:OUT+'/qa_28_reel.png' });
@@ -151,9 +169,9 @@ console.log('\n[3d] Tactical commands — editor palette + stage audible');
 await page.click('#new-scenario-btn'); await page.waitForTimeout(300);
 await page.fill('#ed-title','Commanded play');
 await page.click('#cmd-panel > summary'); await page.waitForTimeout(150);
-ok('command palette shows 20 calls in 3 groups', (await page.locator('#cmd-groups .cmd-btn').count())===20 && (await page.locator('#cmd-groups .cmd-group').count())===3);
+ok('command palette shows 22 calls in 3 groups', (await page.locator('#cmd-groups .cmd-btn').count())===22 && (await page.locator('#cmd-groups .cmd-group').count())===3);
 const stepsBefore = await page.locator('#frame-chips .frame-chip').count();
-await page.click('#cmd-groups .cmd-btn[data-cmd="pick-roll"]'); await page.waitForTimeout(200);
+await page.click('#cmd-groups .cmd-btn[data-cmd="point-pick"]'); await page.waitForTimeout(200);
 ok('Pick & Roll added movement steps', (await page.locator('#frame-chips .frame-chip').count()) > stepsBefore);
 ok('command drew arrows on the editor board', (await page.locator('#editor-pool [marker-end]').count())>=1);
 await page.screenshot({ path:OUT+'/qa_19_commands.png' });
@@ -164,7 +182,7 @@ ok('⚡ Audible button visible on the board', await page.locator('#audible-btn:n
 await page.click('#audible-btn'); await page.waitForTimeout(150);
 ok('audible sheet opens', await page.locator('#audible-sheet:not([hidden])').count()===1);
 await page.selectOption('#as-target','team');
-await page.click('#as-groups .cmd-btn[data-cmd="double-hole"]'); await page.waitForTimeout(250);
+await page.click('#as-groups .cmd-btn[data-cmd="crash"]'); await page.waitForTimeout(250);
 ok('audible marked the play dirty (save bar)', await page.locator('#adjust-bar:not([hidden])').count()===1);
 await page.screenshot({ path:OUT+'/qa_20_audible.png' });
 const audCards = await page.locator('.scn-card').count();

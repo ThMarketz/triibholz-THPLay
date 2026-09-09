@@ -868,3 +868,17 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .hz{height:34px;display:flex;align-items:center;justify-content:center;font-size:.68rem;border-radius:4px;background:rgba(255,255,255,.04);color:var(--muted)}
 .hz.on{background:rgba(31,192,212,calc(.12 + var(--p) * .7));color:#e8f6f8}.hz.goal{background:transparent}
 .scout-more{margin-top:10px}.scout-more summary{cursor:pointer;color:var(--muted);font-size:.86rem}
+
+/* ---- speed · full screen · my cue · import menu · command info (v1.28) ---- */
+.speed-seg{display:inline-flex;gap:2px;margin-left:6px}.speed-seg .vt-btn{padding:4px 7px;font-size:.78rem}
+.layout.stage-full{position:fixed;inset:0;z-index:60;background:var(--bg);grid-template-columns:1fr}
+.layout.stage-full .sidebar,.layout.stage-full .rightbar,.layout.stage-full .stage-head,.layout.stage-full .draft-accordion{display:none}
+.layout.stage-full .stage{padding:8px;gap:8px}.layout.stage-full .pool-wrap{border-radius:10px}
+#fs-btn.active{background:var(--accent);color:#04151a}
+.my-cue{position:absolute;left:12px;top:12px;max-width:min(60%,420px);background:rgba(6,21,31,.86);border:1px solid var(--accent);border-radius:12px;padding:10px 14px;display:flex;flex-direction:column;gap:3px;backdrop-filter:blur(3px);pointer-events:none;z-index:4}
+.my-cue .mc-who{font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:#7fd4de}
+.my-cue strong{font-size:1.15rem;line-height:1.25;color:#fff}.my-cue .mc-note{font-size:.84rem;color:var(--muted)}
+.layout.stage-full .my-cue strong{font-size:1.6rem}
+.cmd-info{margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(31,192,212,.08);font-size:.84rem;line-height:1.4;color:var(--muted)}
+.cmd-info strong,.cmd-info b{color:var(--text)}
+#paste-text{background:var(--surface-2,rgba(255,255,255,.04));color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font:inherit}

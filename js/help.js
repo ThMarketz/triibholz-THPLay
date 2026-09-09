@@ -13,7 +13,7 @@ const HELP = (() => {
       'Players see their position, XP, 🔥 streak, badges and both trivia best scores.',
       'Super Admins see pending approvals and the live activity feed.',
       'Tap any listed play or button to jump straight there.',
-    ], tips:[ 'The 🔊 button in the top bar turns match sounds on (off by default).', '<strong>Steps 👁</strong> next to the Team / My position switch hides the step notes and the arrows on the board, so you watch the pure movement; press it again to bring them back. The choice is remembered on this device.' ]},
+    ], tips:[ 'The 🔊 button in the top bar turns match sounds on (off by default).', '<strong>¼× ½× 1× 1½×</strong> sets the playback speed — slow it down to learn a move; remembered on this device. <strong>⛶</strong> makes the board full-screen for the pool deck or the big screen (Esc leaves it).', '<strong>What do I do now?</strong> Pick <em>My position</em> or a player in <em>Focus…</em> and a cue appears on the board for every step — “Drive to 2 m, then receive the pass” — with that position’s note underneath; everyone else is dimmed.', '<strong>Steps 👁</strong> next to the Team / My position switch hides the step notes and the arrows on the board, so you watch the pure movement; press it again to bring them back. The choice is remembered on this device.' ]},
 
     playbook: { icon:'📖', title:'Playbook — watch & understand a play', steps:[
       'Pick a <strong>situation</strong> in the top bar (6 on 6 … 1 on GK) and <strong>Offense/Defense</strong>.',
@@ -80,7 +80,7 @@ const HELP = (() => {
 
     share: { icon:'📤', title:'Download, import &amp; share plays — sets and video reels', steps:[
       '<strong>⬇ Download ▾</strong> (top right of an open play) offers formats: <em>Play file</em> (.thplay.json, importable), <em>Image sheet</em> (.png, every step on one picture), <em>Vector board</em> (.svg, current step), <em>Print / PDF</em> (steps + notes, one play per page) and <em>Video</em>. In select mode, <strong>🖨 PDF</strong> prints all selected plays as a booklet.',
-      '<strong>⬆ Import</strong> (left, above the play list) reads such files — or drop a file onto the list. Plays already in your playbook are skipped, not duplicated.',
+      '<strong>⬆ Import ▾</strong> (left, above the play list) brings plays in from earlier sessions: <em>From files</em> (.thplay.json, plain .json, a saved backup, or .txt / .md written steps), <em>Paste a link or steps</em> (a 🔗 share link, JSON, or lines like “2 drives to 2 m on the right”), and <strong>💾 Backup all my plays</strong> makes one file with everything you made — import it on another device. Drop files on the list too. Plays already in your playbook are skipped, not duplicated.',
       '<strong>🔗 Share</strong> makes a link that carries the whole play: whoever opens it sees it animated and can press <em>Save to my playbook</em>. On a phone it opens the share sheet (WhatsApp, Mail, AirDrop…).',
       '<strong>☑ Select</strong> lets you pick several plays — e.g. all your defense scenarios — then <strong>⬇ Set</strong> downloads them as one file, and <strong>🎬 Reel</strong> renders them into ONE video: a title card and the animation for each play, ready to send to the team.',
     ], tips:[
@@ -123,6 +123,7 @@ const HELP = (() => {
       'On the board, the <strong>⚡ Audible</strong> button (bottom-right of the pool) flashes a call onto the play you’re watching — the board pauses, runs the move, and you can drag to tweak then <strong>Save as new ⑂</strong>.',
       'Choose <strong>Apply to</strong> first: <strong>Whole team</strong> for unit moves (collapse, press, counter), or a single <strong>player / GK</strong> for individual calls (front the hole, tactical foul, wing iso).',
       'Offense calls move the white attackers; defense calls move the black defenders and the keeper. Everything you add is still fully draggable afterwards.',
+      'Every command is a <strong>real water polo movement</strong> from coach-education curricula (World Aquatics / USA Water Polo and the classic club schools) — the umbrella drive with rotation, entry to the centre, pick at the top, perimeter rotation, clear-out for the centre, 4-2 and 3-3 man-up sets, the front-court press, the M-drop, fronting and crashing on the centre, the man-down zone, help-and-recover, counter lanes and transition defence. Hover one to read <em>when</em> to call it and <em>why</em> it works.',
     ], tips:[
       'The classics are all there: <strong>Pick &amp; Roll</strong>, <strong>Double-team the Hole</strong>, <strong>Goalie Out Front</strong>, <strong>Collapse</strong> (everyone between the two attackers) and the <strong>Ordinary Foul</strong> to stop an attack.',
       'A command that needs a player who isn’t in the current situation is skipped with a note — pick a valid target and try again.',
