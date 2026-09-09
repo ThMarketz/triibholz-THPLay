@@ -306,6 +306,47 @@ const FILM = (() => {
   /* ---------------- Tier 1 position tracking ----------------
      Calibrate the pool once (4 corners → homography), then read
      cap + ball colours per frame and project them onto the board. */
+  /* ---- Auto field: find the pool in the current frame, show the corners, let the coach nudge ---- */
+  let vFieldConf = 0, vFieldMode = 'none';
+  function setFieldStatus() {
+    const c = root && root.querySelector('#field-status'); if (!c) return;
+    c.textContent = vHomography ? (vFieldMode === 'auto' ? `● field found · ${Math.round(vFieldConf * 100)}%` : '● field: clicked corners') : '● field: not set';
+    c.className = 'cloud-status ' + (vHomography ? 'cloud' : 'offline');
+    const posBtn = root.querySelector('#film-scanpos'); if (posBtn) posBtn.disabled = !vHomography;
+  }
+  function grabFrame(Wc, Hc) {
+    const v = root && root.querySelector('#film-video'); if (!v) return null;
+    const cv = document.createElement('canvas'); cv.width = Wc; cv.height = Hc;
+    const g = cv.getContext('2d'); if (!g) return null;
+    try { g.drawImage(v, 0, 0, Wc, Hc); return g.getImageData(0, 0, Wc, Hc).data; } catch (e) { return null; }
+  }
+  function autoField() {
+    const v = root && root.querySelector('#film-video');
+    const out = root && root.querySelector('#film-track-out');
+    if (!v || !out) { ctx.toast('Re-attach the uploaded video first'); return; }
+    if (typeof FIELD === 'undefined') { ctx.toast('Field detection module missing'); return; }
+    const Wc = 320, Hc = 180; vCalibW = Wc; vCalibH = Hc;
+    const data = grabFrame(Wc, Hc);
+    if (!data) { out.innerHTML = '<div class="muted">Could not read a frame from the video (try pausing on a wide shot, then press again).</div>'; return; }
+    const det = FIELD.detect(data, Wc, Hc, { step: 2 });
+    if (!det.found) {
+      vHomography = null; vFieldMode = 'none'; setFieldStatus();
+      out.innerHTML = `<div class="muted">Field not found in this frame — ${esc(det.why || 'no pool edges')} (water in view: ${Math.round(det.coverage * 100)}%). Scrub to a wide shot and try again, or click the corners yourself.</div>`;
+      return;
+    }
+    vCorners = det.corners.map(c => ({ x: c.x, y: c.y })); vHomography = det.H; vFieldConf = det.confidence; vFieldMode = 'auto';
+    setFieldStatus();
+    out.innerHTML = `<div class="cal-wrap"><canvas id="cal-canvas" width="${Wc}" height="${Hc}"></canvas>
+      <div class="cal-hint" id="cal-hint">✓ Field found (${Math.round(det.confidence * 100)}% sure, ${Math.round(det.coverage * 100)}% water in view). Drag a corner to nudge it — or press <strong>Track positions</strong> / <strong>Scout this video</strong>.</div></div>`;
+    const cv = out.querySelector('#cal-canvas'), g = cv.getContext('2d');
+    const draw = () => { try { g.drawImage(v, 0, 0, Wc, Hc); g.strokeStyle = '#1fc0d4'; g.lineWidth = 2; g.beginPath(); vCorners.forEach((c, i) => i ? g.lineTo(c.x, c.y) : g.moveTo(c.x, c.y)); g.closePath(); g.stroke(); vCorners.forEach(c => { g.fillStyle = '#1fc0d4'; g.strokeStyle = '#08131b'; g.beginPath(); g.arc(c.x, c.y, 5, 0, 7); g.fill(); g.stroke(); }); } catch (e) {} };
+    draw();
+    let dragI = -1;
+    const toLocal = ev => { const r = cv.getBoundingClientRect(); return { x: (ev.clientX - r.left) * (Wc / r.width), y: (ev.clientY - r.top) * (Hc / r.height) }; };
+    cv.onpointerdown = ev => { const p = toLocal(ev); dragI = vCorners.findIndex(c => Math.hypot(c.x - p.x, c.y - p.y) < 14); if (dragI >= 0) cv.setPointerCapture(ev.pointerId); };
+    cv.onpointermove = ev => { if (dragI < 0) return; const p = toLocal(ev); vCorners[dragI] = { x: Math.max(0, Math.min(Wc, p.x)), y: Math.max(0, Math.min(Hc, p.y)) }; draw(); };
+    cv.onpointerup = () => { if (dragI < 0) return; dragI = -1; vHomography = VISION.solveHomography(vCorners, VISION.boardCorners()); vFieldMode = 'nudged'; setFieldStatus(); const h = out.querySelector('#cal-hint'); if (h) h.innerHTML = '✓ Corners adjusted — field set from your corners.'; };
+  }
   function startCalibrate() {
     const v = root && root.querySelector('#film-video');
     const out = root && root.querySelector('#film-track-out');
@@ -330,6 +371,7 @@ const FILM = (() => {
       } else {
         vHomography = VISION.solveHomography(vCorners, VISION.boardCorners());
         const posBtn = root.querySelector('#film-scanpos');
+        vFieldMode = 'manual'; setFieldStatus();
         if (vHomography) { hint.innerHTML = '✓ Calibrated — now press <strong>“Track positions”</strong>.'; if (posBtn) posBtn.disabled = false; }
         else hint.textContent = 'Calibration failed — pick four distinct corners and retry.';
       }
@@ -457,7 +499,8 @@ const FILM = (() => {
   function setScoutStatus(txt, cls) { const c = root && root.querySelector('#scout-status'); if (c) { c.textContent = txt; c.className = 'cloud-status ' + (cls || 'offline'); } }
   async function runAutoScout(btn) {
     const out = root && root.querySelector('#scout-out');
-    if (!vHomography) { ctx.toast('Calibrate the pool first (Position tracking → Calibrate)'); return; }
+    const movingCam = !!((root.querySelector('#film-moving') || {}).checked);
+    if (!vHomography && !movingCam) { ctx.toast('Find the field first (🎯 Find the field, or click the corners)'); return; }
     const base = scoutBase(); const us = (root.querySelector('#scout-us') || {}).value || 'white';
     btn.disabled = true; setScoutStatus('● uploading…', 'cloud');
     if (out) out.innerHTML = '<div class="muted">Uploading the video to the analysis backend… ⏳</div>';
@@ -468,7 +511,7 @@ const FILM = (() => {
       const mb = blob.size / 1048576;
       if (health && health.maxUploadMB && mb > health.maxUploadMB) throw new Error(`too-large:${Math.round(mb)}:${health.maxUploadMB}`);
       const videoRef = await uploadWithProgress(base + '/api/upload', blob, pct => { setScoutStatus(`● uploading ${pct}%`, 'cloud'); if (out) out.innerHTML = `<div class="muted">Uploading ${Math.round(mb)} MB to the analysis backend… ${pct}%</div>`; });
-      const job = await fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, calibration: { H: vHomography }, scout: true, us, opts: { fps: 6, chunkSec: 20 } }) });
+      const job = await fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, calibration: { H: vHomography, mode: (root.querySelector('#film-moving') || {}).checked ? 'auto' : 'fixed', minConf: 0.4 }, scout: true, us, opts: { fps: 6, chunkSec: 20 } }) });
       if (!job.ok) throw new Error('job-' + job.status);
       const { id } = await job.json();
       setScoutStatus('● scouting…', 'cloud'); if (out) out.innerHTML = `<div class="muted">Scouting the whole video… ⏳ (job ${esc(id)}). A full match can take a few minutes.</div>`;
@@ -505,8 +548,9 @@ const FILM = (() => {
   function renderScout(sc, result) {
     const out = root && root.querySelector('#scout-out'); if (!out) return;
     lastScout = { sc, result, sessionId: cur && cur.id };
-    if (!sc || !sc.possessions) { out.innerHTML = '<div class="muted">No possessions could be read from this video — check the calibration and cap colours.</div>'; return; }
-    const meta = result && result.meta ? ` · ${Math.round(result.meta.seconds)}s analysed` : '';
+    if (!sc || !sc.possessions) { const fm0 = result && result.meta && result.meta.field; out.innerHTML = `<div class="muted">No possessions could be read from this video${fm0 && fm0.mode === 'auto' ? ` — the field was readable in ${fm0.readPct}% of it` : ''} — check the cap colours${fm0 && fm0.mode === 'auto' && fm0.readPct < 50 ? ', or click the corners yourself on a wide shot' : ''}.</div>`; return; }
+    const fm = result && result.meta && result.meta.field;
+    const meta = (result && result.meta ? ` · ${Math.round(result.meta.seconds)}s analysed` : '') + (fm && fm.mode === 'auto' ? ` · 📷 field tracked automatically: ${fm.readPct}% of the video readable${fm.unreadSeconds ? `, ${fm.unreadSeconds}s unread` : ''}` : fm && fm.mode === 'fixed' ? ' · fixed camera' : '');
     const teamRows = Object.keys(sc.profile || {}).map(k => { const t = sc.profile[k]; return `<div class="scout-team"><strong>${k === 'att' ? 'White caps' : 'Blue caps'}</strong> — ${t.possessions} possessions · ${Math.round(t.shotRate * 100)}% shots · ${t.avgPasses} passes/poss
       <div class="scout-tend">${(t.tendencies || []).slice(0, 4).map(x => `<span class="tag">${esc(x.name)} ${x.pct}%</span>`).join('') || '<span class="muted">no recognised tactics yet</span>'}</div></div>`; }).join('');
     out.innerHTML = `<div class="scout-box">
@@ -869,7 +913,10 @@ const FILM = (() => {
       </div>
       <div class="film-auto" id="film-track">
         <div class="fa-head"><strong>📍 Position tracking <span class="fa-beta">Tier 1</span></strong>
-          <button class="btn-ghost sm" id="film-calibrate">Calibrate pool</button>
+          <button class="btn-primary sm" id="film-autofield" title="Find the pool in the current frame automatically — works with a moving camera">🎯 Find the field</button>
+          <button class="btn-ghost sm" id="film-calibrate" title="Click the four corners yourself">Click corners</button>
+          <label class="fa-check" title="Re-detect the pool about once a second while scouting — for a panning / zooming camera. Frames where the pool is not visible enough are reported as unread."><input type="checkbox" id="film-moving" checked /> 📷 moving camera</label>
+          <span class="cloud-status offline" id="field-status">● field: not set</span>
           <button class="btn-ghost sm" id="film-scanpos" disabled>Track positions</button>
           <label class="fa-check" title="Tier 2: connected-component detection + multi-object tracking — rejects splash, bridges occlusion, steadier positions"><input type="checkbox" id="film-hardened" checked> Hardened <span class="fa-beta">Tier&nbsp;2</span></label>
           <span class="cloud-status" id="ondevice-detector">● colour</span>
@@ -954,6 +1001,9 @@ const FILM = (() => {
     if (scanBtn) scanBtn.onclick = () => runAutoAnalyse(scanBtn);
     const calBtn = main.querySelector('#film-calibrate');
     if (calBtn) calBtn.onclick = () => startCalibrate();
+    const afBtn = main.querySelector('#film-autofield');
+    if (afBtn) afBtn.onclick = () => autoField();
+    setFieldStatus();
     const odChip = main.querySelector('#ondevice-detector');
     if (odChip && typeof WEBDETECTOR !== 'undefined') { const st = WEBDETECTOR.status(); odChip.textContent = st.hasModel ? `● model: ${st.name}` : '● colour'; odChip.className = 'cloud-status ' + (st.hasModel ? 'cloud' : 'offline'); }
     const posBtn = main.querySelector('#film-scanpos');

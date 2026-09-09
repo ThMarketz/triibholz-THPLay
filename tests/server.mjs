@@ -205,6 +205,18 @@ function frame(w, h) {
     ok('comments persist with author, item link and time', two.comments.length === 2 && two.comments[0].itemId === one.items[1].id && two.comments[1].itemId === null && two.comments[0].author === 'Sam (3)' && two.comments[0].at > 0);
     ok('unknown debrief → 404', (await fetch(base + '/api/debriefs/nope')).status === 404);
 
+    console.log('\n[3i] Auto field — frames mode with calibration.mode=auto');
+    const W2 = 80, H2 = 45;
+    const poolFrame = () => { const d = new Array(W2 * H2 * 4).fill(0); const put = (x0, y0, x1, y1, r, g, b) => { for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const i = (y * W2 + x) * 4; d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255; } };
+      put(0, 0, W2, H2, 120, 118, 110); put(6, 4, 74, 41, 30, 90, 140); put(10, 8, 14, 12, 245, 248, 250); put(50, 9, 54, 13, 245, 248, 250); put(20, 20, 24, 24, 22, 26, 30); put(66, 20, 70, 25, 220, 40, 40); put(30, 14, 34, 18, 255, 130, 30); return d; };
+    const af = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'frames', w: W2, h: H2, frames: Array.from({ length: 6 }, poolFrame), calibration: { mode: 'auto' }, scout: true }) });
+    const afj = await af.json();
+    ok('auto calibration needs no corners: 200 + field meta (readPct, confidence)', af.status === 200 && afj.meta && afj.meta.field && afj.meta.field.mode === 'auto' && afj.meta.field.readPct === 100 && afj.meta.field.avgConfidence > 0.5);
+    ok('players landed on the board through the detected field', afj.frames.some(f => Object.keys(f.boardFrame.att).length >= 1));
+    const nf = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'frames', w: W2, h: H2, frames: Array.from({ length: 4 }, () => new Array(W2 * H2 * 4).fill(90)), calibration: { mode: 'auto' } }) });
+    ok('no pool in any frame → 422 field-not-found (never guessed)', nf.status === 422 && (await nf.json()).error === 'field-not-found');
+    ok('fixed mode without corners still → bad-calibration', (await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'frames', w: W2, h: H2, frames: [poolFrame()], calibration: {} }) })).status === 422);
+
     console.log('\n[4] Error handling');
     ok('bad JSON → 400', (await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{oops' })).status === 400);
     const noInput = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });

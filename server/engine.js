@@ -23,11 +23,13 @@ global.ANALYSIS = require('../js/analysis.js');
 global.BYTETRACK = require('../js/bytetrack.js');
 global.EVENTS = require('../js/events.js');
 global.TACTICS = require('../js/tactics.js');
-const VISION = global.VISION, ANALYSIS = global.ANALYSIS, BYTETRACK = global.BYTETRACK, EVENTS = global.EVENTS, TACTICS = global.TACTICS;
+global.FIELD = require('../js/field.js');
+const VISION = global.VISION, ANALYSIS = global.ANALYSIS, BYTETRACK = global.BYTETRACK, EVENTS = global.EVENTS, TACTICS = global.TACTICS, FIELD = global.FIELD;
 const { makeDetector } = require('./detector.js');
 
 const WORK_W = 320, WORK_H = 180;   // analysis resolution
 
+const isAuto = cal => !!(cal && cal.mode === 'auto');
 function homographyOf(cal) {
   if (cal && Array.isArray(cal.H) && cal.H.length === 9) return cal.H;
   if (cal && Array.isArray(cal.corners) && cal.corners.length === 4) return VISION.solveHomography(cal.corners, VISION.boardCorners());
@@ -44,7 +46,7 @@ function tracksFrom(con) {
 async function framesToResult(frames, w, h, cal, opts) {
   opts = opts || {};
   const H = homographyOf(cal);
-  if (!H) { const e = new Error('bad-calibration'); e.code = 'bad-calibration'; throw e; }
+  if (!H && !isAuto(cal)) { const e = new Error('bad-calibration'); e.code = 'bad-calibration'; throw e; }
   if (!frames || !frames.length) { const e = new Error('no-frames'); e.code = 'no-frames'; throw e; }
   // Phase 2: detection is pluggable (colour now, a served model when configured);
   // ByteTrack fuses the per-frame detections into stable, occlusion-bridged tracks.
@@ -56,7 +58,12 @@ async function framesToResult(frames, w, h, cal, opts) {
   // then read events off the sequence.
   const snaps = BYTETRACK.series(perFrame, tOpts);
   const fps = opts.fps || 10, start = opts.start || 0;
-  const seriesFrames = snaps.map((s, i) => ({ t: +(start + i / fps).toFixed(2), boardFrame: VISION.toBoardFrame(s, H).frame }));
+  // auto field: detect the pool on every frame (frames mode is small), fall back to the manual H
+  let track = null;
+  if (isAuto(cal)) { track = FIELD.timeline(frames.map((f, i) => ({ t: +(start + i / fps).toFixed(2), det: FIELD.detect(f, w, h, { step: 2 }) })), { minConf: cal.minConf || 0.4 }); }
+  const Hat = t => { if (track) { const s = FIELD.at(track, t); if (s && s.H) return s.H; } return H; };
+  const seriesFrames = snaps.map((s, i) => { const t = +(start + i / fps).toFixed(2), Hi = Hat(t); return Hi ? { t, boardFrame: VISION.toBoardFrame(s, Hi).frame } : null; }).filter(Boolean);
+  if (!seriesFrames.length) { const e = new Error('field-not-found'); e.code = 'field-not-found'; throw e; }
   const detected = EVENTS.detect(seriesFrames, {});
   // a representative frame (most players on it) for the formation overview
   let rep = seriesFrames[0] || { t: start, boardFrame: VISION.toBoardFrame({}, H).frame }, best = -1;
@@ -69,6 +76,7 @@ async function framesToResult(frames, w, h, cal, opts) {
     events: [{ t: rep.t, type: 'formation', conf: 0.72, frame: rep.boardFrame }].concat(detected),
   };
   if (opts.scout) out.scout = scoutSeries(seriesFrames, detected, opts);
+  if (track) out.meta = { field: Object.assign({ mode: 'auto' }, FIELD.stats(track)) };
   return ANALYSIS.normalizeResult(out);
 }
 
@@ -116,22 +124,39 @@ async function videoToScout(path, cal, opts) {
   opts = opts || {};
   const w = opts.w || WORK_W, h = opts.h || WORK_H, fps = opts.fps || 6, chunkSec = opts.chunkSec || 20;
   const H = homographyOf(cal);
-  if (!H) { const e = new Error('bad-calibration'); e.code = 'bad-calibration'; throw e; }
+  if (!H && !isAuto(cal)) { const e = new Error('bad-calibration'); e.code = 'bad-calibration'; throw e; }
   const durSec = await probeDuration(path, opts.ffmpeg);
   const total = Math.max(0.5, (opts.winSec ? Math.min(opts.winSec, durSec - (opts.start || 0)) : durSec - (opts.start || 0)));
   const detector = opts.detector || makeDetector({ modelEndpoint: opts.modelEndpoint, step: opts.step, minArea: opts.minArea });
   const series = []; const start = opts.start || 0;
+  const auto = isAuto(cal); const samples = []; const every = Math.max(1, Math.round(fps * (opts.fieldEverySec || 1)));   // detect the field about once a second
+  let unread = 0;
   for (let t0 = 0; t0 < total; t0 += chunkSec) {
     const frames = await decodeChunk(path, start + t0, Math.min(chunkSec, total - t0), w, h, fps, opts.ffmpeg);
     if (!frames.length) continue;
     const perFrame = []; for (const f of frames) perFrame.push(await detector.detect(f, w, h));
     const snaps = BYTETRACK.series(perFrame, { minHits: 2, maxAge: 4, gate: Math.max(w, h) / 8 });
-    snaps.forEach((snap, i) => series.push({ t: +(start + t0 + i / fps).toFixed(2), boardFrame: VISION.toBoardFrame(snap, H).frame }));
+    let track = null;
+    if (auto) {
+      frames.forEach((f, i) => { if (i % every === 0) samples.push({ t: +(start + t0 + i / fps).toFixed(2), det: FIELD.detect(f, w, h, { step: 2 }) }); });
+      track = FIELD.timeline(samples, { minConf: cal.minConf || 0.4 });   // the whole track so far → hold/decay carries across chunks
+    }
+    snaps.forEach((snap, i) => {
+      const t = +(start + t0 + i / fps).toFixed(2);
+      let Hi = H;
+      if (track) { const sm = FIELD.at(track, t); Hi = (sm && sm.H) || H; }
+      if (!Hi) { unread++; return; }
+      series.push({ t, boardFrame: VISION.toBoardFrame(snap, Hi).frame });
+    });
     if (typeof opts.onProgress === 'function') opts.onProgress(Math.min(1, (t0 + chunkSec) / total));
   }
+  if (!series.length) { const e = new Error('field-not-found'); e.code = 'field-not-found'; throw e; }
   const events = EVENTS.detect(series, {});
   const scout = scoutSeries(series, events, opts);
-  return ANALYSIS.normalizeResult({ engine: 'server', version: ANALYSIS.VERSION, tracks: [], frames: series.filter((_, i) => i % Math.max(1, Math.round(fps)) === 0), events, scout, meta: { seconds: total, fps, chunks: Math.ceil(total / chunkSec) } });
+  const meta = { seconds: total, fps, chunks: Math.ceil(total / chunkSec) };
+  if (auto) { const tr = FIELD.timeline(samples, { minConf: cal.minConf || 0.4 }); meta.field = Object.assign({ mode: 'auto', unreadSeconds: +(unread / fps).toFixed(1) }, FIELD.stats(tr), { corners: (tr.find(x => x.corners) || {}).corners || null }); }
+  else meta.field = { mode: 'fixed' };
+  return ANALYSIS.normalizeResult({ engine: 'server', version: ANALYSIS.VERSION, tracks: [], frames: series.filter((_, i) => i % Math.max(1, Math.round(fps)) === 0), events, scout, meta });
 }
 function probeDuration(path, ffmpegBin) {
   return new Promise((resolve) => {

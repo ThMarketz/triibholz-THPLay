@@ -105,3 +105,22 @@ situation. `TACTICS.scout()` now returns `teams` (per team × situation: possess
 goals, patterns with an example, ball heat, tactics %, formation, defence met) and `narrative`
 (plain sentences). The Film Room shows this first; the older summary / plan / attacks sit under
 "Go further".
+
+## v1.27 — the program finds the field (moving camera)
+
+`js/field.js` (pure, browser + server): water mask (HSV blue) → trimmed least‑squares lines on
+the mask's left / right / top / bottom boundaries → corner intersections → homography, scored
+0..1 (straightness, size, support). `FIELD.timeline()` turns per‑second detections into a
+camera track: small moves are smoothed, cuts jump, weak seconds hold the last good field with
+decaying confidence, and below 0.4 the frames are **unread** (counted in the report).
+
+- Film Room: **🎯 Find the field** (one click; corners drawn, draggable to nudge) replaces
+  clicking four corners; *Click corners* stays as the manual path. **📷 moving camera** (default
+  on) makes the scouting job re‑detect the field about once a second; the report says how much
+  of the video was readable.
+- Backend: `calibration: { mode: 'auto', H?: fallback, minConf }` for `/api/jobs` and frames‑mode
+  `/api/analyse`; `result.meta.field = { mode, readPct, avgConfidence, held, unreadSeconds }`.
+- Honest limits: needs pool edges visible (tribune / end‑line phones, broadcast wide shots);
+  tight close‑ups are unread for those seconds; lane‑line anchors (red 2 m / yellow 5 m) are a
+  seam (`refineWithLines`) not yet used. A Veo / Pixellot **panoramic export** is still the
+  cleanest input: fixed camera, one detection.

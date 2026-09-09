@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -735,6 +735,24 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('select mode has 🖨 PDF booklet', !!q('#sb-print'));
   }
 
+  console.log('\n[6v] Auto field — the program finds the pool (moving camera)');
+  {
+    const { FIELD } = window.__T; const W=320,H=180;
+    const frame=(quad,noise)=>{ const d=new Uint8ClampedArray(W*H*4); for(let y=0;y<H;y++)for(let x=0;x<W;x++){ const i=(y*W+x)*4; d[i]=120;d[i+1]=118;d[i+2]=110;d[i+3]=255; }
+      for(let y=0;y<H;y++){ const xs=[]; for(let k=0;k<4;k++){ const a=quad[k],b=quad[(k+1)%4]; if(y>=Math.min(a.y,b.y)&&y<Math.max(a.y,b.y)) xs.push(a.x+(y-a.y)*(b.x-a.x)/(b.y-a.y)); } if(xs.length>=2){ xs.sort((p,q)=>p-q); for(let x=Math.max(0,Math.ceil(xs[0]));x<Math.min(W,xs[xs.length-1]);x++){ const i=(y*W+x)*4; d[i]=30+(noise?(x*7)%20:0);d[i+1]=90+(noise?(y*5)%30:0);d[i+2]=140+(noise?(x+y)%40:0); } } }
+      if(noise) for(let k=0;k<40;k++){ const x=(k*53)%W, y=(k*29)%H; for(let dy=0;dy<4;dy++)for(let dx=0;dx<4;dx++){ const i=((y+dy)*W+(x+dx))*4; if(i<d.length){ d[i]=240;d[i+1]=240;d[i+2]=240; } } }
+      return d; };
+    const trap=[{x:40,y:30},{x:290,y:26},{x:310,y:165},{x:20,y:170}];
+    const det = FIELD.detect(frame(trap,true), W, H, {});
+    const err = det.found ? Math.max(...det.corners.map((c,i)=>Math.hypot(c.x-trap[i].x,c.y-trap[i].y))) : 999;
+    ok('finds a noisy trapezoid pool: corners within 4 px, confidence ≥ 0.8', det.found && err<4 && det.confidence>=0.8 && Array.isArray(det.H) && det.H.length===9);
+    const none = FIELD.detect(new Uint8ClampedArray(W*H*4).fill(90), W, H, {});
+    ok('no water → not found with a reason (never guesses)', !none.found && /water/.test(none.why));
+    const tl = FIELD.timeline([{t:0,det},{t:1,det},{t:2,det:none},{t:3,det:none},{t:4,det:none},{t:5,det:none},{t:6,det:none},{t:7,det:none},{t:8,det}],{});
+    ok('moving camera: weak seconds hold the last field with decaying confidence, then go unread', tl[2].held && tl[2].H && tl[2].confidence<det.confidence && tl[7].H===null && tl[8].H && !tl[8].held);
+    ok('track stats + lookup by time', FIELD.stats(tl).readPct===Math.round(100*8/9) && FIELD.at(tl, 3.5).t===3);
+  }
+
   console.log('\n[7] Basics + i18n');
   q('.nav-btn[data-view="basics"]').click(); await wait(25);
   ok('10 basics cards incl. responsibilities', qa('#view-basics .basics-card').length===10);
@@ -785,6 +803,14 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
   ok('phase defense', q('#ed-phase').value==='defense');
   ok('single staged keyframe', qa('#frame-chips .frame-chip').length===1);
   q('#ed-cancel').click(); await wait(20);
+
+  console.log('\n[8b] Auto field — Film Room controls on an uploaded video');
+    // Film Room: the button exists and fails gracefully without a drawable frame (jsdom has no canvas)
+    q('.nav-btn[data-view="film"]').click(); await wait(40);
+    { const up = q('#film-upload'); Object.defineProperty(up, 'files', { value:[new window.File([new Uint8Array(64)], 'field-clip.mp4', { type:'video/mp4' })], configurable:true }); up.dispatchEvent(new window.Event('change')); await wait(150); }
+    const af = q('#film-autofield');
+    ok('🎯 Find the field + 📷 moving camera controls present on an uploaded video', !!af && !!q('#film-moving') && q('#film-moving').checked && !!q('#field-status'));
+    if (af) { af.click(); await wait(20); ok('no drawable frame → clear message, nothing set', /Could not read a frame|Re-attach/.test(q('#film-track-out').textContent + q('#toast').textContent) && q('#field-status').textContent.includes('not set')); }
 
   console.log('\n[9] Approval gate + player experience + demo');
   q('#logout-btn').click(); await wait(20);

@@ -194,6 +194,10 @@ ok('🔎 Auto-analyse control present for uploaded video', await page.locator('#
 // Tier 1 position tracking — calibrate the pool by clicking 4 corners
 ok('📍 Position-tracking controls present', await page.locator('#film-calibrate').count()===1 && await page.locator('#film-scanpos').count()===1);
 ok('Track button starts disabled (needs calibration)', await page.locator('#film-scanpos').isDisabled());
+// 🎯 the program finds the field by itself (real canvas frame of the uploaded clip)
+ok('🎯 Find the field + moving-camera controls present', await page.locator('#film-autofield').count()===1 && await page.locator('#film-moving').isChecked());
+await page.click('#film-autofield'); await page.waitForTimeout(400);
+ok('auto field: found or a clear reason (no crash)', /Field found|Field not found|Could not read/.test(await page.locator('#film-track-out').innerText()));
 await page.click('#film-calibrate'); await page.waitForTimeout(200);
 ok('calibration canvas appears', await page.locator('#cal-canvas').count()===1);
 const cal = await page.locator('#cal-canvas').boundingBox();
@@ -259,9 +263,11 @@ await page.click('.film-item:has-text("clip")'); await page.waitForTimeout(500);
 await page.locator('#film-scout').scrollIntoViewIfNeeded().catch(()=>{});
 ok('auto-scout panel with run button + side select', await page.locator('#scout-run').count()===1 && await page.locator('#scout-us option').count()===2);
 await page.selectOption('#scout-us','dark');
-await page.click('#scout-run'); await page.waitForTimeout(400);
-const scoutTxt = ((await page.locator('#toast').textContent().catch(()=>''))||'') + ' ' + ((await page.locator('#scout-out').textContent().catch(()=>''))||'');
-ok('scouting without calibration/backend explains itself (no crash)', /Calibrate the pool first|didn’t respond|failed/i.test(scoutTxt));
+await page.click('#scout-run');
+// moving-camera mode needs no corners, so this really talks to the backend: a 16-byte fake clip must end in a clear failure, never a hang
+await page.waitForFunction(() => /failed|done|Find the field/i.test((document.querySelector('#scout-status')||{}).textContent + (document.querySelector('#toast')||{}).textContent), { timeout: 60000 }).catch(()=>{});
+const scoutTxt = ((await page.locator('#toast').textContent().catch(()=>''))||'') + ' ' + ((await page.locator('#scout-out').textContent().catch(()=>''))||'') + ' ' + ((await page.locator('#scout-status').textContent().catch(()=>''))||'');
+ok('scouting a non-video / no backend explains itself (no crash, no hang)', /Find the field|didn’t respond|failed|No possessions/i.test(scoutTxt));
 await page.screenshot({ path:OUT+'/qa_25_autoscout.png' });
 // 🎯 Game plan chips + 📣 Team debriefs panel
 ok('game plan: 18 instruction chips on the match', await page.locator('#film-plan .plan-chip').count()===18);
