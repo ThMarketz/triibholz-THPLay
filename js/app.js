@@ -773,6 +773,7 @@
   let wasPlaying = false;
   function onPlayState(playing) {
     $('play-btn').textContent = playing ? '❚❚' : '▶';
+    const fp = $('fsb-play'); if (fp) fp.textContent = playing ? '❚❚' : '▶';
     $('play-btn').classList.toggle('playing', playing);
     const was = wasPlaying; wasPlaying = playing;
     // only a real playing→paused transition re-opens the drag surface
@@ -838,6 +839,7 @@
     $('scrub').value = Math.round(t*1000);
     const total = (segCount!=null?segCount:(state.viewer?state.viewer.segCount():0)) + 1;
     $('frame-label').textContent = `Step ${Math.min(total, step+1)} / ${total}`;
+    const fl = $('fsb-label'); if (fl) fl.textContent = `Step ${Math.min(total, step+1)} / ${total}`;
     updateMyCue(step, total);
   }
   /* ---- "what do I do now?" — one line for the focused player, per step ---- */
@@ -884,13 +886,22 @@
   function savedSpeed() { try { return +(localStorage.getItem('thplay.speed') || 1) || 1; } catch (e) { return 1; } }
   function applySpeed(v) {
     v = +v || 1; try { localStorage.setItem('thplay.speed', String(v)); } catch (e) {}
-    document.querySelectorAll('#speed-seg [data-speed]').forEach(b => b.classList.toggle('active', +b.dataset.speed === v));
+    document.querySelectorAll('#speed-seg [data-speed], #fsb-speed [data-speed]').forEach(b => b.classList.toggle('active', +b.dataset.speed === v));
     if (state.viewer && state.viewer.setSpeed) state.viewer.setSpeed(v);
   }
+  /* floating controls on the full-screen board: appear on hover / tap, fade after 2.5 s */
+  let fsHideTimer = null;
+  function fsBarShow() {
+    const bar = $('fs-bar'); if (!bar || !$('view-playbook').classList.contains('stage-full')) return;
+    bar.hidden = false; bar.classList.add('show');
+    clearTimeout(fsHideTimer); fsHideTimer = setTimeout(() => { if (!bar.matches(':hover')) bar.classList.remove('show'); }, 2500);
+  }
+  function fsBarHide() { const bar = $('fs-bar'); if (!bar) return; clearTimeout(fsHideTimer); bar.classList.remove('show'); bar.hidden = true; }
   function toggleFull(force) {
     const lay = $('view-playbook'); if (!lay) return;
     const on = force == null ? !lay.classList.contains('stage-full') : !!force;
     lay.classList.toggle('stage-full', on);
+    if (on) fsBarShow(); else fsBarHide();
     const b = $('fs-btn'); if (b) { b.classList.toggle('active', on); b.title = on ? 'Leave full screen (Esc)' : 'Full-screen board (Esc to leave)'; }
     try { if (on && document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); else if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {}
   }
@@ -1319,6 +1330,7 @@
     // keep the normal transport in sync
     const total = adjust.scn.frames.length;
     $('frame-label').textContent = `Step ${adjust.idx+1} / ${total}`;
+    { const fl = $('fsb-label'); if (fl) fl.textContent = `Step ${adjust.idx+1} / ${total}`; }
     $('scrub').value = Math.round(stepT() * 1000);
     updateUndoBtn();
   }
@@ -2191,7 +2203,26 @@
     applySpeed(savedSpeed());
     $('fs-btn').onclick = () => toggleFull();
     document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) toggleFull(false); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('view-playbook').classList.contains('stage-full')) toggleFull(false); });
+    // full-screen bar: hover / tap shows it, buttons delegate to the main controls
+    const pw = document.querySelector('#view-playbook .pool-wrap');
+    if (pw) { ['mousemove', 'touchstart', 'pointerdown'].forEach(ev => pw.addEventListener(ev, fsBarShow, { passive: true })); }
+    $('fsb-play').onclick = () => $('play-btn').click();
+    $('fsb-fwd').onclick = () => $('step-fwd').click();
+    $('fsb-back').onclick = () => $('step-back').click();
+    $('fsb-restart').onclick = () => { if (state.viewer) { state.viewer.seek(0); } };
+    $('fsb-exit').onclick = () => toggleFull(false);
+    document.querySelectorAll('#fsb-speed [data-speed]').forEach(b => b.onclick = () => applySpeed(b.dataset.speed));
+    document.addEventListener('keydown', e => {
+      const full = $('view-playbook').classList.contains('stage-full');
+      if (e.key === 'Escape' && full) { toggleFull(false); return; }
+      if (!full || /input|textarea|select/i.test((e.target && e.target.tagName) || '')) return;
+      if (e.key === ' ' || e.key === 'k') { e.preventDefault(); $('play-btn').click(); fsBarShow(); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); $('step-fwd').click(); fsBarShow(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); $('step-back').click(); fsBarShow(); }
+      else if (e.key === 'r' || e.key === 'Home') { if (state.viewer) state.viewer.seek(0); fsBarShow(); }
+      else if (e.key === '-' || e.key === '_') { applySpeed(Math.max(0.25, savedSpeed() - 0.25)); fsBarShow(); }
+      else if (e.key === '+' || e.key === '=') { applySpeed(Math.min(1.5, savedSpeed() + 0.25)); fsBarShow(); }
+    });
     wireShare();
     $('view-me').onclick = ()=>{ state.viewMode='me'; state.focus=defaultFocus()||(state.user.position||'1'); afterFocusChange(); };
     $('focus-pos').onchange = (e)=>{ state.focus=e.target.value||null; state.viewMode=state.focus?'me':'team'; afterFocusChange(); };
