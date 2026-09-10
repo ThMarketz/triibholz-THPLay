@@ -42,31 +42,40 @@ const MANIKIN = (() => {
 
   /* ---------------- the mannequin: a plain capped figure, no gender ---------------- */
   // local body-space joints in metres; origin = water surface at the player's centre; +Y up, +Z = facing direction
+  // No legs: everyone floats at the surface, and only the head, shoulders and arms
+  // ever show above the water — this is what water polo actually looks like from the
+  // stands, and it's honest about what a flat set of tactical positions can support.
+  // The head carries a proper water polo cap: a crown, two ear guards (the protective
+  // cups every real cap has), and a chin strap — generic, not a copy of any specific
+  // commercial 3D asset.
   const NEUTRAL = {
-    head: [0, 0.55, 0], neck: [0, 0.35, 0], lShoulder: [-0.22, 0.32, 0], rShoulder: [0.22, 0.32, 0],
-    lElbow: [-0.30, 0.05, 0.05], rElbow: [0.30, 0.05, 0.05], lHand: [-0.30, -0.15, 0.15], rHand: [0.30, -0.15, 0.15],
-    hip: [0, -0.05, 0], lKnee: [-0.12, -0.45, 0], rKnee: [0.12, -0.45, 0], lFoot: [-0.12, -0.85, 0.05], rFoot: [0.12, -0.85, 0.05],
+    head: [0, 0.30, 0], lEar: [-0.15, 0.22, 0.01], rEar: [0.15, 0.22, 0.01], chin: [0, 0.14, 0.10],
+    neck: [0, 0.10, 0], lShoulder: [-0.22, 0.07, 0], rShoulder: [0.22, 0.07, 0],
+    lElbow: [-0.30, -0.20, 0.05], rElbow: [0.30, -0.20, 0.05], lHand: [-0.30, -0.40, 0.15], rHand: [0.30, -0.40, 0.15],
+    hip: [0, -0.30, 0],
   };
   const pose = (over) => Object.assign({}, NEUTRAL, over);
   const POSES = {
     // outside the green zone: wide guarding stance, shadowing the lane to their own goal
-    defGuard: pose({ lHand: [-0.55, 0.05, 0.10], rHand: [0.55, 0.05, 0.10], lElbow: [-0.38, 0.12, 0.08], rElbow: [0.38, 0.12, 0.08], hip: [0, -0.10, 0.05], head: [0, 0.50, 0.05] }),
+    defGuard: pose({ lHand: [-0.55, -0.20, 0.10], rHand: [0.55, -0.20, 0.10], lElbow: [-0.38, -0.13, 0.08], rElbow: [0.38, -0.13, 0.08], hip: [0, -0.35, 0.05], head: [0, 0.25, 0.05] }),
     // in the green zone: one hand straight up to block
-    defBlock: pose({ rHand: [0.15, 0.85, -0.05], rElbow: [0.20, 0.55, -0.02], lHand: [-0.35, -0.05, 0.20], lElbow: [-0.32, 0.10, 0.10] }),
+    defBlock: pose({ rHand: [0.15, 0.65, -0.05], rElbow: [0.20, 0.35, -0.02], lHand: [-0.35, -0.30, 0.20], lElbow: [-0.32, -0.15, 0.10] }),
     // the ball is always visibly in hand
-    attHold: pose({ rHand: [0.20, 0.75, 0.10], rElbow: [0.25, 0.45, 0.08], lHand: [-0.30, -0.10, 0.15] }),
+    attHold: pose({ rHand: [0.20, 0.55, 0.10], rElbow: [0.25, 0.25, 0.08], lHand: [-0.30, -0.35, 0.15] }),
     // facing goal, arms out, ready to receive
-    attReady: pose({ lHand: [-0.42, 0.30, 0.25], rHand: [0.42, 0.30, 0.25], lElbow: [-0.34, 0.28, 0.15], rElbow: [0.34, 0.28, 0.15] }),
+    attReady: pose({ lHand: [-0.42, 0.10, 0.25], rHand: [0.42, 0.10, 0.25], lElbow: [-0.34, 0.08, 0.15], rElbow: [0.34, 0.08, 0.15] }),
     // movement is swimming — a forward stroke, oriented along the travel direction
-    swim: pose({ rHand: [0.15, 0.15, 0.65], rElbow: [0.18, 0.20, 0.35], lHand: [-0.45, -0.15, -0.35], lElbow: [-0.35, 0.0, -0.15],
-      head: [0.05, 0.40, 0.30], hip: [0, -0.05, 0.10], lFoot: [-0.12, -0.85, -0.15], rFoot: [0.12, -0.85, -0.15] }),
-    gk: pose({ lHand: [-0.60, 0.30, 0.05], rHand: [0.60, 0.30, 0.05], lElbow: [-0.42, 0.30, 0.03], rElbow: [0.42, 0.30, 0.03], lFoot: [-0.30, -0.85, 0.05], rFoot: [0.30, -0.85, 0.05] }),
+    swim: pose({ rHand: [0.15, -0.10, 0.65], rElbow: [0.18, -0.05, 0.35], lHand: [-0.45, -0.40, -0.35], lElbow: [-0.35, -0.25, -0.15], head: [0.05, 0.15, 0.30] }),
+    gk: pose({ lHand: [-0.60, 0.05, 0.05], rHand: [0.60, 0.05, 0.05], lElbow: [-0.42, 0.05, 0.03], rElbow: [0.42, 0.05, 0.03] }),
   };
   const BONES = [
-    ['head', 'neck'], ['neck', 'lShoulder'], ['neck', 'rShoulder'],
+    ['neck', 'lShoulder'], ['neck', 'rShoulder'],
     ['lShoulder', 'lElbow'], ['lElbow', 'lHand'], ['rShoulder', 'rElbow'], ['rElbow', 'rHand'],
-    ['neck', 'hip'], ['hip', 'lKnee'], ['lKnee', 'lFoot'], ['hip', 'rKnee'], ['rKnee', 'rFoot'],
   ];
+  // drawn as a filled torso panel (shoulders → hip), not a bone line
+  const TORSO = ['lShoulder', 'rShoulder', 'hip'];
+  // the cap: crown + two ear guards + a chin strap, all in the team colour
+  const CAP_PARTS = { crown: 'head', lEar: 'lEar', rEar: 'rEar', chin: 'chin' };
   const CAP = { A: { fill: '#f5f8fa', stroke: '#0b1f2c' }, D: { fill: '#11151c', stroke: '#000' }, GK: { fill: '#e23b3b', stroke: '#7a0f0f' } };
 
   /* rotate a pose's local joints by facingYaw (around the vertical axis) and place it at a world origin */
@@ -157,7 +166,7 @@ const MANIKIN = (() => {
     return Object.assign({}, cam, {
       yaw: (cam.yaw + dyaw) % TAU,
       pitch: clampN(cam.pitch + dpitch, 0.08, 1.45),
-      dist: clampN(cam.dist + ddist, 1.5, 32),
+      dist: clampN(cam.dist + ddist, 2.6, 32),
     });
   }
   function eyeOf(cam) {
@@ -178,7 +187,7 @@ const MANIKIN = (() => {
     return { x: viewport.w / 2 + (vx / vz) * scale, y: viewport.h / 2 - (vy / vz) * scale, depth: vz, scale: scale / vz };
   }
 
-  return { geo, toWorld, POSES, BONES, CAP, jointsWorld, poseFor, sceneAt, worldPool, goalPosts, zoneFloorQuads, makeCamera, orbit, eyeOf, project };
+  return { geo, toWorld, POSES, BONES, TORSO, CAP_PARTS, CAP, jointsWorld, poseFor, sceneAt, worldPool, goalPosts, zoneFloorQuads, makeCamera, orbit, eyeOf, project };
 })();
 
 // Node/CommonJS interop (no-op in the browser)

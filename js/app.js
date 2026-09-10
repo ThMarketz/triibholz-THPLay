@@ -861,33 +861,62 @@
     const cv = $('scene3d'); if (!cv || cv.hidden) return;
     const ctx = cv.getContext('2d'); if (!ctx) return;
     ctx.clearRect(0, 0, cv.width, cv.height);
-    ctx.fillStyle = '#08151f'; ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = '#050e17'; ctx.fillRect(0, 0, cv.width, cv.height);   // above the water — deck / air
     const pool = MANIKIN.worldPool();
-    // floor grid
-    ctx.strokeStyle = 'rgba(63,208,224,.22)'; ctx.lineWidth = Math.max(1, cv.height / 500);
+    const corners = [{ x: -pool.halfLen, y: 0, z: -pool.halfWid }, { x: pool.halfLen, y: 0, z: -pool.halfWid }, { x: pool.halfLen, y: 0, z: pool.halfWid }, { x: -pool.halfLen, y: 0, z: pool.halfWid }].map(proj3);
+    // the water itself — a filled, gently gradient surface, not a dry floor
+    if (!corners.some(p => !p)) {
+      const g = ctx.createLinearGradient(0, Math.min(...corners.map(p => p.y)), 0, Math.max(...corners.map(p => p.y)));
+      g.addColorStop(0, 'rgba(24,110,140,.85)'); g.addColorStop(1, 'rgba(10,50,68,.92)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(corners[0].x, corners[0].y); corners.slice(1).forEach(p => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.fill();
+    }
+    // lane markings on the water surface (not a court grid)
+    ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = Math.max(1, cv.height / 480);
     for (let x = -Math.floor(pool.halfLen); x <= pool.halfLen; x += 5) { const a = proj3({ x, y: 0, z: -pool.halfWid }), b = proj3({ x, y: 0, z: pool.halfWid }); if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); } }
-    for (let z = -Math.floor(pool.halfWid); z <= pool.halfWid; z += 5) { const a = proj3({ x: -pool.halfLen, y: 0, z }), b = proj3({ x: pool.halfLen, y: 0, z }); if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); } }
     // the same shot-chance zones as the 2D board, only when Zones is on
     if (zonesShown()) MANIKIN.zoneFloorQuads().forEach(q => {
       const c = [{ x: q.x0, y: 0, z: q.z0 }, { x: q.x1, y: 0, z: q.z0 }, { x: q.x1, y: 0, z: q.z1 }, { x: q.x0, y: 0, z: q.z1 }].map(proj3);
       if (c.some(p => !p)) return;
-      ctx.fillStyle = q.color + '33'; ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y); c.slice(1).forEach(p => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = q.color + '40'; ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y); c.slice(1).forEach(p => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.fill();
     });
     // goals (both ends, for context and depth)
     ctx.strokeStyle = '#e6f6fb'; ctx.lineWidth = Math.max(1.4, cv.height / 260);
     MANIKIN.goalPosts().forEach(g => g.segs.forEach(seg => { const a = proj3(seg[0]), b = proj3(seg[1]); if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); } }));
-    // mannequins, farthest first (painter's algorithm)
-    const withDepth = scene.mannequins.map(m => ({ m, d: (proj3({ x: m.pos.x, y: 0.3, z: m.pos.z }) || { depth: 1e9 }).depth })).sort((a, b) => b.d - a.d);
+    // a small ripple under each player — everyone is at the surface, nothing stands on a floor
+    scene.mannequins.forEach(m => { const rp = proj3({ x: m.pos.x, y: 0, z: m.pos.z }); if (!rp) return;
+      ctx.strokeStyle = 'rgba(230,250,255,.35)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(rp.x, rp.y, rp.scale * 0.22, rp.scale * 0.22 * 0.35, 0, 0, TAU_LOCAL); ctx.stroke();
+    });
+    // mannequins — upper body only, farthest first (painter's algorithm)
+    const withDepth = scene.mannequins.map(m => ({ m, d: (proj3({ x: m.pos.x, y: 0, z: m.pos.z }) || { depth: 1e9 }).depth })).sort((a, b) => b.d - a.d);
     withDepth.forEach(({ m }) => {
       const cap = MANIKIN.CAP[m.team] || MANIKIN.CAP.A;
       const pts = {}; let any = false;
       Object.keys(m.joints).forEach(k => { const pr = proj3(m.joints[k]); pts[k] = pr; if (pr) any = true; });
       if (!any) return;
-      const px = pts.hip ? pts.hip.scale : 50;   // pixels per metre at this mannequin's depth
-      ctx.strokeStyle = cap.stroke; ctx.lineWidth = Math.max(1.2, px * 0.035);
+      const px = pts.neck ? pts.neck.scale : 50;   // pixels per metre at this mannequin's depth
+      const skin = '#2f5768', skinLine = '#173340';
+      // torso: a filled panel from shoulder to shoulder to hip, not a bone line — a body, not a stick figure
+      if (pts.lShoulder && pts.rShoulder && pts.hip) {
+        // shoulders wide, waist narrower — a real taper, not a flare
+        const hipHalfW = Math.abs(pts.rShoulder.x - pts.lShoulder.x) * 0.5 * 0.55;
+        const rHipPt = { x: pts.hip.x + hipHalfW, y: pts.hip.y }, lHipPt = { x: pts.hip.x - hipHalfW, y: pts.hip.y };
+        ctx.fillStyle = skin; ctx.strokeStyle = skinLine; ctx.lineWidth = Math.max(1, px * 0.02);
+        ctx.beginPath(); ctx.moveTo(pts.lShoulder.x, pts.lShoulder.y); ctx.lineTo(pts.rShoulder.x, pts.rShoulder.y);
+        ctx.lineTo(rHipPt.x, rHipPt.y); ctx.lineTo(lHipPt.x, lHipPt.y);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+      // arms: rounded, body-toned capsules — no legs, ever
+      ctx.strokeStyle = skin; ctx.lineWidth = Math.max(2.2, px * 0.075); ctx.lineCap = 'round';
       MANIKIN.BONES.forEach(([a, b]) => { if (pts[a] && pts[b]) { ctx.beginPath(); ctx.moveTo(pts[a].x, pts[a].y); ctx.lineTo(pts[b].x, pts[b].y); ctx.stroke(); } });
-      if (pts.head) { const r = Math.max(2.5, pts.head.scale * 0.16); ctx.fillStyle = cap.fill; ctx.beginPath(); ctx.arc(pts.head.x, pts.head.y, r, 0, TAU_LOCAL); ctx.fill(); ctx.strokeStyle = cap.stroke; ctx.lineWidth = 1; ctx.stroke(); }
-      if (pts.head && m.key !== 'GK') { ctx.fillStyle = cap.stroke === '#000' ? '#fff' : '#0b1f2c'; const fs = Math.max(7, pts.head.scale * 0.20); ctx.font = fs + 'px Helvetica, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(m.key.replace(/^[AD]/, ''), pts.head.x, pts.head.y + fs * 0.32); }
+      // the cap: crown + two ear guards + a chin strap, all in the team colour
+      if (pts.head) {
+        const r = Math.max(2.5, pts.head.scale * 0.15);
+        if (pts.chin) { ctx.strokeStyle = cap.stroke; ctx.lineWidth = Math.max(1, r * 0.14); ctx.beginPath(); ctx.moveTo(pts.head.x - r * 0.6, pts.head.y + r * 0.5); ctx.lineTo(pts.chin.x, pts.chin.y); ctx.lineTo(pts.head.x + r * 0.6, pts.head.y + r * 0.5); ctx.stroke(); }
+        [pts.lEar, pts.rEar].forEach(ep => { if (!ep) return; ctx.fillStyle = cap.fill; ctx.beginPath(); ctx.arc(ep.x, ep.y, r * 0.42, 0, TAU_LOCAL); ctx.fill(); ctx.strokeStyle = cap.stroke; ctx.lineWidth = 1; ctx.stroke(); });
+        ctx.fillStyle = cap.fill; ctx.beginPath(); ctx.arc(pts.head.x, pts.head.y, r, 0, TAU_LOCAL); ctx.fill(); ctx.strokeStyle = cap.stroke; ctx.lineWidth = 1; ctx.stroke();
+        if (m.key !== 'GK') { ctx.fillStyle = cap.stroke === '#000' ? '#fff' : '#0b1f2c'; const fs = Math.max(7, pts.head.scale * 0.19); ctx.font = '700 ' + fs + 'px Helvetica, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(m.key.replace(/^[AD]/, ''), pts.head.x, pts.head.y + fs * 0.32); }
+      }
     });
     // the ball
     if (scene.ball) { const bp = proj3(scene.ball); if (bp) { ctx.fillStyle = '#ff7a18'; ctx.beginPath(); ctx.arc(bp.x, bp.y, Math.max(2, bp.scale * 0.10), 0, TAU_LOCAL); ctx.fill(); } }

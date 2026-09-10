@@ -978,11 +978,14 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     const far = MANIKIN.project(MANIKIN.makeCamera({dist:14}), {x:1,y:0.3,z:0}, vp);
     const near = MANIKIN.project(MANIKIN.makeCamera({dist:7}), {x:1,y:0.3,z:0}, vp);
     ok('zooming in (shorter distance) makes an off-centre point read farther from screen centre', Math.abs(near.x-320) > Math.abs(far.x-320));
-    ok('orbit clamps pitch and zoom to sane bounds', MANIKIN.orbit(cam,0,10,0).pitch<=1.45+1e-9 && MANIKIN.orbit(cam,0,0,-999).dist>=1.5);
+    ok('orbit clamps pitch and zoom to sane bounds', MANIKIN.orbit(cam,0,10,0).pitch<=1.45+1e-9 && MANIKIN.orbit(cam,0,0,-999).dist>=2.6);
     ok('a point behind the camera does not project', MANIKIN.project(cam, { x: cam.target.x*2 - MANIKIN.eyeOf(cam).x, y:0, z: cam.target.z*2 - MANIKIN.eyeOf(cam).z }, vp)===null || true);
     // zones + goals for the floor
     ok('zone floor quads mirror the 2D Zones bands (green + yellow)', MANIKIN.zoneFloorQuads().map(q=>q.color).sort().join()==='#2ecc71,#ffd166');
     ok('both goals are modelled (3 segments each: two posts + crossbar)', MANIKIN.goalPosts().length===2 && MANIKIN.goalPosts().every(g=>g.segs.length===3));
+    ok('no legs — mannequins are upper body only (head/neck/shoulders/elbows/hands/hip)', MANIKIN.BONES.flat().every(k=>!/Knee|Foot/.test(k)) && Object.keys(MANIKIN.POSES.attReady).every(k=>!/Knee|Foot/.test(k)));
+    ok('the head carries a cap: ear guards + a chin strap', 'lEar' in MANIKIN.POSES.attReady && 'rEar' in MANIKIN.POSES.attReady && 'chin' in MANIKIN.POSES.attReady);
+    ok('the torso is a filled panel (shoulders + hip), not a bone', MANIKIN.TORSO.join()==='lShoulder,rShoulder,hip');
 
     // UI: toggle, canvas, camera-target select, orbit drag, double-click reset
     q('.nav-btn[data-view="playbook"]').click(); await wait(30);
