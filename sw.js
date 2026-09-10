@@ -1,9 +1,9 @@
 /* Triibholz (THPLAY) service worker — offline app shell + fresh rule books. */
-const CACHE = 'triibholz-v43';
+const CACHE = 'triibholz-v44';
 const ASSETS = [
   './', './index.html',
   './css/styles.css',
-  './js/i18n.js', './js/help.js', './js/draft.js', './js/commands.js', './js/solver.js', './js/qr.js', './js/fx.js', './js/pool.js', './js/data.js', './js/animate.js', './js/vision.js', './js/field.js', './js/shot.js', './js/track.js', './js/bytetrack.js', './js/events.js', './js/webdetector.js', './js/videogen.js', './js/calendar.js', './js/planner.js', './js/privacy.js', './js/tactics.js',
+  './js/i18n.js', './js/help.js', './js/draft.js', './js/commands.js', './js/solver.js', './js/qr.js', './js/fx.js', './js/pool.js', './js/data.js', './js/animate.js', './js/vision.js', './js/field.js', './js/shot.js', './js/manikin.js', './js/track.js', './js/bytetrack.js', './js/events.js', './js/webdetector.js', './js/videogen.js', './js/calendar.js', './js/planner.js', './js/privacy.js', './js/tactics.js',
   './js/gameplan.js', './js/share.js', './js/analysis.js', './js/film.js', './js/app.js',
   './data/rules.json',
   './manifest.webmanifest',

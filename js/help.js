@@ -98,6 +98,16 @@ const HELP = (() => {
       'Zones are drawn for the goal you attack (the right-hand goal on the board).',
     ]},
 
+    scene3d: { icon:'🎥', title:'3D replay camera', steps:[
+      '<strong>3D 🎥</strong> in the controls turns the flat board into an orbiting camera over the same play — drag to look around, scroll or pinch to zoom, double-click to reset.',
+      '<strong>Camera follows…</strong> switches what the camera tracks: the whole pool, the ball as it moves, or one named player — the camera keeps orbiting around whichever you pick as they swim.',
+      'Everyone is a plain capped figure — white, dark or the keeper’s red — no faces, no gender, just the same team colours the flat board already uses.',
+      'The poses follow the tactics, not a guess: a defender inside the green shot-chance zone raises a hand to block; outside it, they take a wider stance shadowing the passing lane. The attacker holding the ball always shows it raised in hand; the others face the goal, ready to receive. Anyone moving between spots swims.',
+    ], tips:[
+      'This is a stylized camera over the same 2D positions the flat board uses — there is no motion capture and no real swimming footage behind it, and the app says so on screen.',
+      'It’s a watch-only view. Drag players and build the play in the normal 2D board; open 3D afterwards to see it from any angle.',
+    ]},
+
     privacy: { icon:'🔒', title:'Confidential tactics &amp; anonymous learning', steps:[
       'Every play has a <strong>Who can see it</strong> setting: <strong>👥 Team</strong> (your team only, the default), <strong>🌐 Club</strong> (everyone in the club) or <strong>🔒 Private</strong> (only you — for confidential tactics). Others simply never see private plays in their library.',
       '<strong>The system still learns from private plays — anonymously.</strong> It reduces a play to a handful of pattern features (situation, number of steps, passes, shot zone, a coarse formation shape) and strips the title, description, notes, owner and club. The play itself never leaves the device.',

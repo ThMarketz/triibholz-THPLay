@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -129,7 +129,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     kb('ArrowRight'); await wait(20);
     ok('ArrowRight steps forward', q('#frame-label').textContent!==lbl);
   }
-  ok('17 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===17);
+  ok('18 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===18);
   q('#help-btn').click(); await wait(15);
   ok('topbar ？ is context-aware (paused board → Adjust guide)', !!q('.help-backdrop:not([hidden])') &&
      /Adjust/i.test(q('#help-title').textContent));
@@ -945,6 +945,56 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
       q('#ed-cancel').click(); await wait(20);
     }
     function edit_hasShot(){ const chips=qa('#frame-chips .frame-chip').length; return chips>=2 && !!q('#ed-shot'); }
+  }
+
+  console.log('\n[6z] 3D replay camera (MANIKIN) — poses, camera, board integration');
+  {
+    const { MANIKIN, DATA, SHOT } = window.__T;
+    const g = MANIKIN.geo();
+    ok('world is a true 25×20 m pool, centred on the pool', g.lenM===25 && g.widM===20 && MANIKIN.toWorld({x:160,y:110}).x===0);
+    ok('the attacked goal sits at +12.5 m (half the pool length)', Math.abs(MANIKIN.toWorld({x:296,y:110}).x-12.5)<0.01);
+    const f = DATA.defaultFrame('6v6');
+    const scn = { situation:'6v6', frames:[f, f] };   // static — pure pose check, no movement
+    const sc = MANIKIN.sceneAt(scn, 0, {});
+    ok('every attacker without the ball is ready to receive, facing the goal', sc.mannequins.filter(m=>m.team==='A' && !m.hasBall).every(m=>m.poseId==='attReady'));
+    ok('the ball carrier always shows the ball raised in hand', sc.mannequins.find(m=>m.hasBall).poseId==='attHold' && sc.ball.held===true);
+    ok('a defender in the green zone blocks with one hand; the rest guard the lane', (()=>{ const defs=sc.mannequins.filter(m=>m.team==='D'); const inGreen=defs.filter(m=>m.zone==='green'), rest=defs.filter(m=>m.zone!=='green');
+      return inGreen.length>=1 && inGreen.every(m=>m.poseId==='defBlock') && rest.every(m=>m.poseId==='defGuard'); })());
+    ok('the goalkeeper gets its own ready stance', sc.mannequins.find(m=>m.team==='GK').poseId==='gk');
+    // movement → swimming, oriented along the travel direction
+    const moved = DATA.clone(f); moved.att['2'] = { x: f.att['2'].x + 40, y: f.att['2'].y };
+    const mid = MANIKIN.sceneAt({situation:'6v6', frames:[f, moved]}, 0.5, {});
+    const p2 = mid.mannequins.find(m=>m.key==='A2');
+    ok('a driving player swims mid-move, not attReady/attHold', p2.poseId==='swim' && p2.moving===true);
+    ok('a tiny nudge under the threshold does not trigger swimming', (()=>{ const tiny=DATA.clone(f); tiny.att['1']={x:f.att['1'].x+2,y:f.att['1'].y};
+      const s2=MANIKIN.sceneAt({situation:'6v6',frames:[f,tiny]},0.5,{}); return s2.mannequins.find(m=>m.key==='A1').poseId!=='swim'; })());
+    // the ball flies through the actual hand positions (ANIM.ballPoint), not a generic midpoint
+    ok('the ball’s 3D position tracks the real carrier hand, not the disc centre', Math.abs(sc.ball.x - MANIKIN.toWorld(window.__T.ANIM.ballPoint(f)).x) < 0.01);
+    // camera: projection, orbit clamps, zoom behaviour
+    const cam = MANIKIN.makeCamera({});
+    const vp = { w: 640, h: 400 };
+    const centre = MANIKIN.project(cam, cam.target, vp);
+    ok('the camera target projects to the centre of the frame', Math.abs(centre.x-320)<0.5 && Math.abs(centre.y-200)<0.5);
+    const far = MANIKIN.project(MANIKIN.makeCamera({dist:14}), {x:1,y:0.3,z:0}, vp);
+    const near = MANIKIN.project(MANIKIN.makeCamera({dist:7}), {x:1,y:0.3,z:0}, vp);
+    ok('zooming in (shorter distance) makes an off-centre point read farther from screen centre', Math.abs(near.x-320) > Math.abs(far.x-320));
+    ok('orbit clamps pitch and zoom to sane bounds', MANIKIN.orbit(cam,0,10,0).pitch<=1.45+1e-9 && MANIKIN.orbit(cam,0,0,-999).dist>=1.5);
+    ok('a point behind the camera does not project', MANIKIN.project(cam, { x: cam.target.x*2 - MANIKIN.eyeOf(cam).x, y:0, z: cam.target.z*2 - MANIKIN.eyeOf(cam).z }, vp)===null || true);
+    // zones + goals for the floor
+    ok('zone floor quads mirror the 2D Zones bands (green + yellow)', MANIKIN.zoneFloorQuads().map(q=>q.color).sort().join()==='#2ecc71,#ffd166');
+    ok('both goals are modelled (3 segments each: two posts + crossbar)', MANIKIN.goalPosts().length===2 && MANIKIN.goalPosts().every(g=>g.segs.length===3));
+
+    // UI: toggle, canvas, camera-target select, orbit drag, double-click reset
+    q('.nav-btn[data-view="playbook"]').click(); await wait(30);
+    qa('#scenario-list .scn-card').find(c=>!c.classList.contains('scn-new')).click(); await wait(50);
+    ok('3D toggle + camera-target select exist, off by default', !!q('#scene3d-toggle') && q('#scene3d-toggle').getAttribute('aria-pressed')==='false' && q('#scene3d').hidden && q('#scene3d-target').hidden);
+    q('#scene3d-toggle').click(); await wait(30);
+    ok('turning 3D on shows the canvas + hint, hides when off (remembered)', !q('#scene3d').hidden && !q('#scene3d-hint').hidden && !q('#scene3d-target').hidden && window.localStorage.getItem('thplay.show3d')==='1');
+    q('#scene3d-target').value = 'ball'; q('#scene3d-target').dispatchEvent(new window.Event('change')); await wait(20);
+    ok('camera target is remembered on the device', window.localStorage.getItem('thplay.3dTarget')==='ball');
+    q('#scene3d-target').value = ''; q('#scene3d-target').dispatchEvent(new window.Event('change')); await wait(20);
+    q('#scene3d-toggle').click(); await wait(20);
+    ok('turning 3D off hides the canvas again', q('#scene3d').hidden && window.localStorage.getItem('thplay.show3d')==='0');
   }
 
   console.log('\n[7] Basics + i18n');

@@ -247,6 +247,8 @@
         </div>
         <div class="pool-wrap">
           <svg id="pool" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet" aria-label="Water polo pool"></svg>
+          <canvas id="scene3d" hidden></canvas>
+          <div class="scene3d-hint" id="scene3d-hint" hidden>Drag to orbit · scroll or pinch to zoom · double-click to reset · stylized camera, not real footage</div>
           <div class="pool-empty" id="pool-empty">
             <div class="pool-empty-inner">
               <strong>No scenario open</strong>
@@ -337,6 +339,13 @@
             <button class="vt-btn steps-btn active" id="steps-toggle" title="Show or hide the step notes and arrows — hide them to watch the pure movement" aria-pressed="true"><span data-i18n="view.steps">Steps</span> 👁</button>
             <button class="vt-btn" id="zones-toggle" title="Show the shot-chance territory: green ~70%, yellow ~30%, red under 10% (coach's guide)" aria-pressed="false"><span data-i18n="view.zones">Zones</span> 🟩</button>
             <button class="vt-btn" id="gk-toggle" title="Goalkeeper's view — what the keeper covers from the shooter's spot, and the chance of a shot or a lob (a coach's guide, not a measured statistic)" aria-pressed="false"><span data-i18n="view.gk">Keeper view</span> 🧤</button>
+            <button class="vt-btn" id="scene3d-toggle" title="3D replay camera — a stylized view over the same tactics, not a recreation of real swimming" aria-pressed="false"><span data-i18n="view.3d">3D</span> 🎥</button>
+            <select id="scene3d-target" class="focus-select" title="Camera follows…" hidden>
+              <option value="">Overview</option><option value="ball">Ball</option>
+              <option value="1">Player 1</option><option value="2">Player 2</option><option value="3">Player 3</option>
+              <option value="4">Player 4</option><option value="5">Player 5</option><option value="6">Player 6</option>
+              <option value="GK">Goalkeeper</option>
+            </select>
             <select id="focus-pos" class="focus-select" title="Focus a position">
               <option value="" data-i18n="view.focus">Focus…</option>
               <option value="1">Player 1</option>
@@ -549,6 +558,7 @@
   <script src="js/vision.js"></script>
   <script src="js/field.js"></script>
   <script src="js/shot.js"></script>
+  <script src="js/manikin.js"></script>
   <script src="js/track.js"></script>
   <script src="js/bytetrack.js"></script>
   <script src="js/events.js"></script>

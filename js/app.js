@@ -744,6 +744,7 @@
     if ($('shared-banner')) $('shared-banner').hidden = true;
     if ($('gk-view')) $('gk-view').hidden = true;
     if ($('my-cue')) $('my-cue').hidden = true;
+    if ($('scene3d')) { const cv = $('scene3d'); if (!cv.hidden) { const ctx = cv.getContext('2d'); if (ctx) ctx.clearRect(0, 0, cv.width, cv.height); } }
     $('assign-list').innerHTML = ''; POOL.render($('pool'));
   }
 
@@ -830,6 +831,100 @@
   /* ---- the keeper's view ---- */
   function gkShown() { try { return localStorage.getItem('thplay.showGk') === '1'; } catch (e) { return false; } }
   function toggleGk() { try { localStorage.setItem('thplay.showGk', gkShown() ? '0' : '1'); } catch (e) {} applyGk(); updateGkView(); }
+
+  /* ======================================================
+     3D REPLAY CAMERA — a stylized orbit camera over the same tactics,
+     built from js/manikin.js. Watch-only: dragging players stays 2D.
+     ====================================================== */
+  let scene3dCam = null, scene3dDrag = null, scene3dPinch = null, scene3dTarget = '';
+  function scene3dShown() { try { return localStorage.getItem('thplay.show3d') === '1'; } catch (e) { return false; } }
+  function scene3dSaveTarget(v) { try { localStorage.setItem('thplay.3dTarget', v || ''); } catch (e) {} }
+  function scene3dLoadTarget() { try { return localStorage.getItem('thplay.3dTarget') || ''; } catch (e) { return ''; } }
+  function toggle3d() { try { localStorage.setItem('thplay.show3d', scene3dShown() ? '0' : '1'); } catch (e) {} apply3d(); }
+  function apply3d() {
+    const on = scene3dShown(), b = $('scene3d-toggle'), cv = $('scene3d'), hint = $('scene3d-hint'), sel = $('scene3d-target');
+    if (b) { b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+    if (cv) cv.hidden = !on; if (hint) hint.hidden = !on; if (sel) sel.hidden = !on;
+    if (on && !scene3dCam) scene3dCam = MANIKIN.makeCamera({});
+    if (on) { resize3d(); draw3dNow(); }
+  }
+  function resize3d() {
+    const cv = $('scene3d'); if (!cv) return;
+    const wrap = cv.parentElement, r = wrap.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = Math.max(1, Math.round(r.width * dpr)); cv.height = Math.max(1, Math.round(r.height * dpr));
+    cv.style.width = r.width + 'px'; cv.style.height = r.height + 'px';
+  }
+  /* project a world point, honouring the canvas's device-pixel size */
+  function proj3(p) { const cv = $('scene3d'); return MANIKIN.project(scene3dCam, p, { w: cv.width, h: cv.height }); }
+  function draw3d(scene) {
+    const cv = $('scene3d'); if (!cv || cv.hidden) return;
+    const ctx = cv.getContext('2d'); if (!ctx) return;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = '#08151f'; ctx.fillRect(0, 0, cv.width, cv.height);
+    const pool = MANIKIN.worldPool();
+    // floor grid
+    ctx.strokeStyle = 'rgba(63,208,224,.22)'; ctx.lineWidth = Math.max(1, cv.height / 500);
+    for (let x = -Math.floor(pool.halfLen); x <= pool.halfLen; x += 5) { const a = proj3({ x, y: 0, z: -pool.halfWid }), b = proj3({ x, y: 0, z: pool.halfWid }); if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); } }
+    for (let z = -Math.floor(pool.halfWid); z <= pool.halfWid; z += 5) { const a = proj3({ x: -pool.halfLen, y: 0, z }), b = proj3({ x: pool.halfLen, y: 0, z }); if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); } }
+    // the same shot-chance zones as the 2D board, only when Zones is on
+    if (zonesShown()) MANIKIN.zoneFloorQuads().forEach(q => {
+      const c = [{ x: q.x0, y: 0, z: q.z0 }, { x: q.x1, y: 0, z: q.z0 }, { x: q.x1, y: 0, z: q.z1 }, { x: q.x0, y: 0, z: q.z1 }].map(proj3);
+      if (c.some(p => !p)) return;
+      ctx.fillStyle = q.color + '33'; ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y); c.slice(1).forEach(p => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.fill();
+    });
+    // goals (both ends, for context and depth)
+    ctx.strokeStyle = '#e6f6fb'; ctx.lineWidth = Math.max(1.4, cv.height / 260);
+    MANIKIN.goalPosts().forEach(g => g.segs.forEach(seg => { const a = proj3(seg[0]), b = proj3(seg[1]); if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); } }));
+    // mannequins, farthest first (painter's algorithm)
+    const withDepth = scene.mannequins.map(m => ({ m, d: (proj3({ x: m.pos.x, y: 0.3, z: m.pos.z }) || { depth: 1e9 }).depth })).sort((a, b) => b.d - a.d);
+    withDepth.forEach(({ m }) => {
+      const cap = MANIKIN.CAP[m.team] || MANIKIN.CAP.A;
+      const pts = {}; let any = false;
+      Object.keys(m.joints).forEach(k => { const pr = proj3(m.joints[k]); pts[k] = pr; if (pr) any = true; });
+      if (!any) return;
+      const px = pts.hip ? pts.hip.scale : 50;   // pixels per metre at this mannequin's depth
+      ctx.strokeStyle = cap.stroke; ctx.lineWidth = Math.max(1.2, px * 0.035);
+      MANIKIN.BONES.forEach(([a, b]) => { if (pts[a] && pts[b]) { ctx.beginPath(); ctx.moveTo(pts[a].x, pts[a].y); ctx.lineTo(pts[b].x, pts[b].y); ctx.stroke(); } });
+      if (pts.head) { const r = Math.max(2.5, pts.head.scale * 0.16); ctx.fillStyle = cap.fill; ctx.beginPath(); ctx.arc(pts.head.x, pts.head.y, r, 0, TAU_LOCAL); ctx.fill(); ctx.strokeStyle = cap.stroke; ctx.lineWidth = 1; ctx.stroke(); }
+      if (pts.head && m.key !== 'GK') { ctx.fillStyle = cap.stroke === '#000' ? '#fff' : '#0b1f2c'; const fs = Math.max(7, pts.head.scale * 0.20); ctx.font = fs + 'px Helvetica, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(m.key.replace(/^[AD]/, ''), pts.head.x, pts.head.y + fs * 0.32); }
+    });
+    // the ball
+    if (scene.ball) { const bp = proj3(scene.ball); if (bp) { ctx.fillStyle = '#ff7a18'; ctx.beginPath(); ctx.arc(bp.x, bp.y, Math.max(2, bp.scale * 0.10), 0, TAU_LOCAL); ctx.fill(); } }
+  }
+  const TAU_LOCAL = Math.PI * 2;
+  function scene3dCurrentScenario() { return state.scenarios.find(x => x.id === state.selectedId); }
+  function scene3dCurrentT() {
+    if (adjust.live && adjust.scn) { const n = Math.max(1, adjust.scn.frames.length - 1); return n ? adjust.idx / n : 0; }
+    return state.viewer ? state.viewer.t : 0;
+  }
+  function draw3dNow() {
+    if (!scene3dShown() || typeof MANIKIN === 'undefined') return;
+    const scn = adjust.live && adjust.scn ? adjust.scn : scene3dCurrentScenario();
+    if (!scn) return;
+    const scene = MANIKIN.sceneAt(scn, scene3dCurrentT(), {});
+    // "switch player or ball view" — the camera target follows the chosen entity every frame
+    if (scene3dTarget === 'ball' && scene.ball) scene3dCam.target = { x: scene.ball.x, y: 0.4, z: scene.ball.z };
+    else if (scene3dTarget) { const m = scene.mannequins.find(x => x.key === scene3dTarget || x.key === 'A' + scene3dTarget || x.key === 'D' + scene3dTarget); if (m) scene3dCam.target = { x: m.pos.x, y: 0.45, z: m.pos.z }; }
+    draw3d(scene);
+  }
+  function wire3dInteraction() {
+    const cv = $('scene3d'); if (!cv) return;
+    const pointers = new Map();
+    const dist2 = () => { const p = [...pointers.values()]; return p.length === 2 ? Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) : null; };
+    cv.addEventListener('pointerdown', e => { pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (pointers.size === 1) scene3dDrag = { x: e.clientX, y: e.clientY }; else scene3dPinch = dist2(); cv.setPointerCapture(e.pointerId); });
+    cv.addEventListener('pointermove', e => {
+      if (!pointers.has(e.pointerId)) return; pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size >= 2) { const d = dist2(); if (scene3dPinch && d) { scene3dCam = MANIKIN.orbit(scene3dCam, 0, 0, (scene3dPinch - d) * 0.03); scene3dPinch = d; draw3dNow(); } return; }
+      if (!scene3dDrag) return;
+      const dx = e.clientX - scene3dDrag.x, dy = e.clientY - scene3dDrag.y; scene3dDrag = { x: e.clientX, y: e.clientY };
+      scene3dCam = MANIKIN.orbit(scene3dCam, -dx * 0.008, -dy * 0.006, 0); draw3dNow();
+    });
+    const up = e => { pointers.delete(e.pointerId); if (pointers.size < 2) scene3dPinch = null; if (pointers.size === 0) scene3dDrag = null; };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    cv.addEventListener('wheel', e => { e.preventDefault(); scene3dCam = MANIKIN.orbit(scene3dCam, 0, 0, e.deltaY * 0.01); draw3dNow(); }, { passive: false });
+    cv.addEventListener('dblclick', () => { scene3dCam = MANIKIN.makeCamera({}); draw3dNow(); });
+  }
   function applyGk() {
     const on = gkShown(), b = $('gk-toggle');
     if (b) { b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
@@ -908,7 +1003,7 @@
     applySteps();
     paintZones(state.renderer && state.renderer.layers);
     if (state.viewer.setSpeed) state.viewer.setSpeed(savedSpeed());
-    updateMyCue(); lastGkStep = -1; updateGkView();
+    updateMyCue(); lastGkStep = -1; updateGkView(); draw3dNow();
     if (t0) state.viewer.seek(t0);
     if (andPlay) state.viewer.play();
   }
@@ -951,6 +1046,7 @@
     const fl = $('fsb-label'); if (fl) fl.textContent = `Step ${Math.min(total, step+1)} / ${total}`;
     updateMyCue(step, total);
     if (step !== lastGkStep) { lastGkStep = step; updateGkView(); }   // once per step, not per frame
+    draw3dNow();   // the 3D camera redraws every tick — it's animating the same interpolated motion
   }
   let lastGkStep = -1;
   /* ---- "what do I do now?" — one line for the focused player, per step ---- */
@@ -1078,6 +1174,7 @@
     const on = force == null ? !lay.classList.contains('stage-full') : !!force;
     lay.classList.toggle('stage-full', on);
     if (on) fsBarShow(); else fsBarHide();
+    if (scene3dShown()) setTimeout(() => { resize3d(); draw3dNow(); }, 30);   // .pool-wrap just changed size
     const b = $('fs-btn'); if (b) { b.classList.toggle('active', on); b.title = on ? 'Leave full screen (Esc)' : 'Full-screen board (Esc to leave)'; }
     try { if (on && document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); else if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {}
   }
@@ -1463,7 +1560,7 @@
     const f = adjust.scn.frames[adjust.idx];
     adjust.layers = POOL.render($('pool'));
     paintZones(adjust.layers);
-    const refresh = () => { ANIM.drawTactics(adjust.layers, adjust.scn, state.focus); updateGkView(); };
+    const refresh = () => { ANIM.drawTactics(adjust.layers, adjust.scn, state.focus); updateGkView(); draw3dNow(); };
     refresh();
     // one undo snapshot per drag gesture (a gesture = pointerdown → pointerup)
     const snapshot = () => {
@@ -1508,7 +1605,7 @@
     const total = adjust.scn.frames.length;
     $('frame-label').textContent = `Step ${adjust.idx+1} / ${total}`;
     { const fl = $('fsb-label'); if (fl) fl.textContent = `Step ${adjust.idx+1} / ${total}`; }
-    updateGkView();
+    updateGkView(); draw3dNow();
     $('scrub').value = Math.round(stepT() * 1000);
     updateUndoBtn();
   }
@@ -2401,6 +2498,12 @@
     $('steps-toggle').onclick = toggleSteps;
     $('zones-toggle').onclick = toggleZones; applyZones();
     $('gk-toggle').onclick = toggleGk; applyGk();
+    $('scene3d-toggle').onclick = toggle3d;
+    scene3dTarget = scene3dLoadTarget(); if ($('scene3d-target')) $('scene3d-target').value = scene3dTarget;
+    $('scene3d-target').onchange = e => { scene3dTarget = e.target.value; scene3dSaveTarget(scene3dTarget); if (!scene3dTarget) scene3dCam = MANIKIN.makeCamera({}); draw3dNow(); };
+    wire3dInteraction();
+    window.addEventListener('resize', () => { if (scene3dShown()) { resize3d(); draw3dNow(); } });
+    apply3d();
     $('ed-shot').onchange = e => setShotOnFrame(e.target.checked);
     $('ed-shot-kind').onchange = () => { if ($('ed-shot').checked) setShotOnFrame(true); };
     document.querySelectorAll('#speed-seg [data-speed]').forEach(b => b.onclick = () => applySpeed(b.dataset.speed));
@@ -2418,7 +2521,7 @@
     $('fsb-play').onclick = () => $('play-btn').click();
     $('fsb-fwd').onclick = () => $('step-fwd').click();
     $('fsb-back').onclick = () => $('step-back').click();
-    $('fsb-restart').onclick = () => { if (state.viewer) { state.viewer.seek(0); } };
+    $('fsb-restart').onclick = () => { if (adjust.live) { adjust.idx = 0; renderAdjustBoard(); } else if (state.viewer) { state.viewer.seek(0); } };
     $('fsb-exit').onclick = () => toggleFull(false);
     document.querySelectorAll('#fsb-speed [data-speed]').forEach(b => b.onclick = () => applySpeed(b.dataset.speed));
     document.addEventListener('keydown', e => {

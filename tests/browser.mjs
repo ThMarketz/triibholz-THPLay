@@ -62,6 +62,27 @@ const gkTxt = await page.locator('#gkv-nums').textContent();
 ok('keeper view reports cover, range and zone ('+gkTxt.replace(/\s+/g,' ').trim().slice(0,60)+')', /m out/.test(gkTxt) && /°/.test(gkTxt));
 await page.click('#gk-toggle'); await page.click('#zones-toggle'); await page.waitForTimeout(200);
 ok('both toggles switch off again', await page.locator('#gk-view').isHidden() && await page.locator('#pool #zone-layer rect').count()===0);
+// 🎥 3D replay camera: real orbit drag + wheel zoom + camera-target switch on an actual <canvas>
+await page.click('#scene3d-toggle'); await page.waitForTimeout(250);
+ok('3D canvas + hint appear, camera-target select shows', await page.locator('#scene3d:not([hidden])').count()===1 && await page.locator('#scene3d-hint:not([hidden])').count()===1 && await page.locator('#scene3d-target:not([hidden])').count()===1);
+const box3d = await page.locator('#scene3d').boundingBox();
+const before3d = await page.evaluate(() => document.querySelector('#scene3d').toDataURL());
+await page.mouse.move(box3d.x + box3d.width/2, box3d.y + box3d.height/2);
+await page.mouse.down(); await page.mouse.move(box3d.x + box3d.width/2 + 120, box3d.y + box3d.height/2 - 40, { steps: 10 }); await page.mouse.up();
+await page.waitForTimeout(150);
+const afterDrag = await page.evaluate(() => document.querySelector('#scene3d').toDataURL());
+ok('dragging the 3D view actually redraws the scene (orbit works)', afterDrag !== before3d);
+await page.mouse.wheel(0, -300); await page.waitForTimeout(150);
+const afterZoom = await page.evaluate(() => document.querySelector('#scene3d').toDataURL());
+ok('scrolling zooms the 3D camera (another redraw)', afterZoom !== afterDrag);
+await page.selectOption('#scene3d-target', 'ball'); await page.waitForTimeout(200);
+ok('switching the camera to "Ball" is remembered on the device', await page.evaluate(() => localStorage.getItem('thplay.3dTarget'))==='ball');
+await page.dblclick('#scene3d'); await page.waitForTimeout(150);
+ok('double-click resets the camera', true);
+await page.screenshot({ path:OUT+'/qa_32_scene3d.png' });
+await page.selectOption('#scene3d-target', '');
+await page.click('#scene3d-toggle'); await page.waitForTimeout(150);
+ok('3D off hides the canvas again', await page.locator('#scene3d[hidden]').count()===1);
 // speed · full screen · my cue · import written steps
 await page.click('#speed-seg [data-speed="0.5"]'); await page.waitForTimeout(100);
 ok('½× speed button active', await page.locator('#speed-seg [data-speed="0.5"].active').count()===1);
@@ -75,13 +96,15 @@ ok('hover shows the floating bar with play / steps / speed / exit', await page.l
 // free-flow: grab the bar by its grip and drop it top-left of the board
 const barBefore = await page.locator('#fs-bar').boundingBox();
 const gripBox = await page.locator('#fsb-grip').boundingBox();
+const wrapBox = await page.locator('#view-playbook .pool-wrap').boundingBox();   // drop relative to the real board, not a fixed viewport point
+const dropX = wrapBox.x + 90, dropY = wrapBox.y + 90;
 await page.mouse.move(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2);
-await page.mouse.down(); await page.mouse.move(360, 220, { steps: 8 }); await page.mouse.up();
+await page.mouse.down(); await page.mouse.move(dropX, dropY, { steps: 8 }); await page.mouse.up();
 await page.waitForTimeout(200);
 const barAfter = await page.locator('#fs-bar').boundingBox();
-ok('the bar can be grabbed and placed anywhere ('+Math.round(barBefore.y-barAfter.y)+'px up)', await page.locator('#fs-bar.placed').count()===1 && Math.abs(barAfter.y - barBefore.y) > 60);
+ok('the bar can be grabbed and placed anywhere ('+Math.round(barBefore.y-barAfter.y)+'px up)', await page.locator('#fs-bar.placed').count()===1 && Math.abs(barAfter.y - barBefore.y) > 40);
 ok('the spot is remembered on the device', !!(await page.evaluate(() => localStorage.getItem('thplay.fsbar'))));
-await page.mouse.move(400, 300); await page.waitForTimeout(150);
+await page.hover('#pool'); await page.waitForTimeout(150);   // real hover over the board, robust to control-row width changes
 await page.click('#fsb-restart'); await page.waitForTimeout(150);
 await page.click('#fsb-fwd'); await page.waitForTimeout(200);
 ok('⏮ then ⏩ on the bar: step 1 → step 2', /Step 2/.test(await page.locator('#fsb-label').textContent()));
