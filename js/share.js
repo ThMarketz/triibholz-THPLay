@@ -27,6 +27,7 @@ const SHARE = (() => {
     if (f.ball && f.ball.carrier) o.ball = { carrier: str(f.ball.carrier, 4) };
     else { const b = pt(f.ball); o.ball = b ? { carrier: null, x: b.x, y: b.y } : { carrier: null, x: 250, y: 110 }; }
     if (Array.isArray(f.extra)) o.extra = f.extra.slice(0, 12).map(e => { try { return JSON.parse(JSON.stringify(e)); } catch (x) { return null; } }).filter(Boolean);
+    if (f.shot && f.shot.by != null) o.shot = { by: str(f.shot.by, 4), kind: f.shot.kind === 'lob' ? 'lob' : 'shot' };
     return o;
   }
   function cleanPlay(p) {
@@ -60,7 +61,7 @@ const SHARE = (() => {
   /* the positions decide identity — same movement = same play, whatever the title */
   function fingerprint(p) {
     p = cleanPlay(p) || p || {};
-    const s = JSON.stringify({ s: p.situation, ph: p.phase, f: (p.frames || []).map(f => [f.att, f.def, f.ball]) });
+    const s = JSON.stringify({ s: p.situation, ph: p.phase, f: (p.frames || []).map(f => [f.att, f.def, f.ball, f.shot || null]) });
     let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
     return 'fp' + Math.abs(h).toString(36);
   }

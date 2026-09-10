@@ -52,6 +52,16 @@ ok('steps off → notes bar hidden, fewer marks on the board', !(await page.loca
 await page.screenshot({ path:OUT+'/qa_27_steps_off.png' });
 await page.click('#steps-toggle'); await page.waitForTimeout(200);
 ok('steps back on', await page.locator('#rightbar').isVisible());
+// 🟩 shot zones painted into the board, 🧤 keeper view, and a marked shot step
+await page.click('#zones-toggle'); await page.waitForTimeout(250);
+ok('Zones paints green + yellow territory into the board SVG', await page.locator('#pool #zone-layer rect').count()===2 && /coach/.test(await page.locator('#pool #zone-layer').textContent()));
+await page.click('#gk-toggle'); await page.waitForTimeout(350);
+ok('Keeper view shows the goal mouth with shoot / lob numbers', await page.locator('#gk-view:not([hidden])').count()===1 && (await page.locator('#gkv-goal rect').count())>=2 && /shoot/.test(await page.locator('#gkv-nums').textContent()) && /lob/.test(await page.locator('#gkv-nums').textContent()));
+await page.screenshot({ path:OUT+'/qa_31_zones_keeper.png' });
+const gkTxt = await page.locator('#gkv-nums').textContent();
+ok('keeper view reports cover, range and zone ('+gkTxt.replace(/\s+/g,' ').trim().slice(0,60)+')', /m out/.test(gkTxt) && /°/.test(gkTxt));
+await page.click('#gk-toggle'); await page.click('#zones-toggle'); await page.waitForTimeout(200);
+ok('both toggles switch off again', await page.locator('#gk-view').isHidden() && await page.locator('#pool #zone-layer rect').count()===0);
 // speed · full screen · my cue · import written steps
 await page.click('#speed-seg [data-speed="0.5"]'); await page.waitForTimeout(100);
 ok('½× speed button active', await page.locator('#speed-seg [data-speed="0.5"].active').count()===1);
@@ -196,8 +206,10 @@ console.log('\n[3d] Tactical commands — editor palette + stage audible');
 await page.click('#new-scenario-btn'); await page.waitForTimeout(300);
 await page.fill('#ed-title','Commanded play');
 await page.click('#cmd-panel > summary'); await page.waitForTimeout(150);
-ok('command palette shows 22 calls in 3 groups', (await page.locator('#cmd-groups .cmd-btn').count())===22 && (await page.locator('#cmd-groups .cmd-group').count())===3);
+ok('command palette shows 26 calls in 3 groups', (await page.locator('#cmd-groups .cmd-btn').count())===26 && (await page.locator('#cmd-groups .cmd-group').count())===3);
 const stepsBefore = await page.locator('#frame-chips .frame-chip').count();
+await page.click('#cmd-groups .cmd-btn[data-cmd="shoot"]'); await page.waitForTimeout(250);
+ok('“Take the shot” marks the step and draws the shot line', (await page.locator('#editor-pool text').allTextContents()).some(t=>/SHOT/.test(t)) && await page.locator('#ed-shot').isChecked());
 await page.click('#cmd-groups .cmd-btn[data-cmd="point-pick"]'); await page.waitForTimeout(200);
 ok('Pick & Roll added movement steps', (await page.locator('#frame-chips .frame-chip').count()) > stepsBefore);
 ok('command drew arrows on the editor board', (await page.locator('#editor-pool [marker-end]').count())>=1);

@@ -2,7 +2,9 @@
 
 Every command is a standard water polo movement from coach-education curricula (World Aquatics / USA Water Polo coaching manuals and the classic club schools). It is not copied from one book; it is the shared vocabulary those courses teach. Each entry says **when** to call it, **what** happens on the board, and **why** it works.
 
-Board geometry used by the moves: goal line ≈ x 294, 2 m line ≈ 271, 5 m ≈ 248, point (6–7 m) ≈ 226; standard 6v6 umbrella: 1 left wing · 2 left flat · 3 point · 4 right flat · 5 right wing · 6 centre forward.
+Rule detail behind the foul and free-throw commands is in [FOULS.md](FOULS.md); the shot zones and the keeper view are in [SHOT_ZONES.md](SHOT_ZONES.md).
+
+Board geometry used by the moves: goal line ≈ x 296, 2 m ≈ 274, 5 m ≈ 242, 6 m ≈ 231; standard 6v6 umbrella: 1 left wing · 2 left flat · 3 point · 4 right flat · 5 right wing · 6 centre forward.
 
 ## Offense
 
@@ -61,6 +63,26 @@ Board geometry used by the moves: goal line ≈ x 294, 2 m line ≈ 271, 5 m ≈
 - **What:** Shooter on the 5 m line with the ball; everyone else outside 5 m and behind the ball; keeper on the goal line. Shoot on the whistle in one motion.
 - **Why:** Rule: the shot must be immediate and continuous; teammates behind the ball are ready for a rebound.
 
+### 🎯 Take the shot (mark the shot step)  ·  scope: player
+- **When:** The carrier has the cage: green territory, or a gap the keeper cannot cover.
+- **What:** The player holding the ball shoots. The step is MARKED as the shot — the board draws the shot line and the target ring, the shooter is told "shoot", and the goalkeeper view opens on that step.
+- **Why:** A play should say where it finishes. Marking the shot also lets the app judge the chance from that spot: territory, the keeper’s coverage and any defender in the lane.
+
+### 🌈 Lob over the keeper  ·  scope: player
+- **When:** The keeper has come off the line towards the ball, and you are at an angle to one side of the goal.
+- **What:** A high, soft, cross-cage ball over the advanced keeper into the far top corner. Marked as the shot step, drawn as a dotted arc.
+- **Why:** Off the line the keeper cannot get back to a slow high ball dropping behind them. Honest caveat: lobs are only 1-7% of elite shots and are, overall, LESS successful than a drive shot — this is the one situation coaching consensus says they belong in.
+
+### 🫱 Draw the ordinary foul  ·  scope: player
+- **When:** The set attack has stalled, or you want uncontested possession to re-set the front court.
+- **What:** The attacker drives with the ball ON THE WATER (dribbling, not holding it) and turns into the defender. The hold comes, the whistle goes, and the free throw is taken where the ball is.
+- **Why:** Know which whistle you are playing for. A defender who IMPEDES you while you are not holding the ball gives away an ordinary foul — a free throw. A defender who HOLDS, SINKS or PULLS YOU BACK gives away a major foul — an 18 s exclusion, and a man-up converts at about 48%. Either way you must be dribbling, because neither foul exists against a player holding the ball. What the free throw buys: both clocks stop at the whistle, the defender must move a metre away before they may block, and you get an uncontested pass to re-set. What it does NOT buy: the possession clock does not reset, it resumes where it froze.
+
+### 💥 Direct shot from the free throw (outside 6 m)  ·  scope: player
+- **When:** You have just been awarded a free throw and the BALL is outside the 6 m line.
+- **What:** Shoot straight from the free throw. The defender has to be a metre away before they may raise an arm, so the lane is briefly open.
+- **Why:** Rule Art. 7.2(d): a goal may be scored from an immediate shot from a free throw taken by a player outside 6 m — it is the location of the BALL that decides. There is no "continuous motion" clause: you may either shoot immediately, or visibly put the ball into play and then fake, dribble and shoot.
+
 ## Defense
 
 ### 🙌 Front-court press (man-to-man)  ·  scope: team
@@ -88,10 +110,10 @@ Board geometry used by the moves: goal line ≈ x 294, 2 m line ≈ 271, 5 m ≈
 - **What:** The screened defender calls "switch"; the screener’s defender takes the driver, the screened defender takes the screener — nobody chases through the pick.
 - **Why:** Chasing through a screen leaves the driver free at 2 m; switching keeps both attackers marked.
 
-### ✋ Ordinary foul to stop the drive  ·  scope: player
-- **When:** A driver has beaten their man outside 5 m, or the attack has rhythm.
-- **What:** The nearest defender fouls the ball-carrier from the side / behind, on the ball (ordinary foul, no free shot outside 6 m if done inside). Everyone re-sets their marks during the free throw.
-- **Why:** A free throw stops the play and lets the defence organise; inside 2 m or with a shooting advantage it becomes an exclusion or a penalty, so choose the spot.
+### ✋ Ordinary foul on the ball-carrier  ·  scope: player
+- **When:** A SETTLED attack: the centre forward or a driver has the ball with their back to goal, and is not in a shooting action.
+- **What:** The marking defender impedes the ball-carrier — body on, no hold, no sink. The whistle stops both clocks, the free throw is taken where the ball is, and the defence re-sets its marks while the thrower puts it back in play.
+- **Why:** An ordinary foul carries no personal foul and there is no limit on them, so it is the cheap way to break a set attack. Three lines you must not cross: it does NOT reset the shot clock (the possession clock resumes where it froze); holding, sinking or pulling back an opponent is a MAJOR foul and an 18 s exclusion, not a free throw; and fouling to kill the flow of an attack — above all a counter — is a tactical foul, also an exclusion (Art. 9.11). Impeding a shooter from behind inside 6 m is a penalty (Art. 10.11).
 
 ### 🕸️ Man-down zone (5 + keeper)  ·  scope: team
 - **When:** 5v6 (your player excluded).

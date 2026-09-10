@@ -12,9 +12,9 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -129,7 +129,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     kb('ArrowRight'); await wait(20);
     ok('ArrowRight steps forward', q('#frame-label').textContent!==lbl);
   }
-  ok('16 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===16);
+  ok('17 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===17);
   q('#help-btn').click(); await wait(15);
   ok('topbar ？ is context-aware (paused board → Adjust guide)', !!q('.help-backdrop:not([hidden])') &&
      /Adjust/i.test(q('#help-title').textContent));
@@ -197,7 +197,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
   console.log('\n[6e] Tactical commands (audibles) — call a play, board runs it');
   {
     const { COMMANDS } = window.__T;
-    ok('22 commands defined', COMMANDS.list.length===22);
+    ok('26 commands defined', COMMANDS.list.length===26);
     ok('both sides covered', COMMANDS.list.some(c=>c.side==='offense') && COMMANDS.list.some(c=>c.side==='defense'));
     ok('every command has id/name/cue/build', COMMANDS.list.every(c=>c.id&&c.name&&c.cue&&typeof c.build==='function'));
     // the classics the coach asked for exist
@@ -208,7 +208,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     const before = scn.frames[0];
     const gk0 = before.gk.x;
     ok('gk-out brings the keeper off the line', COMMANDS.apply(scn,'gk-out',{target:'team'}).steps[0].gk.x < gk0);
-    ok('foul-reset note names the foul', /foul/i.test(Object.values(COMMANDS.apply(scn,'foul-reset',{target:'team'}).notes).join(' ')));
+    ok('foul-reset teaches impede-not-hold and the penalty line', (()=>{ const t=Object.values(COMMANDS.apply(scn,'foul-reset',{target:'team'}).notes).join(' '); return /impede/i.test(t) && /exclusion/i.test(t) && /penalty/i.test(t); })());
     ok('crash puts 2 defenders on the centre', (()=>{ const hp=before.att[Object.keys(before.att).sort((a,b)=>before.att[b].x-before.att[a].x)[0]];
       const d=COMMANDS.apply(scn,'crash',{target:'team'}).steps[0].def;
       return Object.keys(d).filter(k=>Math.hypot(d[k].x-hp.x,d[k].y-hp.y)<14).length===2; })());
@@ -218,7 +218,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
 
     // UI wiring: editor palette adds a step + fills assignments
     q('#new-scenario-btn').click(); await wait(25);
-    ok('command palette present & grouped', qa('#cmd-groups .cmd-group').length===3 && qa('#cmd-groups .cmd-btn').length===22);
+    ok('command palette present & grouped', qa('#cmd-groups .cmd-group').length===3 && qa('#cmd-groups .cmd-btn').length===26);
     const framesBefore = q('#frame-chips').children.length;
     qa('#cmd-groups .cmd-btn').find(b=>b.dataset.cmd==='hole-entry').click(); await wait(20);
     ok('editor command added a step', q('#frame-chips').children.length>framesBefore);
@@ -232,7 +232,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     qa('.scn-card').find(c=>c.textContent.includes('slip to the hole')).click(); await wait(20);
     ok('⚡ Audible button visible on an open play', q('#audible-btn').hidden===false);
     q('#audible-btn').click(); await wait(10);
-    ok('audible sheet opens with 22 calls', q('#audible-sheet').hidden===false && qa('#as-groups .cmd-btn').length===22);
+    ok('audible sheet opens with 26 calls', q('#audible-sheet').hidden===false && qa('#as-groups .cmd-btn').length===26);
     qa('#as-groups .cmd-btn').find(b=>b.dataset.cmd==='help-recover').click(); await wait(20);
     ok('audible marks the board dirty (save bar shows)', q('#adjust-bar').hidden===false);
     const beforeAud = DATA.load().length;
@@ -757,7 +757,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
   {
     const { COMMANDS, DATA } = window.__T;
     const f66 = DATA.defaultFrame('6v6'), f65 = DATA.defaultFrame('6v5');
-    ok('22 commands, each with cue + when + why + source', COMMANDS.list.length===22 && COMMANDS.list.every(c=>c.cue && c.when && c.why && c.source));
+    ok('26 commands, each with cue + when + why + source', COMMANDS.list.length===26 && COMMANDS.list.every(c=>c.cue && c.when && c.why && c.source));
     const R = COMMANDS.roles(f66);
     ok('roles read from geometry: 6 centre, 1/5 wings, 3 point, 2/4 flats', R.hole==='6' && R.lw==='1' && R.rw==='5' && R.point==='3' && R.lf==='2' && R.rf==='4');
     const inb = p => p.x>=28 && p.x<=292 && p.y>=34 && p.y<=186;
@@ -865,6 +865,86 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('Blank play still opens a fresh editor', !q('#editor-modal').hidden && q('#frame-chips').children.length===1); q('#ed-cancel').click(); await wait(10);
     qa('#scenario-list .scn-card').find(c=>/template/.test(c.textContent)).click(); await wait(30); q('#tpl-btn').click(); await wait(30);
     ok('unstar removes the template', !DATA.load().some(x=>x.template));
+  }
+
+  console.log('\n[6y] Shot zones · shot step · keeper view (SHOT + commands + UI)');
+  {
+    const { SHOT, COMMANDS, DATA, POOL, ANIM } = window.__T;
+    const g = SHOT.geo();
+    ok('geometry read from the board: 25 m pool, 10.88 units/m, 3 m mouth at x=296', Math.abs(g.m-10.88)<0.01 && g.goalX===296 && g.cy===110 && Math.abs(g.half-16.32)<0.01);
+    const bands = SHOT.bands();
+    ok('two bands drawn, yellow under green, both ending at the goal line', bands.length===2 && bands[0].id==='yellow' && bands[1].id==='green' && Math.abs(bands[1].x-(296-4*g.m))<0.01 && Math.abs(bands[0].x-(296-7*g.m))<0.01);
+    ok('green is 1 m outside each post, yellow 2 m', Math.abs(bands[1].h-2*(g.half+g.m))<0.01 && Math.abs(bands[0].h-2*(g.half+2*g.m))<0.01);
+    ok('zoneAt: in front of goal green, 6 m centre yellow, wide/long red', SHOT.zoneAt({x:274,y:110}).id==='green' && SHOT.zoneAt({x:264,y:135}).id==='green' && SHOT.zoneAt({x:231,y:110}).id==='yellow' && SHOT.zoneAt({x:264,y:152}).id==='red' && SHOT.zoneAt({x:200,y:60}).id==='red');
+    ok('the three zone percentages are the coach’s 70 / 30 / <10', SHOT.zoneById('green').pct===0.7 && SHOT.zoneById('yellow').pct===0.3 && SHOT.zoneById('red').pct<0.1);
+    // the goal-mouth projection
+    const f = DATA.defaultFrame('6v6');
+    const clean = JSON.parse(JSON.stringify(f)); clean.def = {}; clean.gk = { x:292, y:110 }; clean.ball = { carrier:'A6' };
+    const open = SHOT.chance(clean, {});
+    ok('empty cage but a keeper on the line: some cage covered, none blocked', open.blockerCount===0 && open.coverPct>0 && open.coverPct<1 && open.openPct===+(1-open.coverPct).toFixed(2));
+    const blocked = JSON.parse(JSON.stringify(clean)); blocked.def = { 1:{ x:281, y:110 } };
+    const cb = SHOT.chance(blocked, {});
+    ok('a defender in the lane is counted and costs ~10 points', cb.blockerCount===1 && cb.shootPct < open.shootPct);
+    const behind = JSON.parse(JSON.stringify(clean)); behind.def = { 1:{ x:200, y:110 } };
+    ok('a defender BEHIND the shooter casts no shadow', SHOT.chance(behind, {}).blockerCount===0);
+    const outKeeper = JSON.parse(JSON.stringify(clean)); outKeeper.gk = { x:274, y:110 };
+    const co = SHOT.chance(outKeeper, {});
+    ok('keeper off the line: distance reported and the lob gets better', co.keeperOutM>1.5 && co.lobPct > SHOT.chance(clean,{}).lobPct);
+    ok('penalty is the situation override (~80%), not a zone read', SHOT.chance(clean,{situation:'penalty'}).shootPct===0.8);
+    ok('percentages are rounded to 5% — no false precision', [open.shootPct, open.lobPct, cb.shootPct].every(v=>Math.abs(v*20-Math.round(v*20))<1e-9));
+    ok('every chance carries an honest basis line, incl. the lob caveat', /coaching convention|coaching guide|Coach/i.test(open.basis) && /no study has tested the lob/i.test(open.lobBasis) && open.advice.length>3);
+    // review regressions
+    ok('a defender BESIDE the shooter is not counted as blocking the cage', SHOT.shadow({x:240,y:110},{x:241,y:130},0.55)===null);
+    ok('a body past the goal line casts no shadow', SHOT.shadow({x:240,y:110},{x:300,y:110},0.55)===null);
+    ok('range + angle use the per-axis scales (10.88 across, 8 down)', (()=>{ const gg=SHOT.geo(); if (Math.abs(gg.mY-8)>0.01) return false;
+      const wide=SHOT.chance({att:{1:{x:240,y:60}},def:{},gk:{x:292,y:110},ball:{carrier:'A1'},extra:[]},{}); return wide.distanceM>7.5 && wide.distanceM<9 && wide.angleDeg>45; })());
+    ok('a frame with no keeper says so instead of inventing one', (()=>{ const n={att:{1:{x:250,y:110}},def:{},ball:{carrier:'A1'},extra:[]}; const c=SHOT.chance(n,{}); return c.keeperMissing===true && c.keeperOutM===null && c.coverPct===0; })());
+    ok('a ball already in the net is not treated as a shooting position', SHOT.chance({att:{},def:{},gk:{x:292,y:110},ball:{carrier:null,x:293,y:110},extra:[]},{})===null);
+    ok('the blocked-lane effect is relative, so it can never go negative', (()=>{ const red={att:{1:{x:150,y:60}},def:{1:{x:200,y:80}},gk:{x:292,y:110},ball:{carrier:'A1'},extra:[]}; const c=SHOT.chance(red,{}); return c.shootPct>0 && c.shootPct<=0.92; })());
+    ok('gap labels describe the cage, never a "near post" that depends on the shooter', (()=>{ const c=SHOT.chance({att:{1:{x:250,y:150}},def:{},gk:{x:292,y:96},ball:{carrier:'A1'},extra:[]},{}); return !c.bestGap || /cage|middle/.test(c.bestGap.side); })());
+    // the shot marker
+    const fr = {}; SHOT.markShot(fr,'4','lob');
+    ok('markShot / shotOf / legacy geometric shots', fr.shot.by==='4' && fr.shot.kind==='lob' && SHOT.shotOf(fr).kind==='lob' && SHOT.isShotFrame({ball:{carrier:null,x:293,y:110}}) && !SHOT.isShotFrame({ball:{carrier:'A3'}}));
+    ok('two plays that differ only in the shot step are not duplicates', (()=>{ const S2=window.__T.SHARE; const base={situation:'6v6',phase:'offense',frames:[DATA.defaultFrame('6v6'),DATA.defaultFrame('6v6')],notes:{}};
+      const withShot=JSON.parse(JSON.stringify(base)); withShot.frames[1].shot={by:'4',kind:'shot'}; return S2.fingerprint(base)!==S2.fingerprint(withShot); })());
+    ok('the marker survives download / share / import', !!window.__T.SHARE.pack({situation:'6v6',phase:'offense',frames:[DATA.defaultFrame('6v6'), Object.assign(DATA.clone(DATA.defaultFrame('6v6')),{shot:{by:'4',kind:'shot'}})],notes:{}}).play.frames[1].shot);
+    // the four new commands
+    const scn = () => ({ situation:'6v6', frames:[DATA.defaultFrame('6v6')] });
+    const shoot = COMMANDS.apply(scn(),'shoot',{target:'6'});
+    ok('“Take the shot” marks the step and puts the ball in the cage', shoot.steps.length===2 && shoot.steps[1].shot.by==='6' && shoot.steps[1].ball.carrier===null && shoot.steps[1].ball.x===293);
+    const lob = COMMANDS.apply(scn(),'lob',{target:'1'});
+    ok('“Lob” marks a lob step', lob.steps[1].shot.kind==='lob' && lob.steps[1].shot.by==='1');
+    const ft = COMMANDS.apply(scn(),'free-throw-shot',{target:'3'});
+    ok('direct free-throw shot puts the BALL outside 6 m first, then shoots', ft.steps[0].att['3'].x <= 296-6*g.m && ft.steps[1].shot.by==='3' && /outside 6 m/.test(ft.notes['3']));
+    ok('a shot marker is never inherited by the next command’s steps', (()=>{ const sh=COMMANDS.apply(scn(),'shoot',{target:'3'});
+      const nxt=COMMANDS.apply({situation:'6v6',frames:[DATA.defaultFrame('6v6'), sh.steps[1]]},'press',{target:'team'}); return !nxt.steps.some(f=>f.shot); })());
+    ok('the free throw is drawn with the BALL outside 6 m, offset included', (()=>{ const r=COMMANDS.apply(scn(),'free-throw-shot',{target:'3'}); return ANIM.ballPoint(r.steps[0]).x < 296-6*g.m; })());
+    const df = COMMANDS.apply(scn(),'draw-foul',{target:'6'});
+    ok('“Draw the foul” keeps the ball and backs the defender off a metre', df.steps.length===2 && df.steps[1].ball.carrier==='A6' && !df.steps[1].shot && /do NOT pick the ball up/i.test(df.notes['6']));
+    const fr2 = COMMANDS.byId['foul-reset'];
+    ok('the defensive foul teaches the exclusion boundary and the clock truth', /tactical foul/i.test(fr2.why) && /MAJOR foul/i.test(fr2.why) && /does NOT reset the shot clock/i.test(fr2.why));
+    ok('draw-foul splits ordinary vs major and is honest about the clock', (()=>{ const w=COMMANDS.byId['draw-foul'].why; return /IMPEDES/i.test(w) && /HOLDS, SINKS/i.test(w) && /exclusion/i.test(w) && /does NOT buy/i.test(w) && /not reset/i.test(w); })());
+    // UI: toggles + editor marker + keeper panel
+    q('.nav-btn[data-view="playbook"]').click(); await wait(30);
+    qa('#scenario-list .scn-card').find(c=>!c.classList.contains('scn-new')).click(); await wait(50);
+    ok('Zones + Keeper view toggles exist, both off by default', !!q('#zones-toggle') && !!q('#gk-toggle') && q('#zones-toggle').getAttribute('aria-pressed')==='false' && q('#gk-view').hidden);
+    q('#zones-toggle').click(); await wait(30);
+    ok('zones painted into the board’s own layer (not an HTML overlay)', window.localStorage.getItem('thplay.showZones')==='1' && q('#zones-toggle').classList.contains('active') && qa('#pool #zone-layer rect').length===2 && /coach’s guide/.test(q('#pool #zone-layer').textContent));
+    q('#zones-toggle').click(); await wait(20);
+    ok('zones off again clears the layer', qa('#pool #zone-layer rect').length===0);
+    q('#gk-toggle').click(); await wait(40);
+    ok('keeper view opens with a goal mouth, numbers and advice', !q('#gk-view').hidden && qa('#gkv-goal rect').length>=2 && /shoot/.test(q('#gkv-nums').textContent) && /lob/.test(q('#gkv-nums').textContent) && q('#gkv-advice').textContent.length>3);
+    q('#gk-toggle').click(); await wait(20);
+    ok('keeper view closes', q('#gk-view').hidden);
+    // editor: tick the shot step
+    q('#new-scenario-btn').click(); await wait(40);
+    if (!q('#editor-modal').hidden) {
+      ok('editor has a “this step is the shot” control', !!q('#ed-shot') && !!q('#ed-shot-kind'));
+      qa('#cmd-groups .cmd-btn').find(b=>b.dataset.cmd==='shoot').click(); await wait(30);
+      ok('the shoot audible marks the frame in the editor', edit_hasShot());
+      q('#ed-cancel').click(); await wait(20);
+    }
+    function edit_hasShot(){ const chips=qa('#frame-chips .frame-chip').length; return chips>=2 && !!q('#ed-shot'); }
   }
 
   console.log('\n[7] Basics + i18n');

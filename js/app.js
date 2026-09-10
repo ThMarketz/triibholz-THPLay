@@ -395,10 +395,10 @@
     { icon:'⚠', title:'Fouls & penalties', body:[
       '<strong>Ordinary (minor) fouls</strong> — pushing the ball under, two hands on the ball (field players), impeding a free player — give a <strong>free throw / change of possession</strong>.',
       '<strong>Major (exclusion) fouls</strong> — holding/sinking an opponent, tactical fouls — send the offender to the re‑entry corner for <strong>18 seconds</strong> (a “man‑up”); they return at the earliest of 18 s served, a goal, or their team being awarded a free throw / goal throw / penalty.',
-      'A major foul inside <strong>5 m</strong> that stops a likely goal is a <strong>penalty shot</strong> from the 5 m line — in the last minute the coach may choose possession instead (clock reset to 28 s).' ] },
+      'A major foul inside the <strong>6 m area</strong> that stops a likely goal is a <strong>penalty shot</strong>, taken from the 5 m line — in the last minute the coach may choose possession instead (clock reset to 28 s).' ] },
     { icon:'✛', title:'The goalkeeper', body:[
       'Wears the <strong>red cap</strong> and defends the goal.',
-      'Inside the 5 m area the keeper may <strong>use two hands</strong> and (where depth allows) push off the bottom — things field players can’t do.',
+      'Inside the 6 m area the keeper may <strong>use two hands</strong> and (where depth allows) push off the bottom — things field players can’t do.',
       'The keeper starts the counter‑attack: a fast, accurate outlet pass turns defence into offence.' ] },
     { icon:'≈', title:'Core skills', body:[
       '<strong>Eggbeater kick</strong> — the alternating leg motion that keeps you high and stable without using your hands.',
@@ -742,6 +742,8 @@
     if ($('dl-btn')) { $('dl-btn').hidden = true; $('share-btn').hidden = true; }
     if ($('tpl-btn')) $('tpl-btn').hidden = true;
     if ($('shared-banner')) $('shared-banner').hidden = true;
+    if ($('gk-view')) $('gk-view').hidden = true;
+    if ($('my-cue')) $('my-cue').hidden = true;
     $('assign-list').innerHTML = ''; POOL.render($('pool'));
   }
 
@@ -789,6 +791,112 @@
     if (state.viewer && state.mode !== 'problem') state.viewer.setPaths(show);
   }
   function toggleSteps() { try { localStorage.setItem('thplay.showSteps', stepsShown() ? '0' : '1'); } catch (e) {} applySteps(); }
+
+  /* ======================================================
+     SHOT-CHANCE ZONES + THE KEEPER'S VIEW
+     Both read js/shot.js, which owns the geometry and the chance model.
+     ====================================================== */
+  const ZONE_FILL = { green: '#2ecc71', yellow: '#ffd166' };
+  function zonesShown() { try { return localStorage.getItem('thplay.showZones') === '1'; } catch (e) { return false; } }
+  function paintZones(layers) {
+    if (!layers || !layers.zoneLayer || typeof SHOT === 'undefined') return;
+    const zl = layers.zoneLayer;
+    while (zl.firstChild) zl.removeChild(zl.firstChild);
+    if (!zonesShown()) return;
+    SHOT.bands().forEach(b => {
+      zl.appendChild(POOL.svg('rect', { x: b.x, y: b.y, width: b.w, height: b.h, rx: 3,
+        fill: ZONE_FILL[b.id], 'fill-opacity': b.id === 'green' ? 0.20 : 0.13,
+        stroke: ZONE_FILL[b.id], 'stroke-width': 1, 'stroke-dasharray': '5 3', 'stroke-opacity': 0.75 }));
+      const t = POOL.svg('text', { x: b.x + 4, y: b.y + 9, 'font-size': 6, 'font-weight': 800,
+        fill: ZONE_FILL[b.id], 'font-family': 'Helvetica, Arial, sans-serif', opacity: 0.9 });
+      t.textContent = Math.round(b.pct * 100) + '%';
+      zl.appendChild(t);
+    });
+    const leg = POOL.svg('text', { x: POOL.WATER.x0 + 4, y: POOL.WATER.y1 - 4, 'font-size': 5.4,
+      fill: '#cfe9f2', opacity: 0.85, 'font-family': 'Helvetica, Arial, sans-serif' });
+    leg.textContent = 'green ~70% · yellow ~30% · rest <10% — coach’s guide, not a measurement';
+    zl.appendChild(leg);
+  }
+  function applyZones() {
+    const on = zonesShown();
+    const b = $('zones-toggle');
+    if (b) { b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+    if (state.renderer && state.renderer.layers) paintZones(state.renderer.layers);
+    if (adjust.layers) paintZones(adjust.layers);
+    if (edit.layers) paintZones(edit.layers);
+  }
+  function toggleZones() { try { localStorage.setItem('thplay.showZones', zonesShown() ? '0' : '1'); } catch (e) {} applyZones(); }
+
+  /* ---- the keeper's view ---- */
+  function gkShown() { try { return localStorage.getItem('thplay.showGk') === '1'; } catch (e) { return false; } }
+  function toggleGk() { try { localStorage.setItem('thplay.showGk', gkShown() ? '0' : '1'); } catch (e) {} applyGk(); updateGkView(); }
+  function applyGk() {
+    const on = gkShown(), b = $('gk-toggle');
+    if (b) { b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+    const panel = $('gk-view'); if (panel && !on) panel.hidden = true;
+  }
+  function currentBoardFrame() {
+    if (adjust.live && adjust.scn) return adjust.scn.frames[adjust.idx];
+    const scn = state.scenarios.find(x => x.id === state.selectedId);
+    if (!scn) return null;
+    if (state.viewer && typeof ANIM.stateAt === 'function') { try { return ANIM.stateAt(scn, state.viewer.t); } catch (e) {} }
+    return scn.frames[0];
+  }
+  function markedShotFrame() {
+    const scn = adjust.live && adjust.scn ? adjust.scn : state.scenarios.find(x => x.id === state.selectedId);
+    if (!scn) return null;
+    const i = adjust.live ? adjust.idx : (state.viewer ? state.viewer.currentStep() : 0);
+    const f = scn.frames[i], n = scn.frames[i + 1];
+    if (f && f.shot) return f.shot;
+    if (n && n.shot) return n.shot;
+    return null;
+  }
+  function drawGoalMouth(view) {
+    const svgEl = $('gkv-goal'); if (!svgEl) return;
+    while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+    const X0 = 6, X1 = 114, Y0 = 6, Y1 = 38, W = X1 - X0, H = Y1 - Y0;
+    const add = (tag, at) => { const e = POOL.svg(tag, at); svgEl.appendChild(e); return e; };
+    add('rect', { x: X0, y: Y0, width: W, height: H, rx: 1.5, fill: '#06131c', stroke: '#e6f6fb', 'stroke-width': 1.6 });
+    for (let i = 1; i < 6; i++) add('line', { x1: X0 + W * i / 6, y1: Y0, x2: X0 + W * i / 6, y2: Y1, stroke: '#e6f6fb', 'stroke-width': 0.3, opacity: 0.25 });
+    if (view.bestGap && view.bestGap.size > 0.06)
+      add('rect', { x: X0 + view.bestGap.a * W, y: Y0, width: (view.bestGap.b - view.bestGap.a) * W, height: H,
+        fill: '#2ecc71', 'fill-opacity': 0.28, stroke: '#2ecc71', 'stroke-width': 1, 'stroke-dasharray': '3 2' });
+    (view.blockers || []).forEach(b => add('rect', { x: X0 + b.a * W, y: Y0 + H * 0.28, width: Math.max(1.5, (b.b - b.a) * W), height: H * 0.72,
+      fill: '#0b1b25', 'fill-opacity': 0.9, stroke: '#8fb8ff', 'stroke-width': 0.8 }));
+    if (view.keeper) {
+      // the keeper reaches roughly two-thirds of the 0.9 m cage height — never floor to crossbar
+      const kx = X0 + view.keeper.a * W, kw = Math.max(3, (view.keeper.b - view.keeper.a) * W);
+      add('rect', { x: kx, y: Y0 + H * 0.34, width: kw, height: H * 0.66, rx: 2, fill: '#e2413a', 'fill-opacity': 0.85, stroke: '#ffdede', 'stroke-width': 0.8 });
+    }
+    add('line', { x1: X0, y1: Y1, x2: X1, y2: Y1, stroke: '#3fd0e0', 'stroke-width': 2 });      // water line
+    const t = add('text', { x: X0 + W / 2, y: 46, 'text-anchor': 'middle', 'font-size': 5.4, fill: '#9fd7e4', 'font-family': 'Helvetica, Arial, sans-serif' });
+    t.textContent = view.keeperMissing
+      ? 'no keeper in this step'
+      : 'keeper + blockers cover ~' + (Math.round(view.coverPct * 10) * 10) + '% of the width';
+  }
+  function updateGkView() {
+    const panel = $('gk-view'); if (!panel) return;
+    const scn = state.scenarios.find(x => x.id === state.selectedId);
+    if (!gkShown() || !scn || state.mode === 'problem' || typeof SHOT === 'undefined') { panel.hidden = true; return; }
+    const f = currentBoardFrame(); if (!f) { panel.hidden = true; return; }
+    const marked = markedShotFrame();
+    const c = SHOT.chance(f, { shooter: marked ? marked.by : null, manUp: scn.situation === '6v5' || scn.situation === '5v4' });
+    if (!c) { panel.hidden = true; return; }
+    drawGoalMouth(c);
+    const pct = v => Math.round(v * 100) + '%';
+    $('gkv-badge').hidden = !marked;
+    if (marked) $('gkv-badge').textContent = marked.kind === 'lob' ? 'LOB' : 'SHOT';
+    $('gkv-nums').innerHTML =
+      `<span class="gkv-n gkv-shoot"><b>${pct(c.shootPct)}</b> shoot</span>` +
+      `<span class="gkv-n gkv-lob"><b>${pct(c.lobPct)}</b> lob</span>` +
+      `<span class="gkv-n">${c.blockerCount} in the lane</span>` +
+      (c.keeperOutM == null ? '<span class="gkv-n">no keeper</span>' : `<span class="gkv-n">keeper ${c.keeperOutM} m out</span>`) +
+      `<span class="gkv-n">${c.distanceM} m · ${c.angleDeg}°</span>` +
+      `<span class="gkv-n gkv-zone gkv-${c.zone}">${c.zone}</span>`;
+    $('gkv-advice').textContent = c.advice;
+    const basis = $('gkv-basis'); if (basis) basis.textContent = c.basis + ' ' + c.lobBasis;
+    panel.hidden = false;
+  }
   function buildViewer(t0, andPlay) {
     const scn = state.scenarios.find(s=>s.id===state.selectedId);
     if (!scn) return;
@@ -798,8 +906,9 @@
     state.viewer.setOnState(onPlayState);
     state.viewer.setFocus(state.focus);
     applySteps();
+    paintZones(state.renderer && state.renderer.layers);
     if (state.viewer.setSpeed) state.viewer.setSpeed(savedSpeed());
-    updateMyCue();
+    updateMyCue(); lastGkStep = -1; updateGkView();
     if (t0) state.viewer.seek(t0);
     if (andPlay) state.viewer.play();
   }
@@ -841,7 +950,9 @@
     $('frame-label').textContent = `Step ${Math.min(total, step+1)} / ${total}`;
     const fl = $('fsb-label'); if (fl) fl.textContent = `Step ${Math.min(total, step+1)} / ${total}`;
     updateMyCue(step, total);
+    if (step !== lastGkStep) { lastGkStep = step; updateGkView(); }   // once per step, not per frame
   }
+  let lastGkStep = -1;
   /* ---- "what do I do now?" — one line for the focused player, per step ---- */
   function cueFor(scn, pos, step) {
     const fr = scn.frames, n = fr.length, i = Math.max(0, Math.min(step, n - 1));
@@ -863,7 +974,8 @@
     if (i < n - 1) {
       if (cb === me && ca !== me) parts.push('receive the pass');
       if (ca === me && cb && cb !== me) parts.push('pass to ' + String(cb).replace(/^A/, ''));
-      if (ca === me && !cb && b.ball && b.ball.x != null && b.ball.x >= 285) parts.push('shoot');
+      if (b.shot && String(b.shot.by) === String(pos)) parts.push(b.shot.kind === 'lob' ? 'lob it over the keeper' : 'shoot');
+      else if (ca === me && !cb && b.ball && b.ball.x != null && b.ball.x >= 285) parts.push('shoot');
       if (ca === me && cb === me && !parts.length) parts.push('keep the ball, read the defence');
     }
     if (!parts.length) parts.push(i >= n - 1 ? 'finish — hold your position' : 'hold your position, stay ready');
@@ -1350,7 +1462,8 @@
   function renderAdjustBoard() {
     const f = adjust.scn.frames[adjust.idx];
     adjust.layers = POOL.render($('pool'));
-    const refresh = () => ANIM.drawTactics(adjust.layers, adjust.scn, state.focus);
+    paintZones(adjust.layers);
+    const refresh = () => { ANIM.drawTactics(adjust.layers, adjust.scn, state.focus); updateGkView(); };
     refresh();
     // one undo snapshot per drag gesture (a gesture = pointerdown → pointerup)
     const snapshot = () => {
@@ -1395,6 +1508,7 @@
     const total = adjust.scn.frames.length;
     $('frame-label').textContent = `Step ${adjust.idx+1} / ${total}`;
     { const fl = $('fsb-label'); if (fl) fl.textContent = `Step ${adjust.idx+1} / ${total}`; }
+    updateGkView();
     $('scrub').value = Math.round(stepT() * 1000);
     updateUndoBtn();
   }
@@ -2003,7 +2117,28 @@
     if (f.gk) addEditableDisc(layers,'GK','GK',f.gk);
     (f.extra||[]).forEach((e,i)=> addEditableExtra(layers, e, i));
     addEditableBall(layers, f);
-    buildFrameChips(); buildCarrierSelect();
+    buildFrameChips(); buildCarrierSelect(); syncShotControls(); paintZones(edit.layers);
+  }
+  /* mark the current keyframe as "the shot happens here" */
+  function shooterForFrame() {
+    const i = edit.idx, fr = edit.scenario.frames;
+    const prev = fr[i - 1], cur = fr[i];
+    const c = (prev && prev.ball && prev.ball.carrier) || (cur && cur.ball && cur.ball.carrier) || '';
+    return (c && c[0] === 'A') ? c.slice(1) : null;
+  }
+  function syncShotControls() {
+    const box = $('ed-shot'); if (!box) return;
+    const f = currentFrame(), who = (f.shot && f.shot.by) || shooterForFrame();
+    box.checked = !!(f.shot && f.shot.by);
+    box.disabled = !who;
+    $('ed-shot-kind').value = (f.shot && f.shot.kind) || 'shot';
+    $('ed-shot-kind').disabled = !box.checked;
+    $('ed-shot-label').textContent = who ? `◎ Step ${edit.idx + 1}: ${who} shoots` : '◎ Shot (needs a ball carrier)';
+  }
+  function setShotOnFrame(on) {
+    const f = currentFrame(), who = (f.shot && f.shot.by) || shooterForFrame();
+    if (on && who) SHOT.markShot(f, who, $('ed-shot-kind').value); else delete f.shot;
+    syncShotControls(); drawEditorPathsRefresh();
   }
   function drawEditorPaths(layers, scenario) { ANIM.drawTactics(layers, scenario, null); }
   function addEditableDisc(layers, team, pos, pt) {
@@ -2075,7 +2210,8 @@
   }
 
   function addFrame() {
-    edit.scenario.frames.splice(edit.idx+1,0,DATA.clone(currentFrame()));
+    const nf = DATA.clone(currentFrame()); delete nf.shot;   // a shot belongs to ONE step
+    edit.scenario.frames.splice(edit.idx+1,0,nf);
     edit.idx++; editorRender();
     toast('Step recorded — drag players to their next spots');
   }
@@ -2263,6 +2399,10 @@
     const afterFocusChange = ()=>{ if(state.viewer)state.viewer.setFocus(state.focus); if(adjust.live)renderAdjustBoard(); syncFocusUI(); const s=state.scenarios.find(x=>x.id===state.selectedId); if(s)renderAssignments(s); updateMyCue(); };
     $('view-team').onclick = ()=>{ state.viewMode='team'; state.focus=null; afterFocusChange(); };
     $('steps-toggle').onclick = toggleSteps;
+    $('zones-toggle').onclick = toggleZones; applyZones();
+    $('gk-toggle').onclick = toggleGk; applyGk();
+    $('ed-shot').onchange = e => setShotOnFrame(e.target.checked);
+    $('ed-shot-kind').onchange = () => { if ($('ed-shot').checked) setShotOnFrame(true); };
     document.querySelectorAll('#speed-seg [data-speed]').forEach(b => b.onclick = () => applySpeed(b.dataset.speed));
     applySpeed(savedSpeed());
     $('fs-btn').onclick = () => toggleFull();

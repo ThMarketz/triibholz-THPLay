@@ -64,10 +64,29 @@ const ANIM = (() => {
      Coaching convention: SOLID arrow = player movement (one arrow per step),
      DASHED orange arrow with a numbered chip = pass / ball travel.
      Defenders and the keeper stay as faint context so the attack reads first. */
+  /* a step flagged as the shot gets a dashed shot line and a target ring */
+  function drawShotMarks(layers, scenario) {
+    const frames = (scenario && scenario.frames) || [];
+    frames.forEach((f, i) => {
+      const sh = f && f.shot && f.shot.by;
+      if (!sh) return;
+      const from = frames[i - 1] ? ballPoint(frames[i - 1]) : ballPoint(f);
+      const to = ballPoint(f);
+      const lob = f.shot.kind === 'lob';
+      layers.pathLayer.appendChild(POOL.svg('line', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, stroke: '#ffd166',
+        'stroke-width': 2.2, 'stroke-dasharray': lob ? '2 4' : '7 3', opacity: 0.95, 'stroke-linecap': 'round' }));
+      [5.5, 8.5].forEach((r, k) => layers.pathLayer.appendChild(POOL.svg('circle', { cx: to.x, cy: to.y, r: r,
+        fill: 'none', stroke: '#ffd166', 'stroke-width': k ? 1 : 2, opacity: k ? 0.55 : 0.95 })));
+      const t = POOL.svg('text', { x: to.x, y: to.y - 12, 'text-anchor': 'middle', fill: '#ffd166',
+        'font-size': 6.4, 'font-weight': 800, 'font-family': 'Helvetica, Arial, sans-serif' });
+      t.textContent = (lob ? 'LOB ' : 'SHOT ') + sh;
+      layers.pathLayer.appendChild(t);
+    });
+  }
   function drawTactics(layers, scenario, focusPos) {
     while (layers.pathLayer.firstChild) layers.pathLayer.removeChild(layers.pathLayer.firstChild);
     const frames = scenario.frames;
-    if (!frames || frames.length < 2) return;
+    if (!frames || frames.length < 2) { drawShotMarks(layers, scenario); return; }
     const moved = (a, b) => a && b && (Math.abs(a.x-b.x) > 3 || Math.abs(a.y-b.y) > 3);
     // pull both ends in so arrows sit BESIDE discs, not underneath them
     const trim = (a, b, ts, te) => {
@@ -130,6 +149,7 @@ const ANIM = (() => {
       t.textContent = passNo; g.appendChild(t);
       layers.pathLayer.appendChild(g);
     }
+    drawShotMarks(layers, scenario);
   }
 
   /* ---------- a Renderer bound to one svg ---------- */
@@ -312,5 +332,5 @@ const ANIM = (() => {
     return { play, pause, toggle, stop, seek, stepFwd, stepBack, gotoStep, currentStep, segCount, setScenario, setFocus, setPaths, setOnState, setSpeed, getSpeed, get playing(){return playing;}, get t(){return t;} };
   }
 
-  return { Renderer, Player, stateAt, ballPoint, drawTactics };
+  return { Renderer, Player, stateAt, ballPoint, drawTactics, drawShotMarks };
 })();

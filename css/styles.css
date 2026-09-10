@@ -907,3 +907,30 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .fs-bar.placed.show{transform:translateY(0)}
 .fsb-grip{color:#7fd4de;font-size:1rem;letter-spacing:-1px;padding:0 4px 0 0;user-select:none;cursor:grab}
 .fs-bar.dragging .fsb-grip{cursor:grabbing}
+
+/* ---- shot zones + keeper's view (v1.30) ---- */
+#zones-toggle.active{background:#2ecc71;color:#04151a;border-color:#2ecc71}
+#gk-toggle.active{background:#e2413a;color:#fff;border-color:#e2413a}
+.gk-view{position:absolute;left:12px;top:12px;z-index:8;width:min(38%,270px);padding:9px 11px;border-radius:12px;
+  background:rgba(6,21,31,.9);border:1px solid rgba(226,65,58,.6);backdrop-filter:blur(4px);pointer-events:none;
+  display:flex;flex-direction:column;gap:5px}
+.gkv-head{display:flex;align-items:center;gap:6px;font-size:.82rem;color:#ffdede}
+.gkv-badge{margin-left:auto;font-size:.64rem;font-weight:800;letter-spacing:.08em;background:#ffd166;color:#04151a;border-radius:4px;padding:1px 5px}
+#gkv-goal{width:100%;height:auto;display:block}
+.gkv-nums{display:flex;flex-wrap:wrap;gap:4px}
+.gkv-n{font-size:.68rem;padding:2px 6px;border-radius:999px;background:rgba(255,255,255,.07);color:#cfe9f2;white-space:nowrap}
+.gkv-n b{font-size:.82rem;color:#fff}
+.gkv-shoot{background:rgba(46,204,113,.22)}.gkv-lob{background:rgba(255,209,102,.18)}
+.gkv-zone{text-transform:uppercase;font-weight:700;letter-spacing:.04em}
+.gkv-green{background:rgba(46,204,113,.3);color:#bff5d5}.gkv-yellow{background:rgba(255,209,102,.28);color:#ffeab8}
+.gkv-red{background:rgba(226,65,58,.3);color:#ffd4d1}
+.gkv-advice{font-size:.78rem;color:#fff;line-height:1.3}
+.gkv-basis{font-size:.67rem;line-height:1.3;color:#a8c6d2}
+.layout.stage-full .gk-view{width:min(30%,340px)}
+@media (max-width:760px){.gk-view{width:min(60%,240px);right:8px;top:8px}}
+#ed-shot-wrap{white-space:nowrap}
+
+/* the keeper view lives on the defensive (left) end so it never covers the attacked goal;
+   the player cue slides under it when both are open */
+#gk-view:not([hidden]) ~ .my-cue{top:auto;bottom:12px}
+@media (max-width:760px){.gk-view{left:8px;right:auto;top:8px}}

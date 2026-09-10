@@ -185,13 +185,17 @@ const POOL = (() => {
     bracket(WATER.x0, WATER.y1, +1, -1);  // bottom-left
     bracket(WATER.x1, WATER.y1, -1, -1);  // bottom-right
 
+    // zoneLayer sits under the arrows and discs: shot-chance territory is painted here.
+    // Nothing else wipes it (drawTactics only clears pathLayer), so it survives playback.
+    const zoneLayer = svg('g', { id: 'zone-layer', 'clip-path': 'url(#waterClip)' });
     const pathLayer = svg('g', { id: 'path-layer' });
     const splashLayer = svg('g', { id: 'splash-layer', 'clip-path': 'url(#waterClip)' });
     const discLayer = svg('g', { id: 'disc-layer' });
+    svgEl.appendChild(zoneLayer);
     svgEl.appendChild(pathLayer);
     svgEl.appendChild(splashLayer);
     svgEl.appendChild(discLayer);
-    return { pathLayer, splashLayer, discLayer, WATER };
+    return { zoneLayer, pathLayer, splashLayer, discLayer, WATER };
   }
 
   /* Build a player disc <g>. team: 'A' white | 'D' black | 'GK' red. small=waiting */

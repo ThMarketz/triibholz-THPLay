@@ -88,6 +88,16 @@ const HELP = (() => {
       'A share link works without a login for the play itself; saving it into a playbook needs a signed-in (or demo) user.',
     ]},
 
+    shooting: { icon:'🎯', title:'Shot zones, the shot step &amp; the keeper’s view', steps:[
+      '<strong>Zones 🟩</strong> in the controls paints the shot-chance territory on any play: <span style="color:#2ecc71">green</span> (inside 4 m and no wider than a metre outside the posts) ~70%, <span style="color:#ffd166">yellow</span> (out to 7 m, two metres outside the posts) ~30%, everything else under 10%. Toggle it on and off at any time; it is remembered on this device.',
+      'Those percentages are a <strong>coaching guide, not a measurement</strong>. Published elite data has no spot-level probability: what it does have is situation rates — penalty ~80%, man-up ~48%, even play ~24% — and one solid modifier: a defender in the shooting lane cuts conversion by about a fifth (0.43 → 0.34). See docs/SHOT_ZONES.md.',
+      '<strong>Mark the shot step.</strong> In the editor, tick <em>“Step N: 4 shoots”</em> next to the ball carrier (or use the ⚡ audibles <em>Take the shot</em> / <em>Lob over the keeper</em>). The board then draws the shot line and a target ring, the shooter’s cue says “shoot”, and the play finally states where it finishes.',
+      '<strong>Keeper view 🧤</strong> opens a small panel on the board showing the goal mouth as the shooter sees it: the keeper in red, any defender in the lane in dark, the biggest open gap in green, and the chance for a shot or a lob from that spot.',
+    ], tips:[
+      'The lob number only becomes interesting once the keeper is off the line — that is the situation the lob exists for. Lobs are rare (1–7% of elite shots) and, overall, less successful than a drive shot.',
+      'Zones are drawn for the goal you attack (the right-hand goal on the board).',
+    ]},
+
     privacy: { icon:'🔒', title:'Confidential tactics &amp; anonymous learning', steps:[
       'Every play has a <strong>Who can see it</strong> setting: <strong>👥 Team</strong> (your team only, the default), <strong>🌐 Club</strong> (everyone in the club) or <strong>🔒 Private</strong> (only you — for confidential tactics). Others simply never see private plays in their library.',
       '<strong>The system still learns from private plays — anonymously.</strong> It reduces a play to a handful of pattern features (situation, number of steps, passes, shot zone, a coarse formation shape) and strips the title, description, notes, owner and club. The play itself never leaves the device.',

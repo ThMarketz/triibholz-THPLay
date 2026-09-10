@@ -574,7 +574,7 @@ const DATA = (() => {
       why:'It marks the midpoint of the field of play between the two goals.' },
     { q:'A penalty throw is taken from which line?',
       a:['The 2 m line','The 5 m line','The half line'], correct:1,
-      why:'A major foul inside 5 m that stops a likely goal is a penalty from the 5 m line.' },
+      why:'A major foul inside the 6 m area that stops a likely goal is a penalty, taken from the 5 m line.' },
     { q:'Roughly how long does a team have to shoot each possession (shot clock)?',
       a:['About 28 seconds','About 45 seconds','No limit'], correct:0,
       why:'Rule 4.1 (2025): maximum possession time is 28 seconds.' },

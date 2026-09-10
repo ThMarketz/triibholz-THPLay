@@ -264,6 +264,13 @@
             <span class="fsb-speed" id="fsb-speed"><button class="fsb sm" data-speed="0.25">¼×</button><button class="fsb sm" data-speed="0.5">½×</button><button class="fsb sm active" data-speed="1">1×</button><button class="fsb sm" data-speed="1.5">1½×</button></span>
             <button class="fsb" id="fsb-exit" title="Leave full screen (Esc)">✕</button>
           </div>
+          <div class="gk-view" id="gk-view" hidden>
+            <div class="gkv-head"><strong>🧤 Keeper’s view</strong><span class="gkv-badge" id="gkv-badge" hidden>SHOT</span></div>
+            <svg id="gkv-goal" viewBox="0 0 120 48" preserveAspectRatio="xMidYMid meet" aria-label="Goal mouth as the shooter sees it"></svg>
+            <div class="gkv-nums" id="gkv-nums"></div>
+            <div class="gkv-advice" id="gkv-advice"></div>
+            <div class="gkv-basis" id="gkv-basis">Coach’s guide, not a measured statistic.</div>
+          </div>
           <div class="my-cue" id="my-cue" hidden><span class="mc-who" id="mc-who">You (3) · step 1/4</span><strong id="mc-text">Drive to 2 m</strong><span class="mc-note" id="mc-note"></span></div>
           <button class="audible-btn" id="audible-btn" hidden title="Call a tactical command">⚡ Audible</button>
           <div class="audible-sheet" id="audible-sheet" hidden>
@@ -328,6 +335,8 @@
             </span>
             <button class="vt-btn" id="fs-btn" title="Full-screen board (Esc to leave)">⛶</button>
             <button class="vt-btn steps-btn active" id="steps-toggle" title="Show or hide the step notes and arrows — hide them to watch the pure movement" aria-pressed="true"><span data-i18n="view.steps">Steps</span> 👁</button>
+            <button class="vt-btn" id="zones-toggle" title="Show the shot-chance territory: green ~70%, yellow ~30%, red under 10% (coach's guide)" aria-pressed="false"><span data-i18n="view.zones">Zones</span> 🟩</button>
+            <button class="vt-btn" id="gk-toggle" title="Goalkeeper's view — what the keeper covers from the shooter's spot, and the chance of a shot or a lob (a coach's guide, not a measured statistic)" aria-pressed="false"><span data-i18n="view.gk">Keeper view</span> 🧤</button>
             <select id="focus-pos" class="focus-select" title="Focus a position">
               <option value="" data-i18n="view.focus">Focus…</option>
               <option value="1">Player 1</option>
@@ -502,6 +511,10 @@
           <div class="ef-right">
             <span class="ef-label">Ball carrier</span>
             <select id="ball-carrier" class="focus-select"></select>
+            <label class="fa-check" id="ed-shot-wrap" title="Mark this step as the shot: the board draws the shot line and the target ring, and the keeper view opens on it">
+              <input type="checkbox" id="ed-shot" /> <span id="ed-shot-label">◎ This step is the shot</span>
+            </label>
+            <select id="ed-shot-kind" class="focus-select" title="Shot or lob"><option value="shot">Shot</option><option value="lob">Lob</option></select>
             <span class="ef-hint">Drag players & the ball, then “Capture step”. Build the movement step by step — it records and plays back.</span>
           </div>
         </div>
@@ -535,6 +548,7 @@
   <script src="js/animate.js"></script>
   <script src="js/vision.js"></script>
   <script src="js/field.js"></script>
+  <script src="js/shot.js"></script>
   <script src="js/track.js"></script>
   <script src="js/bytetrack.js"></script>
   <script src="js/events.js"></script>

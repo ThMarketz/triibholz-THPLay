@@ -55,6 +55,9 @@ const COMMANDS = (() => {
   const marker = (f, atkKey, used) => f.att[atkKey] ? nearestKey(f.def, f.att[atkKey], used) : null;
   const ballSide = f => { const b = carrierPt(f); return b && b.y > CY ? 'right' : 'left'; };   // which wing side the ball is on
   const sideY = side => side === 'right' ? RWY : LWY;
+  // notes share ONE namespace (attacker '3', defender '3' and 'GK' all write the same slot),
+  // so never overwrite — append.
+  const note = (notes, k, txt) => { if (!k || !txt) return; notes[k] = notes[k] ? notes[k] + ' ' + txt : txt; };
   const pickTarget = (base, ctx, fallback) => (ctx.target !== 'team' && base.att[ctx.target]) ? ctx.target : fallback;
   const pickDef = (base, ctx, fallback) => (ctx.target !== 'team' && base.def[ctx.target]) ? ctx.target : fallback;
 
@@ -330,15 +333,16 @@ const COMMANDS = (() => {
         return { steps: [s1], notes };
       } },
 
-    { id: 'foul-reset', side: 'defense', scope: 'player', icon: '✋', name: 'Ordinary foul to stop the drive',
-      when: 'A driver has beaten their man outside 5 m, or the attack has rhythm.',
-      cue: 'The nearest defender fouls the ball-carrier from the side / behind, on the ball (ordinary foul, no free shot outside 6 m if done inside). Everyone re-sets their marks during the free throw.',
-      why: 'A free throw stops the play and lets the defence organise; inside 2 m or with a shooting advantage it becomes an exclusion or a penalty, so choose the spot.',
+    { id: 'foul-reset', side: 'defense', scope: 'player', icon: '✋', name: 'Ordinary foul on the ball-carrier',
+      when: 'A SETTLED attack: the centre forward or a driver has the ball with their back to goal, and is not in a shooting action.',
+      cue: 'The marking defender impedes the ball-carrier — body on, no hold, no sink. The whistle stops both clocks, the free throw is taken where the ball is, and the defence re-sets its marks while the thrower puts it back in play.',
+      why: 'An ordinary foul carries no personal foul and there is no limit on them, so it is the cheap way to break a set attack. Three lines you must not cross: it does NOT reset the shot clock (the possession clock resumes where it froze); holding, sinking or pulling back an opponent is a MAJOR foul and an 18 s exclusion, not a free throw; and fouling to kill the flow of an attack — above all a counter — is a tactical foul, also an exclusion (Art. 9.11). Impeding a shooter from behind inside 6 m is a penalty (Art. 10.11).',
       build(base, ctx) {
         const b = carrierPt(base) || { x: FIVEX, y: CY };
         const d = pickDef(base, ctx, nearestKey(base.def, b, null)); if (!d) return null;
         const s1 = clone(base); s1.def[d] = clamp({ x: b.x - 5, y: b.y + (base.def[d].y < b.y ? -3 : 3) });
-        const notes = {}; notes[d] = 'Foul on the ball, from the side — never from behind on a shooter inside 6 m. Then everyone re-sets.';
+        const notes = {}; note(notes, d, 'Body on the ball-carrier from the side — impede, never hold or sink (that is an exclusion), and never from behind on a shooter inside 6 m (that is a penalty). Then re-set your mark.');
+        keys(base.def).forEach(k => { if (k !== d) notes[k] = notes[k] || 'Free throw: find your mark and get goal-side while the ball is dead.'; });
         return { steps: [s1], notes };
       } },
 
@@ -383,6 +387,81 @@ const COMMANDS = (() => {
         return { steps: [s1], notes };
       } },
 
+    { id: 'shoot', side: 'offense', scope: 'player', icon: '🎯', name: 'Take the shot (mark the shot step)',
+      when: 'The carrier has the cage: green territory, or a gap the keeper cannot cover.',
+      cue: 'The player holding the ball shoots. The step is MARKED as the shot — the board draws the shot line and the target ring, the shooter is told "shoot", and the goalkeeper view opens on that step.',
+      why: 'A play should say where it finishes. Marking the shot also lets the app judge the chance from that spot: territory, the keeper\u2019s coverage and any defender in the lane.',
+      build(base, ctx) {
+        const a = pickTarget(base, ctx, carrierKey(base) || roles(base).hole); if (!a || !base.att[a]) return null;
+        const p = base.att[a];
+        const gk = base.gk || { x: GOALX + 2, y: CY };
+        // aim away from where the keeper is standing
+        const aim = gk.y >= CY ? Math.max(96, CY - 14) : Math.min(124, CY + 14);
+        const s1 = clone(base); s1.ball = { carrier: 'A' + a };
+        const s2 = clone(s1); s2.ball = { carrier: null, x: 293, y: aim };
+        s2.shot = { by: String(a), kind: 'shot' };
+        const notes = {}; notes[a] = 'Shoot — pick the corner the keeper is not covering, and finish in one motion.';
+        return { steps: [s1, s2], notes };
+      } },
+
+    { id: 'lob', side: 'offense', scope: 'player', icon: '🌈', name: 'Lob over the keeper',
+      when: 'The keeper has come off the line towards the ball, and you are at an angle to one side of the goal.',
+      cue: 'A high, soft, cross-cage ball over the advanced keeper into the far top corner. Marked as the shot step, drawn as a dotted arc.',
+      why: 'Off the line the keeper cannot get back to a slow high ball dropping behind them. Honest caveat: lobs are only 1-7% of elite shots and are, overall, LESS successful than a drive shot — this is the one situation coaching consensus says they belong in.',
+      build(base, ctx) {
+        const a = pickTarget(base, ctx, carrierKey(base) || roles(base).lw); if (!a || !base.att[a]) return null;
+        const p = base.att[a];
+        const s1 = clone(base); s1.ball = { carrier: 'A' + a };
+        const s2 = clone(s1); s2.ball = { carrier: null, x: 293, y: p.y >= CY ? 96 : 124 };   // cross-cage
+        s2.shot = { by: String(a), kind: 'lob' };
+        const notes = {}; note(notes, a, 'Lob cross-cage over the keeper — high and soft into the far corner, not hard.');
+        note(notes, 'GK', 'This is what an advanced keeper concedes: get set before the release instead of drifting out.');
+        return { steps: [s1, s2], notes };
+      } },
+
+    { id: 'draw-foul', side: 'offense', scope: 'player', icon: '🫱', name: 'Draw the ordinary foul',
+      when: 'The set attack has stalled, or you want uncontested possession to re-set the front court.',
+      cue: 'The attacker drives with the ball ON THE WATER (dribbling, not holding it) and turns into the defender. The hold comes, the whistle goes, and the free throw is taken where the ball is.',
+      why: 'Know which whistle you are playing for. A defender who IMPEDES you while you are not holding the ball gives away an ordinary foul — a free throw. A defender who HOLDS, SINKS or PULLS YOU BACK gives away a major foul — an 18 s exclusion, and a man-up converts at about 48%. Either way you must be dribbling, because neither foul exists against a player holding the ball. What the free throw buys: both clocks stop at the whistle, the defender must move a metre away before they may block, and you get an uncontested pass to re-set. What it does NOT buy: the possession clock does not reset, it resumes where it froze.',
+      build(base, ctx) {
+        const R = roles(base);
+        const a = pickTarget(base, ctx, carrierKey(base) || R.hole); if (!a || !base.att[a]) return null;
+        const d = marker(base, a, null);
+        const s1 = clone(base);
+        s1.att[a] = clamp({ x: base.att[a].x + 8, y: base.att[a].y });
+        if (d) s1.def[d] = clamp({ x: s1.att[a].x + 4, y: s1.att[a].y + (base.def[d].y < base.att[a].y ? -3 : 3) });
+        s1.ball = { carrier: 'A' + a };
+        const s2 = clone(s1);                                     // the whistle: the defender must give a metre
+        if (d) s2.def[d] = clamp({ x: s1.def[d].x + 11, y: s1.def[d].y });
+        const notes = {};
+        note(notes, a, 'Dribble in and turn into your defender — do NOT pick the ball up. If they only impede you, take the free throw at once; if they hold or sink you, sell it and play the man-up.');
+        [R.point, R.lf, R.rf].forEach(k => { if (k && k !== a && !notes[k]) note(notes, k, 'Free throw coming: get to your spot now, the ball moves the moment it is put in play.'); });
+        return { steps: [s1, s2], notes };
+      } },
+
+    { id: 'free-throw-shot', side: 'offense', scope: 'player', icon: '💥', name: 'Direct shot from the free throw (outside 6 m)',
+      when: 'You have just been awarded a free throw and the BALL is outside the 6 m line.',
+      cue: 'Shoot straight from the free throw. The defender has to be a metre away before they may raise an arm, so the lane is briefly open.',
+      why: 'Rule Art. 7.2(d): a goal may be scored from an immediate shot from a free throw taken by a player outside 6 m — it is the location of the BALL that decides. There is no "continuous motion" clause: you may either shoot immediately, or visibly put the ball into play and then fake, dribble and shoot.',
+      build(base, ctx) {
+        const R = roles(base);
+        const a = pickTarget(base, ctx, carrierKey(base) || R.point); if (!a || !base.att[a]) return null;
+        const six = 296 - 6 * 10.88;                                // the real 6 m line (water edge 296, 10.88 units/m)
+        const s1 = clone(base);
+        // the carried ball is DRAWN offset from the player (ANIM BALL_OFF ≈ +5.5 x), so leave room
+        s1.att[a] = clamp({ x: Math.min(base.att[a].x, six - 12), y: base.att[a].y });
+        s1.ball = { carrier: 'A' + a };
+        const d = marker(base, a, null);
+        if (d) s1.def[d] = clamp({ x: s1.att[a].x - 11, y: s1.att[a].y });               // the metre the defender must give
+        const gk = base.gk || { x: GOALX + 2, y: CY };
+        const s2 = clone(s1); s2.ball = { carrier: null, x: 293, y: gk.y >= CY ? 98 : 122 };
+        s2.shot = { by: String(a), kind: 'shot' };
+        const notes = {};
+        note(notes, a, 'Ball outside 6 m — shoot immediately off the free throw, before the defender can close the metre.');
+        note(notes, 'GK', 'Free throw outside 6 m means a direct shot is on: get set square to the ball straight away.');
+        return { steps: [s1, s2], notes };
+      } },
+
     /* ================= TRANSITION ================= */
     { id: 'counter', side: 'transition', scope: 'team', icon: '⚡', name: 'Counter-attack (release + lanes)',
       when: 'Turnover, save or a missed shot.',
@@ -419,8 +498,9 @@ const COMMANDS = (() => {
   /* apply(scenario, id, opts) → { steps, notes, cmd } | null — non-mutating: caller splices `steps` into scenario.frames. */
   function apply(scenario, id, opts) {
     const cmd = byId[id]; if (!cmd) return null;
-    const base = scenario.frames[scenario.frames.length - 1];
-    const out = cmd.build(clone(base), { target: (opts && opts.target) || 'team', situation: scenario.situation });
+    const base = clone(scenario.frames[scenario.frames.length - 1]);
+    delete base.shot;                                   // a shot belongs to ONE step — never inherited
+    const out = cmd.build(base, { target: (opts && opts.target) || 'team', situation: scenario.situation });
     if (!out || !out.steps || !out.steps.length) return null;
     return { steps: out.steps, notes: out.notes || {}, cmd };
   }
