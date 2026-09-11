@@ -211,13 +211,58 @@ const SHOT = (() => {
     });
   }
 
+  /* ---------------- a shot menu: what the shooter should actually try ----------------
+     Every option is a coaching heuristic tied to what the geometry actually shows —
+     the open gap, how far off the line the keeper is, whether the keeper has shaded
+     to one side — never a new invented statistic. `tier` is qualitative on purpose:
+     'best' | 'good' | 'risky'. Options only appear when the situation supports them
+     (a lob straight over the head only when the keeper is genuinely exposed close in;
+     the bounce / fake-and-return pair only when the keeper has visibly shaded a side).
+     The keeper note is the same read from the other side of the ball. */
+  function shotOptions(frame, opts) {
+    opts = opts || {};
+    const view = goalView(frame, opts);
+    if (!view) return { options: [], keeperNote: null };
+    const bestSide = view.bestGap ? view.bestGap.side : null;
+    const isHighGap = bestSide === 'the top of the cage', isLowGap = bestSide === 'the bottom of the cage';
+    const out = [];
+    out.push({ id: 'high', label: 'High corner — over the hands',
+      cue: 'Get the wrist over the ball and place it into the top corner, away from the keeper’s reach.',
+      tier: isHighGap ? 'best' : (view.zone !== 'red' ? 'good' : 'risky') });
+    out.push({ id: 'low', label: 'Low corner, skim the water',
+      cue: 'A flat, hard shot along the surface into the bottom corner — under a raised block.',
+      tier: isLowGap ? 'best' : (view.zone !== 'red' ? 'good' : 'risky') });
+    const closeAndExposed = view.keeperOutM != null && view.keeperOutM >= 1.0 && view.distanceM <= 4.5;
+    if (closeAndExposed) out.push({ id: 'over-head', label: 'Lob straight over the head',
+      cue: `The keeper is ${view.keeperOutM} m off the line at close range — a soft ball straight up and over beats them back before they can recover.`,
+      tier: view.keeperOutM >= 1.6 ? 'best' : 'good' });
+    const kMid = view.keeper ? (view.keeper.a + view.keeper.b) / 2 : 0.5, bias = kMid - 0.5;
+    if (view.keeper && Math.abs(bias) > 0.12) {
+      const vacatedSide = bias > 0 ? 'the top of the cage' : 'the bottom of the cage', towards = bias > 0 ? 'the bottom' : 'the top';
+      out.push({ id: 'bounce', label: 'Skip / bounce shot to the open side',
+        cue: `The keeper has shifted toward ${towards} — skip a hard, low shot off the water toward ${vacatedSide}, where they can’t recover in time.`,
+        tier: view.blockerCount === 0 ? 'best' : 'good' });
+      out.push({ id: 'fake-return', label: 'Fake, then come back to where they started',
+        cue: `Sell a fake toward where the keeper is already leaning, then release back to ${vacatedSide} — the side they just left open.`,
+        tier: view.blockerCount >= 1 ? 'best' : 'good' });
+    }
+    const order = { best: 0, good: 1, risky: 2 };
+    out.sort((a, b) => order[a.tier] - order[b.tier]);
+    const keeperNote = (view.keeperOutM != null && view.keeperOutM >= 1.2)
+      ? 'Keeper: get back square before the release — the lob is on.'
+      : (view.keeper && Math.abs(bias) > 0.12)
+        ? 'Keeper: recover toward centre — don’t fully commit before the ball is released.'
+        : 'Keeper: stay set on the line and force a clean beat.';
+    return { options: out, keeperNote, basis: 'Coach’s guide — a read of the geometry, not a measured rate for any one option.' };
+  }
+
   /* the frame-level shot marker: { by:'3', kind:'shot'|'lob' } */
   const markShot = (frame, by, kind) => { frame.shot = { by: String(by), kind: kind === 'lob' ? 'lob' : 'shot' }; return frame; };
   const shotOf = f => (f && f.shot && f.shot.by) ? { by: String(f.shot.by), kind: f.shot.kind === 'lob' ? 'lob' : 'shot' } : null;
   /* legacy plays have no marker — a loose ball at the goal line still counts */
   const isShotFrame = f => !!shotOf(f) || !!(f && f.ball && !f.ball.carrier && f.ball.x != null && f.ball.x >= 285);
 
-  return { ZONE_DEF, zoneById, zoneAt, band, bands, geo, goalView, chance, shadow, markShot, shotOf, isShotFrame, ballPointOf, shooterOf };
+  return { ZONE_DEF, zoneById, zoneAt, band, bands, geo, goalView, chance, shotOptions, shadow, markShot, shotOf, isShotFrame, ballPointOf, shooterOf };
 })();
 
 // Node/CommonJS interop (no-op in the browser)

@@ -893,6 +893,23 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('penalty is the situation override (~80%), not a zone read', SHOT.chance(clean,{situation:'penalty'}).shootPct===0.8);
     ok('percentages are rounded to 5% — no false precision', [open.shootPct, open.lobPct, cb.shootPct].every(v=>Math.abs(v*20-Math.round(v*20))<1e-9));
     ok('every chance carries an honest basis line, incl. the lob caveat', /coaching convention|coaching guide|Coach/i.test(open.basis) && /no study has tested the lob/i.test(open.lobBasis) && open.advice.length>3);
+    // the shot menu — named, situational suggestions, tied to the geometry, never a fake statistic
+    {
+      const centred = { att:{1:{x:250,y:110}}, def:{}, gk:{x:292,y:110}, ball:{carrier:'A1'} };
+      const rc = SHOT.shotOptions(centred, {});
+      ok('a centred keeper offers only the two corner options, no over-the-head or bounce', rc.options.map(o=>o.id).sort().join()==='high,low');
+      ok('every option has a real cue and a qualitative tier — no invented percentage', rc.options.every(o=>o.cue.length>15 && ['best','good','risky'].includes(o.tier)));
+      ok('a keeper counter-note is always present', /Keeper:/.test(rc.keeperNote));
+      const close = { att:{1:{x:280,y:110}}, def:{}, gk:{x:270,y:110}, ball:{carrier:'A1'} };
+      ok('an advanced keeper at close range offers the lob-over-the-head option', SHOT.shotOptions(close,{}).options.some(o=>o.id==='over-head'));
+      const shaded = { att:{1:{x:250,y:110}}, def:{}, gk:{x:292,y:122}, ball:{carrier:'A1'} };
+      const rs = SHOT.shotOptions(shaded, {});
+      ok('a keeper shaded to one side offers the bounce shot AND the fake-and-return, both to the vacated side', rs.options.some(o=>o.id==='bounce'&&/top of the cage/.test(o.cue)) && rs.options.some(o=>o.id==='fake-return'&&/top of the cage/.test(o.cue)));
+      const withBlocker = { att:{1:{x:250,y:110}}, def:{1:{x:270,y:110}}, gk:{x:292,y:122}, ball:{carrier:'A1'} };
+      ok('a blocker in the lane makes the fake-and-return the top pick over an immediate bounce', SHOT.shotOptions(withBlocker,{}).options.find(o=>o.id==='fake-return').tier==='best');
+      ok('options are sorted best-first', rs.options.every((o,i)=>i===0||({best:0,good:1,risky:2})[rs.options[i-1].tier]<=({best:0,good:1,risky:2})[o.tier]));
+      ok('a frame with no shooting position returns an empty menu, not a crash', JSON.stringify(SHOT.shotOptions({att:{},def:{},gk:{x:292,y:110},ball:{carrier:null,x:293,y:110}},{}).options)==='[]');
+    }
     // review regressions
     ok('a defender BESIDE the shooter is not counted as blocking the cage', SHOT.shadow({x:240,y:110},{x:241,y:130},0.55)===null);
     ok('a body past the goal line casts no shadow', SHOT.shadow({x:240,y:110},{x:300,y:110},0.55)===null);
@@ -934,6 +951,9 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('zones off again clears the layer', qa('#pool #zone-layer rect').length===0);
     q('#gk-toggle').click(); await wait(40);
     ok('keeper view opens with a goal mouth, numbers and advice', !q('#gk-view').hidden && qa('#gkv-goal rect').length>=2 && /shoot/.test(q('#gkv-nums').textContent) && /lob/.test(q('#gkv-nums').textContent) && q('#gkv-advice').textContent.length>3);
+    ok('the shot menu lists real options with a tier and a cue', qa('#gkv-menu .gkv-opt').length>=2 && qa('#gkv-menu .gkv-tier').every(t=>/best|good|risky/i.test(t.textContent)) && qa('#gkv-menu .gkv-opt-cue').every(c=>c.textContent.length>10));
+    ok('always offers a high AND a low corner option', /High corner/.test(q('#gkv-menu').textContent) && /Low corner/.test(q('#gkv-menu').textContent));
+    ok('a one-line keeper counter-note is shown', q('#gkv-keeper').textContent.length>5 && /Keeper:/.test(q('#gkv-keeper').textContent));
     q('#gk-toggle').click(); await wait(20);
     ok('keeper view closes', q('#gk-view').hidden);
     // editor: tick the shot step

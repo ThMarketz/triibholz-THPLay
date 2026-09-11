@@ -422,6 +422,28 @@ const overflowPx = await mp.evaluate(()=>document.body.scrollWidth - window.inne
 ok('no meaningful horizontal overflow ('+overflowPx+'px)', overflowPx <= 4);
 await mp.screenshot({ path:OUT+'/qa_12_mobile.png' });
 
+console.log('\n[9] Common laptop viewport (1280×720) — controls must never be pushed below the fold');
+const lctx = await browser.newContext({ viewport:{ width:1280, height:720 } });
+const lp = await lctx.newPage(); hook(lp,'laptop');
+await lp.goto(URL, { waitUntil:'networkidle' });
+await lp.click('.demo-btn[data-demo="coach"]'); await lp.waitForTimeout(500);
+if (await lp.locator('#tour-skip').count()) await lp.click('#tour-skip').catch(()=>{});
+await lp.click('.nav-btn[data-view="playbook"]'); await lp.waitForTimeout(400);
+await lp.locator('.scn-card:not(.scn-new)').first().click(); await lp.waitForTimeout(400);
+const inView = async (sel) => { const r = await lp.locator(sel).boundingBox(); return !!r && r.y >= 0 && r.y + r.height <= 720 && r.height > 0; };
+ok('play/pause/step controls are fully visible without scrolling', await inView('#play-btn') && await inView('#step-fwd') && await inView('#step-back'));
+ok('the board still gets real height, not squeezed to nothing', (await lp.locator('#pool').boundingBox()).height > 150);
+await lp.click('#play-btn'); await lp.waitForTimeout(250);
+ok('play actually plays at this viewport size', await lp.locator('#play-btn.playing').count()===1);
+await lp.click('#play-btn');
+await lp.click('#scene3d-toggle'); await lp.waitForTimeout(300);
+ok('with 3D on, the SAME controls stay visible and usable', await inView('#play-btn') && await inView('#scene3d-toggle') && await lp.locator('#scene3d:not([hidden])').count()===1);
+const stepBefore = await lp.locator('#frame-label').textContent();
+await lp.click('#step-fwd'); await lp.waitForTimeout(200);
+ok('step-forward still advances the play with 3D on ('+stepBefore+' → '+(await lp.locator('#frame-label').textContent())+')', (await lp.locator('#frame-label').textContent()) !== stepBefore);
+await lp.click('#scene3d-toggle');
+await lctx.close();
+
 console.log(`\n==== ${pass} passed, ${fail} failed ====`);
 console.log('CONSOLE ERRORS:', errs.length?('\n  '+errs.join('\n  ')):'none');
 await browser.close();

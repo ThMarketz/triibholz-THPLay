@@ -77,3 +77,21 @@ The board is drawn anisotropically: 10.88 units per metre across (25 m pool over
 8 units per metre down. The goal mouth is drawn on the *across* scale, so zones, distances and
 angles here all use `POOL.pxPerM` on both axes — that keeps the zones in proportion with the goal
 they are drawn against.
+
+## The shot menu — what the shooter should actually try
+
+Underneath the shoot/lob numbers, the keeper's view lists concrete options, each tied
+to the same geometry already on screen, never a new invented statistic:
+
+| Option | Appears when | Tier logic |
+|---|---|---|
+| High corner, over the hands | Always | `best` when the biggest open gap is the top of the cage |
+| Low corner, skim the water | Always | `best` when the biggest open gap is the bottom |
+| Lob straight over the head | The keeper is ≥1 m off the line **and** the shooter is inside 4.5 m | `best` the further off the line they are |
+| Skip / bounce shot to the open side | The keeper's shadow is shaded more than ~0.35 m off‑centre | `best` with a clean lane, `good` with a blocker |
+| Fake, then come back to where they started | Same off‑centre‑keeper condition | `best` specifically when a blocker means an immediate release is worse |
+
+A one‑line **keeper note** reads the same moment from the other side of the ball —
+stay set, or recover to centre before the release. Like everything else in this panel,
+`tier` is qualitative (best / good / risky), not a percentage: these are coaching
+principles applied to this spot, not measured success rates for each technique.

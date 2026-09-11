@@ -1031,7 +1031,14 @@
       `<span class="gkv-n">${c.distanceM} m · ${c.angleDeg}°</span>` +
       `<span class="gkv-n gkv-zone gkv-${c.zone}">${c.zone}</span>`;
     $('gkv-advice').textContent = c.advice;
-    const basis = $('gkv-basis'); if (basis) basis.textContent = c.basis + ' ' + c.lobBasis;
+    const menuData = SHOT.shotOptions(f, { shooter: marked ? marked.by : null, manUp: scn.situation === '6v5' || scn.situation === '5v4' });
+    const TIER = { best: '★ best', good: 'good', risky: 'risky' };
+    const menu = $('gkv-menu');
+    if (menu) menu.innerHTML = menuData.options.map(o =>
+      `<div class="gkv-opt gkv-opt-${o.tier}"><span class="gkv-opt-h"><b>${escapeHtml(o.label)}</b><span class="gkv-tier gkv-tier-${o.tier}">${TIER[o.tier]}</span></span><span class="gkv-opt-cue">${escapeHtml(o.cue)}</span></div>`
+    ).join('');
+    const kn = $('gkv-keeper'); if (kn) kn.textContent = menuData.keeperNote || '';
+    const basis = $('gkv-basis'); if (basis) basis.textContent = c.basis + ' ' + c.lobBasis + ' ' + (menuData.basis || '');
     panel.hidden = false;
   }
   function buildViewer(t0, andPlay) {
