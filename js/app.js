@@ -857,6 +857,12 @@
   }
   /* project a world point, honouring the canvas's device-pixel size */
   function proj3(p) { const cv = $('scene3d'); return MANIKIN.project(scene3dCam, p, { w: cv.width, h: cv.height }); }
+  /* lighten a #rrggbb hex by `amt` (0..1) toward white — used for the cap's sculpted highlight */
+  function lighten(hex, amt) {
+    const n = parseInt(hex.replace('#', ''), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    const mix = (c) => Math.round(c + (255 - c) * amt);
+    return `rgb(${mix(r)},${mix(g)},${mix(b)})`;
+  }
   function draw3d(scene) {
     const cv = $('scene3d'); if (!cv || cv.hidden) return;
     const ctx = cv.getContext('2d'); if (!ctx) return;
@@ -895,26 +901,33 @@
       Object.keys(m.joints).forEach(k => { const pr = proj3(m.joints[k]); pts[k] = pr; if (pr) any = true; });
       if (!any) return;
       const px = pts.neck ? pts.neck.scale : 50;   // pixels per metre at this mannequin's depth
-      const skin = '#2f5768', skinLine = '#173340';
-      // torso: a filled panel from shoulder to shoulder to hip, not a bone line — a body, not a stick figure
+      // a neutral, sculpted mannequin body — no gender, no skin tone; the cap alone carries the team
+      const skinLine = '#5a6469';
+      const skinGrad = (x0, y0, x1, y1) => { const g = ctx.createLinearGradient(x0, y0, x1, y1); g.addColorStop(0, '#e3e9ec'); g.addColorStop(1, '#a7b2b8'); return g; };
+      // torso: a filled, tapered panel — shoulders wide, waist narrower, lightly shaded like a sculpted figure
       if (pts.lShoulder && pts.rShoulder && pts.hip) {
-        // shoulders wide, waist narrower — a real taper, not a flare
         const hipHalfW = Math.abs(pts.rShoulder.x - pts.lShoulder.x) * 0.5 * 0.55;
         const rHipPt = { x: pts.hip.x + hipHalfW, y: pts.hip.y }, lHipPt = { x: pts.hip.x - hipHalfW, y: pts.hip.y };
-        ctx.fillStyle = skin; ctx.strokeStyle = skinLine; ctx.lineWidth = Math.max(1, px * 0.02);
+        ctx.fillStyle = skinGrad(pts.lShoulder.x, 0, pts.rShoulder.x, 0); ctx.strokeStyle = skinLine; ctx.lineWidth = Math.max(1, px * 0.02);
         ctx.beginPath(); ctx.moveTo(pts.lShoulder.x, pts.lShoulder.y); ctx.lineTo(pts.rShoulder.x, pts.rShoulder.y);
         ctx.lineTo(rHipPt.x, rHipPt.y); ctx.lineTo(lHipPt.x, lHipPt.y);
         ctx.closePath(); ctx.fill(); ctx.stroke();
       }
       // arms: rounded, body-toned capsules — no legs, ever
-      ctx.strokeStyle = skin; ctx.lineWidth = Math.max(2.2, px * 0.075); ctx.lineCap = 'round';
+      ctx.strokeStyle = '#c3cdd2'; ctx.lineWidth = Math.max(2.2, px * 0.075); ctx.lineCap = 'round';
       MANIKIN.BONES.forEach(([a, b]) => { if (pts[a] && pts[b]) { ctx.beginPath(); ctx.moveTo(pts[a].x, pts[a].y); ctx.lineTo(pts[b].x, pts[b].y); ctx.stroke(); } });
-      // the cap: crown + two ear guards + a chin strap, all in the team colour
+      // the cap: crown + two prominent ear guards + a chin strap with tied-off ends, all in the team colour
       if (pts.head) {
         const r = Math.max(2.5, pts.head.scale * 0.15);
-        if (pts.chin) { ctx.strokeStyle = cap.stroke; ctx.lineWidth = Math.max(1, r * 0.14); ctx.beginPath(); ctx.moveTo(pts.head.x - r * 0.6, pts.head.y + r * 0.5); ctx.lineTo(pts.chin.x, pts.chin.y); ctx.lineTo(pts.head.x + r * 0.6, pts.head.y + r * 0.5); ctx.stroke(); }
-        [pts.lEar, pts.rEar].forEach(ep => { if (!ep) return; ctx.fillStyle = cap.fill; ctx.beginPath(); ctx.arc(ep.x, ep.y, r * 0.42, 0, TAU_LOCAL); ctx.fill(); ctx.strokeStyle = cap.stroke; ctx.lineWidth = 1; ctx.stroke(); });
-        ctx.fillStyle = cap.fill; ctx.beginPath(); ctx.arc(pts.head.x, pts.head.y, r, 0, TAU_LOCAL); ctx.fill(); ctx.strokeStyle = cap.stroke; ctx.lineWidth = 1; ctx.stroke();
+        if (pts.chin) {
+          ctx.strokeStyle = cap.stroke; ctx.lineWidth = Math.max(1, r * 0.13); ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(pts.head.x - r * 0.62, pts.head.y + r * 0.48); ctx.lineTo(pts.chin.x, pts.chin.y); ctx.lineTo(pts.head.x + r * 0.62, pts.head.y + r * 0.48); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(pts.chin.x, pts.chin.y); ctx.lineTo(pts.chin.x - r * 0.08, pts.chin.y + r * 0.5); ctx.stroke();   // the tied-off strap ends that hang below the chin
+          ctx.beginPath(); ctx.moveTo(pts.chin.x, pts.chin.y); ctx.lineTo(pts.chin.x + r * 0.1, pts.chin.y + r * 0.4); ctx.stroke();
+        }
+        const capGrad = (cx, cy, rad) => { const g = ctx.createRadialGradient(cx - rad * 0.35, cy - rad * 0.4, rad * 0.1, cx, cy, rad * 1.15); g.addColorStop(0, lighten(cap.fill, 0.35)); g.addColorStop(1, cap.fill); return g; };
+        [pts.lEar, pts.rEar].forEach(ep => { if (!ep) return; const er = r * 0.52; ctx.fillStyle = capGrad(ep.x, ep.y, er); ctx.beginPath(); ctx.arc(ep.x, ep.y, er, 0, TAU_LOCAL); ctx.fill(); ctx.strokeStyle = cap.stroke; ctx.lineWidth = 1; ctx.stroke(); });
+        ctx.fillStyle = capGrad(pts.head.x, pts.head.y, r); ctx.beginPath(); ctx.arc(pts.head.x, pts.head.y, r, 0, TAU_LOCAL); ctx.fill(); ctx.strokeStyle = cap.stroke; ctx.lineWidth = 1; ctx.stroke();
         if (m.key !== 'GK') { ctx.fillStyle = cap.stroke === '#000' ? '#fff' : '#0b1f2c'; const fs = Math.max(7, pts.head.scale * 0.19); ctx.font = '700 ' + fs + 'px Helvetica, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(m.key.replace(/^[AD]/, ''), pts.head.x, pts.head.y + fs * 0.32); }
       }
     });

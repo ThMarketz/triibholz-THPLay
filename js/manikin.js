@@ -49,7 +49,7 @@ const MANIKIN = (() => {
   // cups every real cap has), and a chin strap — generic, not a copy of any specific
   // commercial 3D asset.
   const NEUTRAL = {
-    head: [0, 0.30, 0], lEar: [-0.15, 0.22, 0.01], rEar: [0.15, 0.22, 0.01], chin: [0, 0.14, 0.10],
+    head: [0, 0.30, 0], lEar: [-0.17, 0.21, 0.04], rEar: [0.17, 0.21, 0.04], chin: [0, 0.13, 0.11],
     neck: [0, 0.10, 0], lShoulder: [-0.22, 0.07, 0], rShoulder: [0.22, 0.07, 0],
     lElbow: [-0.30, -0.20, 0.05], rElbow: [0.30, -0.20, 0.05], lHand: [-0.30, -0.40, 0.15], rHand: [0.30, -0.40, 0.15],
     hip: [0, -0.30, 0],
