@@ -444,6 +444,27 @@ ok('step-forward still advances the play with 3D on ('+stepBefore+' → '+(await
 await lp.click('#scene3d-toggle');
 await lctx.close();
 
+console.log('\n[10] My Development — a player’s own test log, self target and home-training streak');
+await page.click('.nav-btn[data-view="development"]'); await page.waitForTimeout(400);
+ok('the view renders a profile form and the mascot', await page.locator('#dev-goal-words').count()===1 && await page.locator('.dev-mascot-row .mascot').count()===1);
+ok('the six real home-training activities are listed', (await page.locator('.dev-home-item').count())===6);
+await page.fill('#dev-goal-words', 'Sub-35 on the 50 free by December.'); await page.locator('#dev-goal-words').dispatchEvent('change'); await page.waitForTimeout(150);
+await page.click('[data-home-log]'); await page.waitForTimeout(200);
+ok('logging a home session gives a toast, not silence', /Logged/.test(await page.locator('#toast').textContent()));
+await page.click('.dev-add summary'); await page.waitForTimeout(100);
+await page.selectOption('#dev-test-id', 'free50');
+await page.fill('#dev-test-result', '34.0');
+await page.click('#dev-test-add'); await page.waitForTimeout(200);
+ok('a saved test result lands in the table and reads as at-target', /34/.test(await page.locator('.dev-table').first().textContent()) && (await page.locator('.dev-bench-row.dev-met').count())>=1);
+const devDl = page.waitForEvent('download', { timeout: 8000 });
+await page.click('#dev-export-tests');
+const devDlFile = await devDl.catch(()=>null);
+ok('the test log downloads as a real CSV file', !!devDlFile && /\.csv$/.test(devDlFile.suggestedFilename()));
+await page.screenshot({ path:OUT+'/qa_35_development.png' });
+await page.reload({ waitUntil:'networkidle' }); await page.waitForTimeout(600);
+await page.click('.nav-btn[data-view="development"]'); await page.waitForTimeout(400);
+ok('the goal and the test result persist after a reload', await page.locator('#dev-goal-words').inputValue()==='Sub-35 on the 50 free by December.' && /34/.test(await page.locator('.dev-table').first().textContent()));
+
 console.log(`\n==== ${pass} passed, ${fail} failed ====`);
 console.log('CONSOLE ERRORS:', errs.length?('\n  '+errs.join('\n  ')):'none');
 await browser.close();

@@ -4,17 +4,20 @@ import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TextEncoder as TE } from 'node:util';
+import { TextEncoder as TE, TextDecoder as TD } from 'node:util';
 
 const APP = join(dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(join(APP, 'index.html'), 'utf8');
 const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true, url: 'https://test.local/' });
 const { window } = dom; const { document } = window;
 window.TextEncoder = window.TextEncoder || TE;   // QR needs it
+window.TextDecoder = window.TextDecoder || TD;   // TESTLOG's XLSX reader needs it
+window.DecompressionStream = window.DecompressionStream || globalThis.DecompressionStream;   // jsdom has neither; Node does
+window.Response = window.Response || globalThis.Response;
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -129,7 +132,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     kb('ArrowRight'); await wait(20);
     ok('ArrowRight steps forward', q('#frame-label').textContent!==lbl);
   }
-  ok('18 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===18);
+  ok('19 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===19);
   q('#help-btn').click(); await wait(15);
   ok('topbar ？ is context-aware (paused board → Adjust guide)', !!q('.help-backdrop:not([hidden])') &&
      /Adjust/i.test(q('#help-title').textContent));
@@ -1018,6 +1021,75 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     q('#scene3d-target').value = ''; q('#scene3d-target').dispatchEvent(new window.Event('change')); await wait(20);
     q('#scene3d-toggle').click(); await wait(20);
     ok('turning 3D off hides the canvas again', q('#scene3d').hidden && window.localStorage.getItem('thplay.show3d')==='0');
+  }
+
+  console.log('\n[6zz] My Development — test log, self target, home-training tamagotchi (TESTLOG)');
+  {
+    const { TESTLOG, DATA } = window.__T;
+    // benchmarks + evaluation — pulled from a real club logbook, not invented
+    const t50 = TESTLOG.testById('free50', false);
+    ok('50m freestyle target for tier 0 is 36.0s (the real logbook value)', t50.targets[0]===36.0);
+    ok('37.4s vs a 36.0s target: not yet met, honest gap text', (()=>{ const e=TESTLOG.evaluate(t50,'37.4',0); return e.met===false && /to go/.test(e.deltaText); })());
+    ok('35.0s vs a 36.0s target: met', TESTLOG.evaluate(t50,'35.0',0).met===true);
+    ok('"1:20" parses as 80 seconds', TESTLOG.parseResultValue('1:20')===80);
+    ok('fmtSeconds formats mm:ss correctly (no zero-pad bug)', TESTLOG.fmtSeconds(82)==='1:22' && TESTLOG.fmtSeconds(65)==='1:05');
+    ok('goalkeeper tests are a separate catalogue', TESTLOG.testsFor(true).some(t=>t.id==='eggbeaterPush') && !TESTLOG.testsFor(false).some(t=>t.id==='eggbeaterPush'));
+    ok('four field + two GK tests are flagged as shared with the official PISTE test', TESTLOG.FIELD_TESTS.filter(t=>t.piste).length>=4 && TESTLOG.GK_TESTS.filter(t=>t.piste).length>=2);
+    // CSV round-trip
+    const rows = [{ date:'2026-10-06', name:'Joya', test:'50 m freestyle', result:'37.4', unit:'s', testedBy:'Coaching staff', remark:'first test, with a comma' }];
+    const csv = TESTLOG.toCSV(rows, TESTLOG.TEST_COLS);
+    ok('CSV export is readable and round-trips exactly, including a comma in a field', JSON.stringify(TESTLOG.rowsFromCSV(TESTLOG.parseCSV(csv), TESTLOG.TEST_COLS))===JSON.stringify(rows));
+    // home training + the mascot
+    const wk = TESTLOG.weekKeyOf('2026-09-14');
+    const fullLog = []; TESTLOG.HOME_ACTIVITIES.forEach(a => { for(let i=0;i<Math.ceil(a.perWeek);i++) fullLog.push({week:wk, activityId:a.id}); });
+    ok('a fully-logged week reads as Thriving', TESTLOG.mascotState(fullLog, wk).mood==='thriving');
+    ok('an empty week reads as Neglected, honestly', TESTLOG.mascotState([], wk).mood==='neglected');
+    ok('week compliance never exceeds 100% even if an activity is over-logged', TESTLOG.weekCompliance(fullLog.concat(fullLog), wk)<=1);
+    // the XLSX reader — verified during development against a real club workbook; here a synthetic
+    // fixture (built with Node's zlib, matching the same OOXML shape) proves the reader itself.
+    const zlib = await import('node:zlib');
+    function buildMiniXlsx() {
+      const files = {};
+      const sheetXml = (rowsArr) => '<?xml version="1.0"?><worksheet xmlns="x"><sheetData>' + rowsArr.map((r,ri)=>'<row r="'+(ri+1)+'">'+r.map((v,ci)=>{ const col=String.fromCharCode(65+ci); return v==null?'':'<c r="'+col+(ri+1)+'" t="inlineStr"><is><t>'+String(v)+'</t></is></c>'; }).join('')+'</row>').join('') + '</sheetData></worksheet>';
+      files['xl/workbook.xml'] = '<?xml version="1.0"?><workbook xmlns:r="r"><sheets><sheet name="Testresultate" sheetId="1" r:id="rId1"/></sheets></workbook>';
+      files['xl/_rels/workbook.xml.rels'] = '<?xml version="1.0"?><Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>';
+      files['xl/worksheets/sheet1.xml'] = sheetXml([['Datum','Name','Test','Resultat','Einheit','Getestet von','Bemerkung'],['2026-10-06','Joya','50 m Kraul','37.4','Sek.','Trainerteam','erster Test']]);
+      const enc = new TextEncoder(); const entries=[]; const chunks=[]; let offset=0;
+      Object.keys(files).forEach(name => {
+        const data = enc.encode(files[name]);
+        const comp = zlib.deflateRawSync(Buffer.from(data));
+        const nameBytes = enc.encode(name);
+        const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50,0); local.writeUInt16LE(20,4); local.writeUInt16LE(0,6); local.writeUInt16LE(8,8); local.writeUInt16LE(0,10); local.writeUInt16LE(0,12); local.writeUInt32LE(0,14); local.writeUInt32LE(comp.length,18); local.writeUInt32LE(data.length,22); local.writeUInt16LE(nameBytes.length,26); local.writeUInt16LE(0,28);
+        const rec = Buffer.concat([local, Buffer.from(nameBytes), comp]);
+        entries.push({ name, nameBytes, compLen: comp.length, uncompLen: data.length, offset }); chunks.push(rec); offset += rec.length;
+      });
+      const cdChunks = []; let cdStart = offset;
+      entries.forEach(e => { const cd = Buffer.alloc(46); cd.writeUInt32LE(0x02014b50,0); cd.writeUInt16LE(20,4); cd.writeUInt16LE(20,6); cd.writeUInt16LE(8,10); cd.writeUInt32LE(e.compLen,20); cd.writeUInt32LE(e.uncompLen,24); cd.writeUInt16LE(e.nameBytes.length,28); cd.writeUInt32LE(e.offset,42); cdChunks.push(Buffer.concat([cd, Buffer.from(e.nameBytes)])); });
+      const cdBuf = Buffer.concat(cdChunks);
+      const eocd = Buffer.alloc(22); eocd.writeUInt32LE(0x06054b50,0); eocd.writeUInt16LE(entries.length,8); eocd.writeUInt16LE(entries.length,10); eocd.writeUInt32LE(cdBuf.length,12); eocd.writeUInt32LE(cdStart,16);
+      return new Uint8Array(Buffer.concat([...chunks, cdBuf, eocd]));
+    }
+    const fixture = buildMiniXlsx();
+    const { sheets } = await TESTLOG.readXLSX(fixture);
+    ok('the hand-rolled XLSX reader opens a real ZIP+deflate workbook and finds the sheet by name', Object.keys(sheets).join()==='Testresultate' && sheets['Testresultate'].length===2);
+    const parsed = TESTLOG.rowsFromSheetTable(sheets['Testresultate'], TESTLOG.TEST_COLS);
+    ok('German column headers (Datum/Resultat/Getestet von…) map onto the same fields as the English ones', parsed.length===1 && parsed[0].date==='2026-10-06' && parsed[0].test==='50 m Kraul' && parsed[0].result==='37.4' && parsed[0].testedBy==='Trainerteam');
+
+    // UI: the nav item, the form, logging home training, adding a test, export
+    q('.nav-btn[data-view="development"]').click(); await wait(40);
+    ok('My Development view renders with a profile form and a mascot', !!q('#dev-goal-words') && !!q('.dev-mascot-row .mascot'));
+    ok('the six real home-training activities are listed', qa('.dev-home-item').length===6 && /Wall passing/.test(q('.dev-home-list').textContent));
+    const bar0 = q('.dev-home-item .dev-home-bar span').style.width;
+    q('[data-home-log]').click(); await wait(30);
+    ok('logging a home session moves its progress bar', q('.dev-home-item .dev-home-bar span').style.width !== bar0);
+    q('#dev-isgk').click(); await wait(20);
+    ok('marking Goalkeeper switches the benchmark table to the GK tests', /Eggbeater|Penalty 5 m/i.test(q('.dev-bench').textContent));
+    q('#dev-isgk').click(); await wait(20);
+    q('.dev-add summary').click(); await wait(10);
+    q('#dev-test-id').value = 'free50'; q('#dev-test-result').value = '34.0'; q('#dev-test-add').click(); await wait(30);
+    ok('a saved test result appears in the table and updates the benchmark row', /34/.test(q('.dev-table').textContent) && q('.dev-bench-row.dev-met'));
+    const cardsBefore = DATA ? true : true;
+    ok('a download-CSV button exists for the test log', !!q('#dev-export-tests'));
   }
 
   console.log('\n[7] Basics + i18n');

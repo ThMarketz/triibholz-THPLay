@@ -72,14 +72,24 @@ const FX = (() => {
   }
 
   // Polo — the water-polo-ball mascot
-  function mascot(size){
-    size = size || 40;
-    return `<svg class="mascot" width="${size}" height="${size}" viewBox="0 0 48 48" aria-hidden="true">
+  // mood: 'thriving' (default, the original happy face) | 'happy' | 'okay' | 'neglected' —
+  // the same orange-ball mascot, just the mouth/eyes/tilt changing with the home-training streak.
+  const MASCOT_MOUTH = {
+    thriving: 'M16 30 q8 8 16 0', happy: 'M17 31 q7 6 14 0', okay: 'M18 32 q6 2 12 0', neglected: 'M18 33 q6 -2 12 0',
+  };
+  function mascot(size, mood){
+    size = size || 40; mood = MASCOT_MOUTH[mood] ? mood : 'thriving';
+    const tilt = mood === 'neglected' ? -6 : mood === 'okay' ? -2 : 0;
+    const eyesClosed = mood === 'neglected';
+    return `<svg class="mascot mascot-${mood}" width="${size}" height="${size}" viewBox="0 0 48 48" aria-hidden="true">
+      <g transform="rotate(${tilt} 24 25)">
       <circle cx="24" cy="25" r="20" fill="#ff7a18" stroke="#9c3d00" stroke-width="2"/>
       <path d="M6 22 q18 -12 36 0 M6 30 q18 12 36 0 M24 5 v40" stroke="#fff" stroke-width="1.4" fill="none" opacity=".85"/>
-      <circle cx="17" cy="21" r="4.4" fill="#fff"/><circle cx="31" cy="21" r="4.4" fill="#fff"/>
-      <circle cx="18" cy="22" r="2.1" fill="#0b1f2c"/><circle cx="32" cy="22" r="2.1" fill="#0b1f2c"/>
-      <path d="M17 31 q7 6 14 0" stroke="#0b1f2c" stroke-width="2" fill="none" stroke-linecap="round"/>
+      ${eyesClosed
+        ? '<path d="M13 21 q4 3 8 0 M27 21 q4 3 8 0" stroke="#0b1f2c" stroke-width="2" fill="none" stroke-linecap="round"/>'
+        : '<circle cx="17" cy="21" r="4.4" fill="#fff"/><circle cx="31" cy="21" r="4.4" fill="#fff"/><circle cx="18" cy="22" r="2.1" fill="#0b1f2c"/><circle cx="32" cy="22" r="2.1" fill="#0b1f2c"/>'}
+      <path d="${MASCOT_MOUTH[mood]}" stroke="#0b1f2c" stroke-width="2" fill="none" stroke-linecap="round"/>
+      </g>
     </svg>`;
   }
 

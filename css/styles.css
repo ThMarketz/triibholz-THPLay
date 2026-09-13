@@ -956,3 +956,38 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .gkv-tier-risky{background:rgba(226,65,58,.22);color:#ffd4d1}
 .gkv-opt-best{border-color:rgba(46,204,113,.5)}
 .gkv-keeper{margin-top:4px;font-size:.72rem;color:#8fb0bd;font-style:italic}
+
+/* ---- My Development: profile, self target, home training tamagotchi, tests, swim weeks (v1.33) ---- */
+.dev-roster{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0}
+.dev-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+@media (max-width:900px){.dev-grid{grid-template-columns:1fr}}
+.dev-card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:14px;padding:16px}
+.dev-card h3{margin:0 0 10px}
+.dev-form{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;margin-bottom:8px}
+.dev-form label{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--muted)}
+.dev-form input,.dev-form select{background:var(--surface-2,rgba(255,255,255,.04));border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text);font:inherit}
+.dev-goal{display:flex;flex-direction:column;gap:3px;font-size:.8rem;color:var(--muted);margin-top:6px}
+.dev-goal input,.dev-goal textarea{background:var(--surface-2,rgba(255,255,255,.04));border:1px solid var(--border);border-radius:8px;padding:7px 9px;color:var(--text);font:inherit;resize:vertical}
+.dev-mascot-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.dev-mascot-row div{display:flex;flex-direction:column;gap:2px}
+.dev-streak{font-size:.78rem;color:#ffd166}
+.dev-home-list{display:flex;flex-direction:column;gap:8px}
+.dev-home-item{border:1px solid var(--border);border-radius:8px;padding:7px 9px}
+.dev-home-h{display:flex;justify-content:space-between;font-size:.86rem}
+.dev-home-bar{height:5px;border-radius:999px;background:rgba(255,255,255,.08);margin:5px 0;overflow:hidden}
+.dev-home-bar span{display:block;height:100%;background:linear-gradient(90deg,#2ecc71,#1fc0d4)}
+.dev-bench{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
+.dev-bench-row{display:grid;grid-template-columns:1.6fr 1fr 1fr 1.2fr;gap:6px;font-size:.78rem;padding:5px 6px;border-radius:6px;align-items:center}
+.dev-bench-row.dev-met{background:rgba(46,204,113,.10)}
+.dev-bench-row.dev-notyet{background:rgba(255,209,102,.07)}
+.dev-bench-name{font-weight:600}
+.dev-ok{color:#7be0a6}.dev-gap{color:#ffd166}
+.dev-add{margin:8px 0;font-size:.82rem}
+.dev-add summary{cursor:pointer;color:var(--muted)}
+.dev-add-form{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.dev-add-form input,.dev-add-form select{background:var(--surface-2,rgba(255,255,255,.04));border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text);font:inherit;flex:1;min-width:110px}
+.dev-table-wrap{overflow-x:auto;margin:8px 0}
+.dev-table{width:100%;border-collapse:collapse;font-size:.8rem}
+.dev-table th,.dev-table td{text-align:left;padding:5px 7px;border-bottom:1px solid var(--border)}
+.dev-table th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.03em}
+.dev-swim-sum{font-size:.86rem;color:var(--muted);margin-bottom:6px}

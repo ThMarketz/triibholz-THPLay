@@ -109,6 +109,18 @@ const HELP = (() => {
       'It’s a watch-only view. Drag players and build the play in the normal 2D board; open 3D afterwards to see it from any angle.',
     ]},
 
+    development: { icon:'📈', title:'My Development — your own log, your own goal', steps:[
+      'This is <strong>your data, not the team\'s</strong>. Your profile, your self-set goal, your test results and your home-training streak — only you, and your coach or trainer, ever see it.',
+      '<strong>Profile &amp; self target:</strong> your season tier picks which target column the benchmarks below compare you against. Write your goal in your own words — there is no wrong answer.',
+      '<strong>Test results</strong> are logged against your season\'s benchmarks — the same tests a real club testing programme uses, four of them shared with the official Swiss Aquatics PISTE test. A green row means you\'re at target; yellow shows exactly how far to go.',
+      '<strong>Home training</strong> is the part you control completely: wall passing, mobility, a shoulder-band routine, bodyweight strength, ball feel, watching matches — a small weekly target for each. Log a session and the mascot notices; keep it up and it thrives, let it go quiet and it says so.',
+      '<strong>Swim weeks</strong> count club metres and home/self metres side by side, plus sessions attended — exactly how a real training log tracks it.',
+      'Coaches and trainers can <strong>import a whole team\'s existing logbook</strong> (.xlsx or .csv) in one go, matched to the roster by name; players can download their own test log and swim weeks as a CSV at any time.',
+    ], tips:[
+      'There are no bad numbers here. Only starting points. Honest entries matter more than fast ones.',
+      'A coach viewing a player\'s record sees the same thing the player does — nothing is hidden, and nothing is shared beyond the coaching team.',
+    ]},
+
     privacy: { icon:'🔒', title:'Confidential tactics &amp; anonymous learning', steps:[
       'Every play has a <strong>Who can see it</strong> setting: <strong>👥 Team</strong> (your team only, the default), <strong>🌐 Club</strong> (everyone in the club) or <strong>🔒 Private</strong> (only you — for confidential tactics). Others simply never see private plays in their library.',
       '<strong>The system still learns from private plays — anonymously.</strong> It reduces a play to a handful of pattern features (situation, number of steps, passes, shot zone, a coarse formation shape) and strips the title, description, notes, owner and club. The play itself never leaves the device.',

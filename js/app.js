@@ -119,7 +119,7 @@
   function switchView(view) {
     state.view = view;
     document.querySelectorAll('#main-nav .nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view===view));
-    ['dashboard','playbook','basics','film','solutions','season','trivia','admin'].forEach(v => $('view-'+v).classList.toggle('active', v===view));
+    ['dashboard','playbook','basics','film','solutions','season','trivia','development','admin'].forEach(v => $('view-'+v).classList.toggle('active', v===view));
     const inPlaybook = view==='playbook';
     $('situation-tabs').style.display = inPlaybook ? '' : 'none';
     $('phase-toggle').style.display = inPlaybook ? '' : 'none';
@@ -162,6 +162,7 @@
     if (view==='solutions') renderSolutions();
     if (view==='season') renderSeason();
     if (view==='trivia') renderTrivia();
+    if (view==='development') renderDevelopment();
     if (view==='admin') renderAdmin();
     if (view==='playbook' && !state.selectedId) openFirstOrEmpty();
     if (typeof updateAudibleBtn==='function') updateAudibleBtn();
@@ -510,6 +511,214 @@
           .catch(()=>{});
       }
     }
+  }
+
+  /* ======================================================
+     MY DEVELOPMENT — a player's own test log, self target, swim weeks
+     and home-training streak (modelled on a real club's own process:
+     "this is YOUR data, not the team's — you and your coach fill it in,
+     you, your parents and the coaching team see it, nobody else").
+     ====================================================== */
+  const DEV_KEY = e => 'thplay.testlog.' + (e || '').toLowerCase();
+  const HOME_KEY = e => 'thplay.hometraining.' + (e || '').toLowerCase();
+  function loadDev(email) {
+    let d; try { d = JSON.parse(localStorage.getItem(DEV_KEY(email))); } catch (e) { d = null; }
+    return Object.assign({ info: { name: '', birthYear: '', band: '', position: '', isGK: false, talentCard: '', cardValidUntil: '', lastPiste: '', tier: 0, goalBlock: '', goalWords: '' }, tests: [], swimWeeks: [] }, d || {});
+  }
+  function saveDev(email, d) { try { localStorage.setItem(DEV_KEY(email), JSON.stringify(d)); } catch (e) {} }
+  function loadHome(email) { let d; try { d = JSON.parse(localStorage.getItem(HOME_KEY(email))); } catch (e) { d = null; } return Object.assign({ log: [] }, d || {}); }
+  function saveHome(email, d) { try { localStorage.setItem(HOME_KEY(email), JSON.stringify(d)); } catch (e) {} }
+  const devCanCoach = () => ['coach', 'trainer', 'super-admin'].includes(state.user.role);
+  let devViewing = null;   // the email whose record is on screen; null → self
+  function devTargetEmail() { return state.user.role === 'player' ? state.user.email : (devViewing || state.user.email); }
+
+  function renderDevelopment() {
+    const root = $('view-development');
+    const email = devTargetEmail();
+    const dev = loadDev(email), home = loadHome(email);
+    const isSelf = email === state.user.email;
+    const wk = TESTLOG.weekKeyOf(new Date().toISOString().slice(0, 10));
+    const mascot = TESTLOG.mascotState(home.log, wk);
+    const roster = devCanCoach() ? DATA.loadUsers().filter(u => u.role === 'player' && u.status === 'approved').sort((a, b) => (a.name || '').localeCompare(b.name || '')) : [];
+
+    const testCat = TESTLOG.testsFor(!!dev.info.isGK);
+    const testRows = (dev.tests || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const latestByTest = {}; (dev.tests || []).forEach(t => { if (!latestByTest[t.test] || t.date > latestByTest[t.test].date) latestByTest[t.test] = t; });
+    const swimRows = (dev.swimWeeks || []).slice().sort((a, b) => (b.week || '').localeCompare(a.week || ''));
+    const swim4 = swimRows.slice(0, 4);
+    const swim4Avg = swim4.length ? Math.round(swim4.reduce((s, r) => s + (+r.total || 0), 0) / swim4.length) : 0;
+
+    root.innerHTML = `<div class="dash-head with-mascot">${(typeof FX !== 'undefined') ? FX.mascot(38, mascot.mood) : ''}
+        <div><h1 data-i18n="nav.development">My Development</h1>
+        <p class="dash-sub">Your own test results, your own goal, your own home-training streak — not the team's. <button class="help-chip" data-help="development" title="How this works">？</button></p></div></div>
+
+      ${roster.length ? `<div class="dev-roster"><span class="ef-label">Viewing</span><select id="dev-roster-select" class="focus-select"><option value="">Myself</option>${roster.map(u => `<option value="${escapeHtml(u.email)}" ${devViewing === u.email ? 'selected' : ''}>${escapeHtml(u.name || u.email)}${u.position ? ' · ' + escapeHtml(u.position) : ''}</option>`).join('')}</select>
+        <span class="muted">${roster.length} player${roster.length === 1 ? '' : 's'} approved</span>
+        <button class="btn-ghost sm" id="dev-import-btn">⬆ Import team logbook (.xlsx / .csv)</button><input type="file" id="dev-import-file" accept=".xlsx,.csv" hidden multiple></div>` : ''}
+
+      <div class="dev-grid">
+        <div class="dev-card dev-profile">
+          <h3>Profile &amp; self target</h3>
+          <div class="dev-form">
+            <label>Name<input type="text" id="dev-name" value="${escapeHtml(dev.info.name || (isSelf ? state.user.name : ''))}" ${isSelf ? '' : 'disabled'}></label>
+            <label>Birth year<input type="text" id="dev-birth" value="${escapeHtml(dev.info.birthYear)}" placeholder="e.g. 2013"></label>
+            <label>Band / age group<input type="text" id="dev-band" value="${escapeHtml(dev.info.band)}" placeholder="e.g. Core (2013–14)"></label>
+            <label>Position<input type="text" id="dev-position" value="${escapeHtml(dev.info.position || state.user.position || '')}"></label>
+            <label class="fa-check">Goalkeeper?<input type="checkbox" id="dev-isgk" ${dev.info.isGK ? 'checked' : ''}></label>
+            <label>Season tier<select id="dev-tier">${TESTLOG.TIERS.map((t, i) => `<option value="${i}" ${dev.info.tier == i ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select></label>
+            <label>Talent card<input type="text" id="dev-card" value="${escapeHtml(dev.info.talentCard)}" placeholder="e.g. National"></label>
+            <label>Card valid until<input type="text" id="dev-card-until" value="${escapeHtml(dev.info.cardValidUntil)}" placeholder="YYYY-MM"></label>
+            <label>Last PISTE test<input type="text" id="dev-piste" value="${escapeHtml(dev.info.lastPiste)}" placeholder="YYYY-MM-DD"></label>
+          </div>
+          <label class="dev-goal">My goal this block<input type="text" id="dev-goal-block" value="${escapeHtml(dev.info.goalBlock)}" placeholder="e.g. sub-35s on the 50 free"></label>
+          <label class="dev-goal">My goal, in my own words<textarea id="dev-goal-words" rows="2" placeholder="What do I want to be true by the end of this block?">${escapeHtml(dev.info.goalWords)}</textarea></label>
+          <p class="fa-note">There are no bad numbers here — only starting points. Honest entries matter more than fast ones.</p>
+        </div>
+
+        <div class="dev-card dev-home">
+          <h3>🏠 Home training <span class="rightbar-hint">this week</span></h3>
+          <div class="dev-mascot-row">${(typeof FX !== 'undefined') ? FX.mascot(56, mascot.mood) : ''}
+            <div><strong>${escapeHtml(mascot.moodLabel)}</strong><span class="muted">${mascot.line}</span>
+            <span class="dev-streak">${mascot.streak > 0 ? `🔥 ${mascot.streak} week streak` : 'No streak yet — this week starts one'}</span></div></div>
+          <div class="dev-home-list">${TESTLOG.HOME_ACTIVITIES.map(a => {
+            const n = home.log.filter(e => e.week === wk && e.activityId === a.id).length;
+            const done = Math.min(n, a.perWeek);
+            return `<div class="dev-home-item"><div class="dev-home-h"><b>${escapeHtml(a.label)}</b><span class="muted">${done}/${a.perWeek === Math.round(a.perWeek) ? a.perWeek : a.perWeek.toFixed(1)} · ${a.minutes} min</span></div>
+              <div class="dev-home-bar"><span style="width:${Math.min(100, Math.round(100 * done / a.perWeek))}%"></span></div>
+              <span class="fa-note">${escapeHtml(a.note)}</span>
+              ${isSelf ? `<button class="btn-ghost sm" data-home-log="${a.id}">＋ Log it</button>` : ''}</div>`;
+          }).join('')}</div>
+        </div>
+
+        <div class="dev-card dev-tests">
+          <h3>📈 Test results <span class="rightbar-hint">vs this season's target</span></h3>
+          <div class="dev-bench">${testCat.map(t => {
+            const last = latestByTest[t.label] || latestByTest[t.id];
+            const ev = last ? TESTLOG.evaluate(t, last.result, dev.info.tier) : null;
+            return `<div class="dev-bench-row ${ev && ev.met === true ? 'dev-met' : ev && ev.met === false ? 'dev-notyet' : ''}">
+              <span class="dev-bench-name">${escapeHtml(t.label)}${t.piste ? ' <span class=\"tag\" title=\"Shared with the official Swiss Aquatics PISTE test\">PISTE</span>' : ''}</span>
+              <span class="muted">${last ? escapeHtml(String(last.result)) + ' ' + escapeHtml(t.unit) : 'no result yet'}</span>
+              <span class="muted">target ${t.targets[dev.info.tier] == null ? '—' : escapeHtml(String(t.targets[dev.info.tier]))}</span>
+              <span class="${ev && ev.met === true ? 'dev-ok' : ev && ev.met === false ? 'dev-gap' : 'muted'}">${ev ? escapeHtml(ev.deltaText) : ''}</span>
+            </div>`;
+          }).join('')}</div>
+          ${isSelf || devCanCoach() ? `<details class="dev-add"><summary>＋ Add a test result</summary>
+            <div class="dev-add-form">
+              <select id="dev-test-id">${testCat.map(t => `<option value="${t.id}">${escapeHtml(t.label)}</option>`).join('')}</select>
+              <input type="text" id="dev-test-date" placeholder="Date (YYYY-MM-DD)" value="${new Date().toISOString().slice(0, 10)}">
+              <input type="text" id="dev-test-result" placeholder="Result (e.g. 37.4 or 1:22)">
+              <input type="text" id="dev-test-by" placeholder="Tested by" value="${escapeHtml(devCanCoach() ? state.user.name : 'Coaching staff')}">
+              <input type="text" id="dev-test-remark" placeholder="Remark (optional)">
+              <button class="btn-primary sm" id="dev-test-add">Save result</button>
+            </div></details>` : ''}
+          <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>Date</th><th>Test</th><th>Result</th><th>Tested by</th><th>Remark</th>${isSelf || devCanCoach() ? '<th></th>' : ''}</tr></thead>
+            <tbody>${testRows.map((r, i) => `<tr><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.test)}</td><td>${escapeHtml(String(r.result))} ${escapeHtml(r.unit || '')}</td><td>${escapeHtml(r.testedBy || '')}</td><td class="muted">${escapeHtml(r.remark || '')}</td>${isSelf || devCanCoach() ? `<td><button class="btn-ghost sm danger" data-test-del="${r.id}">✕</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="6" class="muted">No tests logged yet.</td></tr>`}</tbody></table></div>
+          <button class="btn-ghost sm" id="dev-export-tests">⬇ Download my test log (CSV)</button>
+        </div>
+
+        <div class="dev-card dev-swim">
+          <h3>🏊 Swim weeks <span class="rightbar-hint">club + home, side by side</span></h3>
+          <div class="dev-swim-sum">4-week average: <b>${swim4Avg.toLocaleString()} m</b> · target ${Math.round((TESTLOG.testById('swimPerWeek', false).targets[dev.info.tier] || 0) * 1000).toLocaleString()} m</div>
+          ${isSelf || devCanCoach() ? `<details class="dev-add"><summary>＋ Add this week</summary>
+            <div class="dev-add-form">
+              <input type="text" id="dev-swim-week" placeholder="Week (Monday, YYYY-MM-DD)" value="${TESTLOG.mondayOf(new Date())}">
+              <input type="number" id="dev-swim-club" placeholder="Metres — club">
+              <input type="number" id="dev-swim-self" placeholder="Metres — self / home">
+              <input type="number" id="dev-swim-att" placeholder="Sessions attended">
+              <input type="number" id="dev-swim-poss" placeholder="Sessions possible">
+              <button class="btn-primary sm" id="dev-swim-add">Save week</button>
+            </div></details>` : ''}
+          <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>Week</th><th>Club</th><th>Self/home</th><th>Total</th><th>Attended</th>${isSelf || devCanCoach() ? '<th></th>' : ''}</tr></thead>
+            <tbody>${swimRows.map(r => `<tr><td>${escapeHtml(r.week)}</td><td>${escapeHtml(String(r.metersClub || 0))}</td><td>${escapeHtml(String(r.metersSelf || 0))}</td><td><b>${escapeHtml(String(r.total || ((+r.metersClub || 0) + (+r.metersSelf || 0))))}</b></td><td class="muted">${escapeHtml(String(r.attended || 0))}/${escapeHtml(String(r.possible || 0))}</td>${isSelf || devCanCoach() ? `<td><button class="btn-ghost sm danger" data-swim-del="${r.id}">✕</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="5" class="muted">No weeks logged yet.</td></tr>`}</tbody></table></div>
+          <button class="btn-ghost sm" id="dev-export-swim">⬇ Download my swim weeks (CSV)</button>
+        </div>
+      </div>`;
+
+    wireDevelopment(root, email, dev, home, wk);
+  }
+
+  function devRegenId(rows) { rows.forEach(r => { if (!r.id) r.id = 'd' + Math.random().toString(36).slice(2, 9); }); return rows; }
+
+  function wireDevelopment(root, email, dev, home, wk) {
+    const rs = root.querySelector('#dev-roster-select');
+    if (rs) rs.onchange = () => { devViewing = rs.value || null; renderDevelopment(); };
+    const isSelf = email === state.user.email;
+
+    // profile fields — save on change (self only; a coach views read-only except tier/goal stay editable by the player)
+    if (isSelf) {
+      const bind = (sel, key, checkbox) => { const el = root.querySelector(sel); if (!el) return; el.addEventListener('change', () => { dev.info[key] = checkbox ? el.checked : el.value; saveDev(email, dev); }); };
+      bind('#dev-name', 'name'); bind('#dev-birth', 'birthYear'); bind('#dev-band', 'band'); bind('#dev-position', 'position');
+      bind('#dev-isgk', 'isGK', true); bind('#dev-card', 'talentCard'); bind('#dev-card-until', 'cardValidUntil'); bind('#dev-piste', 'lastPiste');
+      bind('#dev-goal-block', 'goalBlock'); bind('#dev-goal-words', 'goalWords');
+      const tierSel = root.querySelector('#dev-tier'); if (tierSel) tierSel.onchange = () => { dev.info.tier = +tierSel.value; saveDev(email, dev); renderDevelopment(); };
+      root.querySelector('#dev-isgk').onchange = () => { dev.info.isGK = root.querySelector('#dev-isgk').checked; saveDev(email, dev); renderDevelopment(); };
+    }
+    // home training: log one occurrence of an activity this week
+    root.querySelectorAll('[data-home-log]').forEach(b => b.onclick = () => {
+      home.log.push({ id: 'h' + Math.random().toString(36).slice(2, 9), week: wk, activityId: b.dataset.homeLog, date: new Date().toISOString().slice(0, 10) });
+      saveHome(email, home); toast('Logged — the mascot noticed 🐠'); renderDevelopment();
+    });
+    // add a test result
+    const addTest = root.querySelector('#dev-test-add');
+    if (addTest) addTest.onclick = () => {
+      const id = root.querySelector('#dev-test-id').value, t = TESTLOG.testById(id, !!dev.info.isGK);
+      const result = root.querySelector('#dev-test-result').value.trim(); if (!t || !result) { toast('Pick a test and enter a result'); return; }
+      dev.tests = dev.tests || []; dev.tests.push({ id: 'd' + Math.random().toString(36).slice(2, 9), date: root.querySelector('#dev-test-date').value || new Date().toISOString().slice(0, 10), name: dev.info.name || email, test: t.label, result, unit: t.unit, testedBy: root.querySelector('#dev-test-by').value, remark: root.querySelector('#dev-test-remark').value });
+      saveDev(email, dev); toast('Test result saved'); renderDevelopment();
+    };
+    root.querySelectorAll('[data-test-del]').forEach(b => b.onclick = () => { dev.tests = (dev.tests || []).filter(t => t.id !== b.dataset.testDel); saveDev(email, dev); renderDevelopment(); });
+    // add a swim week
+    const addSwim = root.querySelector('#dev-swim-add');
+    if (addSwim) addSwim.onclick = () => {
+      const week = root.querySelector('#dev-swim-week').value || TESTLOG.mondayOf(new Date());
+      const club = +root.querySelector('#dev-swim-club').value || 0, self_ = +root.querySelector('#dev-swim-self').value || 0;
+      dev.swimWeeks = dev.swimWeeks || []; dev.swimWeeks.push({ id: 's' + Math.random().toString(36).slice(2, 9), week, name: dev.info.name || email, metersClub: club, metersSelf: self_, total: club + self_, attended: +root.querySelector('#dev-swim-att').value || 0, possible: +root.querySelector('#dev-swim-poss').value || 0 });
+      saveDev(email, dev); toast('Swim week saved'); renderDevelopment();
+    };
+    root.querySelectorAll('[data-swim-del]').forEach(b => b.onclick = () => { dev.swimWeeks = (dev.swimWeeks || []).filter(r => r.id !== b.dataset.swimDel); saveDev(email, dev); renderDevelopment(); });
+    // export
+    const exT = root.querySelector('#dev-export-tests'); if (exT) exT.onclick = () => downloadBlob(TESTLOG.toCSV(dev.tests || [], TESTLOG.TEST_COLS), (dev.info.name || 'player').replace(/[^\w]+/g, '-') + '-test-log.csv', 'text/csv');
+    const exS = root.querySelector('#dev-export-swim'); if (exS) exS.onclick = () => downloadBlob(TESTLOG.toCSV(dev.swimWeeks || [], TESTLOG.SWIM_COLS), (dev.info.name || 'player').replace(/[^\w]+/g, '-') + '-swim-weeks.csv', 'text/csv');
+    // team import (coach/trainer/admin only) — .xlsx or .csv, matched by player name against the roster
+    const impBtn = root.querySelector('#dev-import-btn'), impFile = root.querySelector('#dev-import-file');
+    if (impBtn) impBtn.onclick = () => impFile.click();
+    if (impFile) impFile.onchange = async () => {
+      const files = Array.from(impFile.files || []); impFile.value = ''; if (!files.length) return;
+      const roster = DATA.loadUsers().filter(u => u.role === 'player');
+      const byName = n => roster.find(u => (u.name || '').trim().toLowerCase() === String(n || '').trim().toLowerCase());
+      let addedTests = 0, addedWeeks = 0, unmatched = new Set(), bad = 0;
+      for (const f of files) {
+        try {
+          let testSheetRows = [], swimSheetRows = [];
+          if (/\.xlsx$/i.test(f.name)) {
+            const buf = new Uint8Array(await f.arrayBuffer());
+            const { sheets } = await TESTLOG.readXLSX(buf);
+            const testSheet = sheets['Testresultate'] || Object.values(sheets).find(rows => TESTLOG.rowsFromSheetTable(rows, TESTLOG.TEST_COLS).length);
+            const swimSheet = sheets['Schwimm-Wochen'] || Object.values(sheets).find(rows => TESTLOG.rowsFromSheetTable(rows, TESTLOG.SWIM_COLS).length);
+            if (testSheet) testSheetRows = TESTLOG.rowsFromSheetTable(testSheet, TESTLOG.TEST_COLS);
+            if (swimSheet) swimSheetRows = TESTLOG.rowsFromSheetTable(swimSheet, TESTLOG.SWIM_COLS);
+          } else {
+            const text = await f.text(); const rows = TESTLOG.parseCSV(text);
+            const asTests = TESTLOG.rowsFromCSV(rows, TESTLOG.TEST_COLS), asSwim = TESTLOG.rowsFromCSV(rows, TESTLOG.SWIM_COLS);
+            if (asTests.some(r => r.test && r.result)) testSheetRows = asTests; else if (asSwim.some(r => r.week)) swimSheetRows = asSwim;
+          }
+          testSheetRows.filter(r => r.test && r.result).forEach(r => {
+            const u = byName(r.name); if (!u) { unmatched.add(r.name || '(blank)'); return; }
+            const d = loadDev(u.email); d.tests = d.tests || [];
+            const dup = d.tests.some(x => x.date === r.date && x.test === r.test && String(x.result) === String(r.result));
+            if (!dup) { d.tests.push({ id: 'd' + Math.random().toString(36).slice(2, 9), date: r.date, name: r.name, test: r.test, result: r.result, unit: r.unit, testedBy: r.testedBy, remark: r.remark }); saveDev(u.email, d); addedTests++; }
+          });
+          swimSheetRows.filter(r => r.week).forEach(r => {
+            const u = byName(r.name); if (!u) { unmatched.add(r.name || '(blank)'); return; }
+            const d = loadDev(u.email); d.swimWeeks = d.swimWeeks || [];
+            const dup = d.swimWeeks.some(x => x.week === r.week);
+            if (!dup) { d.swimWeeks.push({ id: 's' + Math.random().toString(36).slice(2, 9), week: r.week, name: r.name, metersClub: +r.metersClub || 0, metersSelf: +r.metersSelf || 0, total: +r.total || ((+r.metersClub || 0) + (+r.metersSelf || 0)), attended: +r.attended || 0, possible: +r.possible || 0 }); saveDev(u.email, d); addedWeeks++; }
+          });
+        } catch (e) { bad++; }
+      }
+      toast(`Imported ${addedTests} test result${addedTests === 1 ? '' : 's'} and ${addedWeeks} swim week${addedWeeks === 1 ? '' : 's'}` + (unmatched.size ? ` · ${unmatched.size} name${unmatched.size > 1 ? 's' : ''} not on the roster` : '') + (bad ? ` · ${bad} file${bad > 1 ? 's' : ''} could not be read` : ''));
+      renderDevelopment();
+    };
   }
 
   /* ======================================================
