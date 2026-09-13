@@ -1075,20 +1075,24 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     const parsed = TESTLOG.rowsFromSheetTable(sheets['Testresultate'], TESTLOG.TEST_COLS);
     ok('German column headers (Datum/Resultat/Getestet von…) map onto the same fields as the English ones', parsed.length===1 && parsed[0].date==='2026-10-06' && parsed[0].test==='50 m Kraul' && parsed[0].result==='37.4' && parsed[0].testedBy==='Trainerteam');
 
-    // UI: the nav item, the form, logging home training, adding a test, export
+    // UI: the nav item, the hero + mascot, stat strip, logging home training, the modal flows
     q('.nav-btn[data-view="development"]').click(); await wait(40);
-    ok('My Development view renders with a profile form and a mascot', !!q('#dev-goal-words') && !!q('.dev-mascot-row .mascot'));
+    ok('My Development view renders with a hero mascot and a goal line', !!q('.dev-hero-mascot .mascot') && !!q('.dev-hero-goal'));
+    ok('a glanceable stat strip is shown', qa('.dev-stat').length===4);
     ok('the six real home-training activities are listed', qa('.dev-home-item').length===6 && /Wall passing/.test(q('.dev-home-list').textContent));
     const bar0 = q('.dev-home-item .dev-home-bar span').style.width;
     q('[data-home-log]').click(); await wait(30);
     ok('logging a home session moves its progress bar', q('.dev-home-item .dev-home-bar span').style.width !== bar0);
-    q('#dev-isgk').click(); await wait(20);
-    ok('marking Goalkeeper switches the benchmark table to the GK tests', /Eggbeater|Penalty 5 m/i.test(q('.dev-bench').textContent));
-    q('#dev-isgk').click(); await wait(20);
-    q('.dev-add summary').click(); await wait(10);
+    ok('add-test/add-swim tiles show and the profile modal starts hidden', !!q('[data-open-modal="test"]') && q('#dev-profile-modal').hidden===true);
+    q('#dev-edit-profile').click(); await wait(10);
+    ok('Edit profile opens the profile modal', q('#dev-profile-modal').hidden===false);
+    q('#dev-isgk').click(); q('#dev-profile-save').click(); await wait(20);
+    ok('marking Goalkeeper + Save switches the benchmark cards to the GK tests', /Eggbeater|Penalty 5 m/i.test(q('.dev-bench-grid').textContent));
+    q('#dev-edit-profile').click(); q('#dev-isgk').click(); q('#dev-profile-save').click(); await wait(20);
+    q('[data-open-modal="test"]').click(); await wait(10);
+    ok('the "Log a test result" tile opens the test modal', q('#dev-test-modal').hidden===false);
     q('#dev-test-id').value = 'free50'; q('#dev-test-result').value = '34.0'; q('#dev-test-add').click(); await wait(30);
-    ok('a saved test result appears in the table and updates the benchmark row', /34/.test(q('.dev-table').textContent) && q('.dev-bench-row.dev-met'));
-    const cardsBefore = DATA ? true : true;
+    ok('a saved test result appears in the history table and updates the benchmark card', /34/.test(q('.dev-table').textContent) && q('.dev-bench-card.dev-bench-met'));
     ok('a download-CSV button exists for the test log', !!q('#dev-export-tests'));
   }
 

@@ -537,6 +537,7 @@
     const email = devTargetEmail();
     const dev = loadDev(email), home = loadHome(email);
     const isSelf = email === state.user.email;
+    const canEditThis = isSelf || devCanCoach();
     const wk = TESTLOG.weekKeyOf(new Date().toISOString().slice(0, 10));
     const mascot = TESTLOG.mascotState(home.log, wk);
     const roster = devCanCoach() ? DATA.loadUsers().filter(u => u.role === 'player' && u.status === 'approved').sort((a, b) => (a.name || '').localeCompare(b.name || '')) : [];
@@ -545,22 +546,85 @@
     const testRows = (dev.tests || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const latestByTest = {}; (dev.tests || []).forEach(t => { if (!latestByTest[t.test] || t.date > latestByTest[t.test].date) latestByTest[t.test] = t; });
     const swimRows = (dev.swimWeeks || []).slice().sort((a, b) => (b.week || '').localeCompare(a.week || ''));
-    const swim4 = swimRows.slice(0, 4);
-    const swim4Avg = swim4.length ? Math.round(swim4.reduce((s, r) => s + (+r.total || 0), 0) / swim4.length) : 0;
+    const thisWeekSwim = swimRows.find(r => r.week === TESTLOG.mondayOf(new Date()));
+    const metCount = testCat.filter(t => { const l = latestByTest[t.label]; return l && TESTLOG.evaluate(t, l.result, dev.info.tier).met === true; }).length;
+    const tierLabel = TESTLOG.TIERS[dev.info.tier] || TESTLOG.TIERS[0];
+    const displayName = dev.info.name || (isSelf ? state.user.name : (roster.find(u => u.email === email) || {}).name) || email;
 
-    root.innerHTML = `<div class="dash-head with-mascot">${(typeof FX !== 'undefined') ? FX.mascot(38, mascot.mood) : ''}
-        <div><h1 data-i18n="nav.development">My Development</h1>
-        <p class="dash-sub">Your own test results, your own goal, your own home-training streak — not the team's. <button class="help-chip" data-help="development" title="How this works">？</button></p></div></div>
+    // one progress card per test — a bar you can read in a glance, not a spreadsheet row
+    const benchCard = (t) => {
+      const last = latestByTest[t.label] || latestByTest[t.id];
+      const ev = last ? TESTLOG.evaluate(t, last.result, dev.info.tier) : null;
+      let pct = 0, state_ = 'untested';
+      if (ev && ev.target != null) { state_ = ev.met ? 'met' : 'gap'; pct = ev.met ? 100 : Math.max(4, Math.min(96, 100 * (t.lower ? ev.target / ev.value : ev.value / ev.target))); }
+      else if (last) { state_ = 'baseline'; pct = 50; }
+      return `<div class="dev-bench-card dev-bench-${state_}">
+        <div class="dev-bench-top"><b>${escapeHtml(t.label)}</b>${t.piste ? ' <span class="tag" title="Shared with the official Swiss Aquatics PISTE test">PISTE</span>' : ''}</div>
+        <div class="dev-bench-bar"><span style="width:${pct}%"></span></div>
+        <div class="dev-bench-bottom"><span>${last ? escapeHtml(String(last.result)) + ' ' + escapeHtml(t.unit) : 'not tested yet'}</span><span class="muted">${ev ? escapeHtml(ev.deltaText) : (t.targets[dev.info.tier] != null ? 'target ' + escapeHtml(String(t.targets[dev.info.tier])) : '')}</span></div>
+      </div>`;
+    };
 
-      ${roster.length ? `<div class="dev-roster"><span class="ef-label">Viewing</span><select id="dev-roster-select" class="focus-select"><option value="">Myself</option>${roster.map(u => `<option value="${escapeHtml(u.email)}" ${devViewing === u.email ? 'selected' : ''}>${escapeHtml(u.name || u.email)}${u.position ? ' · ' + escapeHtml(u.position) : ''}</option>`).join('')}</select>
-        <span class="muted">${roster.length} player${roster.length === 1 ? '' : 's'} approved</span>
-        <button class="btn-ghost sm" id="dev-import-btn">⬆ Import team logbook (.xlsx / .csv)</button><input type="file" id="dev-import-file" accept=".xlsx,.csv" hidden multiple></div>` : ''}
+    root.innerHTML = `
+      <div class="dev-hero">
+        <div class="dev-hero-mascot">${(typeof FX !== 'undefined') ? FX.mascot(84, mascot.mood) : ''}</div>
+        <div class="dev-hero-info">
+          <div class="dev-hero-id"><h1>${escapeHtml(displayName)} <button class="help-chip" data-help="development" title="How this works">？</button></h1><span class="tag">${escapeHtml(tierLabel)}</span>${dev.info.position ? `<span class="tag">Pos ${escapeHtml(dev.info.position)}</span>` : ''}${dev.info.isGK ? `<span class="tag">GK</span>` : ''}
+            ${canEditThis ? `<button class="btn-ghost sm" id="dev-edit-profile">Edit profile</button>` : ''}</div>
+          <div class="dev-hero-goal">${dev.info.goalBlock ? `🎯 ${escapeHtml(dev.info.goalBlock)}` : (canEditThis ? 'No goal set yet — tap Edit profile' : 'No goal set yet')}</div>
+          <div class="dev-hero-line">${escapeHtml(mascot.line)}${mascot.streak > 0 ? ` · 🔥 ${mascot.streak}-week streak` : ''}</div>
+        </div>
+      </div>
 
-      <div class="dev-grid">
-        <div class="dev-card dev-profile">
-          <h3>Profile &amp; self target</h3>
+      <div class="dev-stats">
+        <div class="dev-stat"><b>${metCount}/${testCat.length}</b><span>tests at target</span></div>
+        <div class="dev-stat"><b>${Math.round(mascot.compliance * 100)}%</b><span>home training this week</span></div>
+        <div class="dev-stat"><b>${(thisWeekSwim ? thisWeekSwim.total : 0).toLocaleString()} m</b><span>swum this week</span></div>
+        <div class="dev-stat"><b>${(dev.tests || []).length}</b><span>tests logged, all time</span></div>
+      </div>
+
+      ${roster.length ? `<details class="dev-coach-tools"><summary>👥 Coach tools — viewing <b>${devViewing ? escapeHtml((roster.find(u => u.email === devViewing) || {}).name || devViewing) : 'myself'}</b></summary>
+        <div class="dev-coach-row"><select id="dev-roster-select" class="focus-select"><option value="">Myself</option>${roster.map(u => `<option value="${escapeHtml(u.email)}" ${devViewing === u.email ? 'selected' : ''}>${escapeHtml(u.name || u.email)}${u.position ? ' · ' + escapeHtml(u.position) : ''}</option>`).join('')}</select>
+          <button class="btn-ghost sm" id="dev-import-btn">⬆ Import team logbook (.xlsx / .csv)</button><input type="file" id="dev-import-file" accept=".xlsx,.csv" hidden multiple></div></details>` : ''}
+
+      ${canEditThis ? `<div class="dev-actions">
+        <button class="dev-tile" data-open-modal="test"><span class="dev-tile-ic">🧪</span>Log a test result</button>
+        <button class="dev-tile" data-open-modal="swim"><span class="dev-tile-ic">🏊</span>Log this week's swim</button>
+      </div>` : ''}
+
+      <div class="dev-card dev-home">
+        <h3>🏠 Home training <span class="rightbar-hint">this week</span></h3>
+        <div class="dev-home-list">${TESTLOG.HOME_ACTIVITIES.map(a => {
+          const n = home.log.filter(e => e.week === wk && e.activityId === a.id).length;
+          const done = Math.min(n, a.perWeek);
+          return `<div class="dev-home-item"><div class="dev-home-h"><b>${escapeHtml(a.label)}</b><span class="muted">${done}/${a.perWeek === Math.round(a.perWeek) ? a.perWeek : a.perWeek.toFixed(1)} · ${a.minutes} min</span></div>
+            <div class="dev-home-bar"><span style="width:${Math.min(100, Math.round(100 * done / a.perWeek))}%"></span></div>
+            <span class="fa-note">${escapeHtml(a.note)}</span>
+            ${isSelf ? `<button class="btn-ghost sm" data-home-log="${a.id}">＋ Log it</button>` : ''}</div>`;
+        }).join('')}</div>
+      </div>
+
+      <div class="dev-card dev-bench">
+        <h3>📈 Test results <span class="rightbar-hint">vs this season's target</span></h3>
+        <div class="dev-bench-grid">${testCat.map(benchCard).join('')}</div>
+      </div>
+
+      <details class="dev-history"><summary>Test log history (${testRows.length})</summary>
+        <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>Date</th><th>Test</th><th>Result</th><th>Tested by</th><th>Remark</th>${canEditThis ? '<th></th>' : ''}</tr></thead>
+          <tbody>${testRows.map(r => `<tr><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.test)}</td><td>${escapeHtml(String(r.result))} ${escapeHtml(r.unit || '')}</td><td>${escapeHtml(r.testedBy || '')}</td><td class="muted">${escapeHtml(r.remark || '')}</td>${canEditThis ? `<td><button class="btn-ghost sm danger" data-test-del="${r.id}">✕</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="6" class="muted">No tests logged yet.</td></tr>`}</tbody></table></div>
+        <button class="btn-ghost sm" id="dev-export-tests">⬇ Download CSV</button>
+      </details>
+      <details class="dev-history"><summary>Swim weeks history (${swimRows.length})</summary>
+        <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>Week</th><th>Club</th><th>Self/home</th><th>Total</th><th>Attended</th>${canEditThis ? '<th></th>' : ''}</tr></thead>
+          <tbody>${swimRows.map(r => `<tr><td>${escapeHtml(r.week)}</td><td>${escapeHtml(String(r.metersClub || 0))}</td><td>${escapeHtml(String(r.metersSelf || 0))}</td><td><b>${escapeHtml(String(r.total || ((+r.metersClub || 0) + (+r.metersSelf || 0))))}</b></td><td class="muted">${escapeHtml(String(r.attended || 0))}/${escapeHtml(String(r.possible || 0))}</td>${canEditThis ? `<td><button class="btn-ghost sm danger" data-swim-del="${r.id}">✕</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="5" class="muted">No weeks logged yet.</td></tr>`}</tbody></table></div>
+        <button class="btn-ghost sm" id="dev-export-swim">⬇ Download CSV</button>
+      </details>
+
+      <div class="modal-backdrop dev-modal" id="dev-profile-modal" hidden><div class="modal modal-sm">
+        <div class="modal-head"><h3>Profile &amp; self target</h3><span class="spacer"></span><button class="modal-x" data-close-modal="dev-profile-modal">✕</button></div>
+        <div class="modal-body">
           <div class="dev-form">
-            <label>Name<input type="text" id="dev-name" value="${escapeHtml(dev.info.name || (isSelf ? state.user.name : ''))}" ${isSelf ? '' : 'disabled'}></label>
+            <label>Name<input type="text" id="dev-name" value="${escapeHtml(dev.info.name || (isSelf ? state.user.name : ''))}"></label>
             <label>Birth year<input type="text" id="dev-birth" value="${escapeHtml(dev.info.birthYear)}" placeholder="e.g. 2013"></label>
             <label>Band / age group<input type="text" id="dev-band" value="${escapeHtml(dev.info.band)}" placeholder="e.g. Core (2013–14)"></label>
             <label>Position<input type="text" id="dev-position" value="${escapeHtml(dev.info.position || state.user.position || '')}"></label>
@@ -574,84 +638,58 @@
           <label class="dev-goal">My goal, in my own words<textarea id="dev-goal-words" rows="2" placeholder="What do I want to be true by the end of this block?">${escapeHtml(dev.info.goalWords)}</textarea></label>
           <p class="fa-note">There are no bad numbers here — only starting points. Honest entries matter more than fast ones.</p>
         </div>
+        <div class="modal-foot"><button class="btn-ghost" data-close-modal="dev-profile-modal">Cancel</button><button class="btn-primary" id="dev-profile-save">Save</button></div>
+      </div></div>
 
-        <div class="dev-card dev-home">
-          <h3>🏠 Home training <span class="rightbar-hint">this week</span></h3>
-          <div class="dev-mascot-row">${(typeof FX !== 'undefined') ? FX.mascot(56, mascot.mood) : ''}
-            <div><strong>${escapeHtml(mascot.moodLabel)}</strong><span class="muted">${mascot.line}</span>
-            <span class="dev-streak">${mascot.streak > 0 ? `🔥 ${mascot.streak} week streak` : 'No streak yet — this week starts one'}</span></div></div>
-          <div class="dev-home-list">${TESTLOG.HOME_ACTIVITIES.map(a => {
-            const n = home.log.filter(e => e.week === wk && e.activityId === a.id).length;
-            const done = Math.min(n, a.perWeek);
-            return `<div class="dev-home-item"><div class="dev-home-h"><b>${escapeHtml(a.label)}</b><span class="muted">${done}/${a.perWeek === Math.round(a.perWeek) ? a.perWeek : a.perWeek.toFixed(1)} · ${a.minutes} min</span></div>
-              <div class="dev-home-bar"><span style="width:${Math.min(100, Math.round(100 * done / a.perWeek))}%"></span></div>
-              <span class="fa-note">${escapeHtml(a.note)}</span>
-              ${isSelf ? `<button class="btn-ghost sm" data-home-log="${a.id}">＋ Log it</button>` : ''}</div>`;
-          }).join('')}</div>
+      <div class="modal-backdrop dev-modal" id="dev-test-modal" hidden><div class="modal modal-sm">
+        <div class="modal-head"><h3>Log a test result</h3><span class="spacer"></span><button class="modal-x" data-close-modal="dev-test-modal">✕</button></div>
+        <div class="modal-body dev-add-form">
+          <select id="dev-test-id">${testCat.map(t => `<option value="${t.id}">${escapeHtml(t.label)}</option>`).join('')}</select>
+          <input type="text" id="dev-test-date" placeholder="Date (YYYY-MM-DD)" value="${new Date().toISOString().slice(0, 10)}">
+          <input type="text" id="dev-test-result" placeholder="Result (e.g. 37.4 or 1:22)">
+          <input type="text" id="dev-test-by" placeholder="Tested by" value="${escapeHtml(devCanCoach() ? state.user.name : 'Coaching staff')}">
+          <input type="text" id="dev-test-remark" placeholder="Remark (optional)">
         </div>
+        <div class="modal-foot"><button class="btn-ghost" data-close-modal="dev-test-modal">Cancel</button><button class="btn-primary" id="dev-test-add">Save result</button></div>
+      </div></div>
 
-        <div class="dev-card dev-tests">
-          <h3>📈 Test results <span class="rightbar-hint">vs this season's target</span></h3>
-          <div class="dev-bench">${testCat.map(t => {
-            const last = latestByTest[t.label] || latestByTest[t.id];
-            const ev = last ? TESTLOG.evaluate(t, last.result, dev.info.tier) : null;
-            return `<div class="dev-bench-row ${ev && ev.met === true ? 'dev-met' : ev && ev.met === false ? 'dev-notyet' : ''}">
-              <span class="dev-bench-name">${escapeHtml(t.label)}${t.piste ? ' <span class=\"tag\" title=\"Shared with the official Swiss Aquatics PISTE test\">PISTE</span>' : ''}</span>
-              <span class="muted">${last ? escapeHtml(String(last.result)) + ' ' + escapeHtml(t.unit) : 'no result yet'}</span>
-              <span class="muted">target ${t.targets[dev.info.tier] == null ? '—' : escapeHtml(String(t.targets[dev.info.tier]))}</span>
-              <span class="${ev && ev.met === true ? 'dev-ok' : ev && ev.met === false ? 'dev-gap' : 'muted'}">${ev ? escapeHtml(ev.deltaText) : ''}</span>
-            </div>`;
-          }).join('')}</div>
-          ${isSelf || devCanCoach() ? `<details class="dev-add"><summary>＋ Add a test result</summary>
-            <div class="dev-add-form">
-              <select id="dev-test-id">${testCat.map(t => `<option value="${t.id}">${escapeHtml(t.label)}</option>`).join('')}</select>
-              <input type="text" id="dev-test-date" placeholder="Date (YYYY-MM-DD)" value="${new Date().toISOString().slice(0, 10)}">
-              <input type="text" id="dev-test-result" placeholder="Result (e.g. 37.4 or 1:22)">
-              <input type="text" id="dev-test-by" placeholder="Tested by" value="${escapeHtml(devCanCoach() ? state.user.name : 'Coaching staff')}">
-              <input type="text" id="dev-test-remark" placeholder="Remark (optional)">
-              <button class="btn-primary sm" id="dev-test-add">Save result</button>
-            </div></details>` : ''}
-          <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>Date</th><th>Test</th><th>Result</th><th>Tested by</th><th>Remark</th>${isSelf || devCanCoach() ? '<th></th>' : ''}</tr></thead>
-            <tbody>${testRows.map((r, i) => `<tr><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.test)}</td><td>${escapeHtml(String(r.result))} ${escapeHtml(r.unit || '')}</td><td>${escapeHtml(r.testedBy || '')}</td><td class="muted">${escapeHtml(r.remark || '')}</td>${isSelf || devCanCoach() ? `<td><button class="btn-ghost sm danger" data-test-del="${r.id}">✕</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="6" class="muted">No tests logged yet.</td></tr>`}</tbody></table></div>
-          <button class="btn-ghost sm" id="dev-export-tests">⬇ Download my test log (CSV)</button>
+      <div class="modal-backdrop dev-modal" id="dev-swim-modal" hidden><div class="modal modal-sm">
+        <div class="modal-head"><h3>Log this week's swim</h3><span class="spacer"></span><button class="modal-x" data-close-modal="dev-swim-modal">✕</button></div>
+        <div class="modal-body dev-add-form">
+          <input type="text" id="dev-swim-week" placeholder="Week (Monday, YYYY-MM-DD)" value="${TESTLOG.mondayOf(new Date())}">
+          <input type="number" id="dev-swim-club" placeholder="Metres — club">
+          <input type="number" id="dev-swim-self" placeholder="Metres — self / home">
+          <input type="number" id="dev-swim-att" placeholder="Sessions attended">
+          <input type="number" id="dev-swim-poss" placeholder="Sessions possible">
         </div>
+        <div class="modal-foot"><button class="btn-ghost" data-close-modal="dev-swim-modal">Cancel</button><button class="btn-primary" id="dev-swim-add">Save week</button></div>
+      </div></div>`;
 
-        <div class="dev-card dev-swim">
-          <h3>🏊 Swim weeks <span class="rightbar-hint">club + home, side by side</span></h3>
-          <div class="dev-swim-sum">4-week average: <b>${swim4Avg.toLocaleString()} m</b> · target ${Math.round((TESTLOG.testById('swimPerWeek', false).targets[dev.info.tier] || 0) * 1000).toLocaleString()} m</div>
-          ${isSelf || devCanCoach() ? `<details class="dev-add"><summary>＋ Add this week</summary>
-            <div class="dev-add-form">
-              <input type="text" id="dev-swim-week" placeholder="Week (Monday, YYYY-MM-DD)" value="${TESTLOG.mondayOf(new Date())}">
-              <input type="number" id="dev-swim-club" placeholder="Metres — club">
-              <input type="number" id="dev-swim-self" placeholder="Metres — self / home">
-              <input type="number" id="dev-swim-att" placeholder="Sessions attended">
-              <input type="number" id="dev-swim-poss" placeholder="Sessions possible">
-              <button class="btn-primary sm" id="dev-swim-add">Save week</button>
-            </div></details>` : ''}
-          <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>Week</th><th>Club</th><th>Self/home</th><th>Total</th><th>Attended</th>${isSelf || devCanCoach() ? '<th></th>' : ''}</tr></thead>
-            <tbody>${swimRows.map(r => `<tr><td>${escapeHtml(r.week)}</td><td>${escapeHtml(String(r.metersClub || 0))}</td><td>${escapeHtml(String(r.metersSelf || 0))}</td><td><b>${escapeHtml(String(r.total || ((+r.metersClub || 0) + (+r.metersSelf || 0))))}</b></td><td class="muted">${escapeHtml(String(r.attended || 0))}/${escapeHtml(String(r.possible || 0))}</td>${isSelf || devCanCoach() ? `<td><button class="btn-ghost sm danger" data-swim-del="${r.id}">✕</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="5" class="muted">No weeks logged yet.</td></tr>`}</tbody></table></div>
-          <button class="btn-ghost sm" id="dev-export-swim">⬇ Download my swim weeks (CSV)</button>
-        </div>
-      </div>`;
-
-    wireDevelopment(root, email, dev, home, wk);
+    wireDevelopment(root, email, dev, home, wk, canEditThis);
   }
 
-  function devRegenId(rows) { rows.forEach(r => { if (!r.id) r.id = 'd' + Math.random().toString(36).slice(2, 9); }); return rows; }
+  function devToggleModal(root, id, show) { const m = root.querySelector('#' + id); if (m) m.hidden = show == null ? !m.hidden : !show; }
 
-  function wireDevelopment(root, email, dev, home, wk) {
+  function wireDevelopment(root, email, dev, home, wk, canEditThis) {
     const rs = root.querySelector('#dev-roster-select');
     if (rs) rs.onchange = () => { devViewing = rs.value || null; renderDevelopment(); };
-    const isSelf = email === state.user.email;
 
-    // profile fields — save on change (self only; a coach views read-only except tier/goal stay editable by the player)
-    if (isSelf) {
-      const bind = (sel, key, checkbox) => { const el = root.querySelector(sel); if (!el) return; el.addEventListener('change', () => { dev.info[key] = checkbox ? el.checked : el.value; saveDev(email, dev); }); };
-      bind('#dev-name', 'name'); bind('#dev-birth', 'birthYear'); bind('#dev-band', 'band'); bind('#dev-position', 'position');
-      bind('#dev-isgk', 'isGK', true); bind('#dev-card', 'talentCard'); bind('#dev-card-until', 'cardValidUntil'); bind('#dev-piste', 'lastPiste');
-      bind('#dev-goal-block', 'goalBlock'); bind('#dev-goal-words', 'goalWords');
-      const tierSel = root.querySelector('#dev-tier'); if (tierSel) tierSel.onchange = () => { dev.info.tier = +tierSel.value; saveDev(email, dev); renderDevelopment(); };
-      root.querySelector('#dev-isgk').onchange = () => { dev.info.isGK = root.querySelector('#dev-isgk').checked; saveDev(email, dev); renderDevelopment(); };
+    root.querySelectorAll('[data-open-modal]').forEach(b => b.onclick = () => devToggleModal(root, 'dev-' + b.dataset.openModal + '-modal', true));
+    root.querySelectorAll('[data-close-modal]').forEach(b => b.onclick = () => devToggleModal(root, b.dataset.closeModal, false));
+    const editBtn = root.querySelector('#dev-edit-profile'); if (editBtn) editBtn.onclick = () => devToggleModal(root, 'dev-profile-modal', true);
+
+    // profile — one explicit Save, not silent auto-save on every keystroke
+    if (canEditThis) {
+      const save = root.querySelector('#dev-profile-save');
+      if (save) save.onclick = () => {
+        dev.info = Object.assign({}, dev.info, {
+          name: root.querySelector('#dev-name').value, birthYear: root.querySelector('#dev-birth').value, band: root.querySelector('#dev-band').value,
+          position: root.querySelector('#dev-position').value, isGK: root.querySelector('#dev-isgk').checked, tier: +root.querySelector('#dev-tier').value,
+          talentCard: root.querySelector('#dev-card').value, cardValidUntil: root.querySelector('#dev-card-until').value, lastPiste: root.querySelector('#dev-piste').value,
+          goalBlock: root.querySelector('#dev-goal-block').value, goalWords: root.querySelector('#dev-goal-words').value,
+        });
+        saveDev(email, dev); toast('Profile saved'); renderDevelopment();
+      };
     }
     // home training: log one occurrence of an activity this week
     root.querySelectorAll('[data-home-log]').forEach(b => b.onclick = () => {

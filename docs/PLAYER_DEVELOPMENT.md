@@ -32,6 +32,18 @@ swim-week structure below are taken from that real document, not invented.
   own weekly target. Log a session and the mascot notices; a fully-kept week reads as
   **Thriving**, a quiet one reads as **Neglected** — honestly, not as a guilt trip.
 
+## How it's presented
+
+The default view is a glance, not a form: a hero card (mascot mood, name, season tier,
+current goal, streak), a four-number stat strip (tests at target, this week's home-training
+compliance, this week's swim total, tests logged all-time), the home-training checklist
+inline, and a benchmark **card** per test with a fill bar instead of a table row. Editing
+the profile, logging a test result and logging a swim week are each a short modal — not
+permanent on-screen forms. Raw history (every logged test, every logged week) is still all
+there, just tucked behind a "history" disclosure so it doesn't dominate the page. A coach's
+roster picker and team-import tool live behind a collapsed "Coach tools" disclosure so a
+player's own view stays player-sized.
+
 ## Privacy
 
 This is the player's own record. It is visible to the player and to coach/trainer/
