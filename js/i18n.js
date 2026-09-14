@@ -1075,6 +1075,13 @@ const I18N = (() => {
       'film.demo.n4':'Trailer arrived unmarked.',
       'film.demo.c5':'Move the legs earlier — no wrestling at 2 m',
       'film.demo.n5':'Late slide forced the foul.',
+      /* pool markings + three strings the markup scanner could not see */
+      'pool.officialTable':'OFFICIAL TABLE',
+      'pool.goalJudge':'GOAL JUDGE',
+      'pool.flyingSub':'FLYING SUBSTITUTION — ONE HALF PER TEAM',
+      'ui.signingIn':'Signing in…',
+      'ui.shotLegend':'green ~70% · yellow ~30% · rest <10% — coach’s guide, not a measurement',
+      'ui.thinkItThrough':'Think it through first — reveal the solution to see what each position does.',
     },
     de: {
       'app.tagline':'Strategien & Laufwege — fürs Team und für jede Position.',
@@ -2136,6 +2143,13 @@ const I18N = (() => {
       'film.demo.n4':'Der Nachrückende kam ungedeckt durch.',
       'film.demo.c5':'Früher die Beine bewegen — kein Gerangel auf 2 m',
       'film.demo.n5':'Hilfe kam zu spät — daher das Foul.',
+      /* pool markings + three strings the markup scanner could not see */
+      'pool.officialTable':'KAMPFGERICHT',
+      'pool.goalJudge':'TORRICHTER',
+      'pool.flyingSub':'FLIEGENDER WECHSEL — EIGENE HÄLFTE PRO TEAM',
+      'ui.signingIn':'Anmeldung…',
+      'ui.shotLegend':'grün ~70% · gelb ~30% · Rest <10% — Orientierung fürs Training, keine Messung',
+      'ui.thinkItThrough':'Denk zuerst selbst nach — mit «Lösung zeigen ▶» siehst du, was jede Position macht.',
     },
     fr: {
       'app.tagline':'Stratégies & déplacements — pour l’équipe et pour chaque poste.',
@@ -3197,6 +3211,13 @@ const I18N = (() => {
       'film.demo.n4':'L’attaquant qui suivait est arrivé libre.',
       'film.demo.c5':'Bouge les jambes plus tôt — pas de lutte à 2 m',
       'film.demo.n5':'Aide trop tardive — obligé de faire faute.',
+      /* pool markings + three strings the markup scanner could not see */
+      'pool.officialTable':'TABLE DU JURY',
+      'pool.goalJudge':'JUGE DE BUT',
+      'pool.flyingSub':'CHANGEMENT VOLANT — UNE MOITIÉ PAR ÉQUIPE',
+      'ui.signingIn':'Connexion…',
+      'ui.shotLegend':'vert ~70 % · jaune ~30 % · reste <10 % — repère d’entraîneur, pas une mesure',
+      'ui.thinkItThrough':'Réfléchis d’abord — « Voir la solution ▶ » te montre ce que fait chaque poste.',
     },
     it: {
       'app.tagline':'Strategie & movimenti — per la squadra e per ogni ruolo.',
@@ -4258,6 +4279,13 @@ const I18N = (() => {
       'film.demo.n4':'L’attaccante in seconda ondata è arrivato libero.',
       'film.demo.c5':'Muovi prima le gambe — niente lotta a 2 m',
       'film.demo.n5':'Scivolamento in ritardo — fallo obbligato.',
+      /* pool markings + three strings the markup scanner could not see */
+      'pool.officialTable':'TAVOLO DELLA GIURIA',
+      'pool.goalJudge':'GIUDICE DI PORTA',
+      'pool.flyingSub':'CAMBIO VOLANTE — UNA METÀ PER SQUADRA',
+      'ui.signingIn':'Accesso…',
+      'ui.shotLegend':'verde ~70% · giallo ~30% · resto <10% — guida per l’allenatore, non una misura',
+      'ui.thinkItThrough':'Pensaci prima — con “Mostra la soluzione ▶” vedi cosa fa ogni ruolo.',
     },
   };
 

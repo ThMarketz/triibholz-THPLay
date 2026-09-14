@@ -8,6 +8,10 @@
    Red goal box = 2 m deep (goal line → 2 m) and 1 m beyond each post.
    ============================================================ */
 const POOL = (() => {
+  /* The pool's own markings are text a player reads, so they follow the app language.
+     They are drawn onto the SVG rather than written as markup, which is why the i18n
+     scanner never saw them — it now watches textContent assignments too. */
+  const T = k => (typeof I18N !== 'undefined') ? I18N.t(k) : k;
   const VB = { w: 320, h: 262 };
   const WATER = { x0: 24, y0: 30, x1: 296, y1: 190 };
   WATER.w = WATER.x1 - WATER.x0;   // 272
@@ -86,9 +90,9 @@ const POOL = (() => {
     // top strip: OFFICIAL TABLE + goal judges
     const tableW = 120, tableX = (VB.w - tableW) / 2;
     svgEl.appendChild(svg('rect', { x: tableX, y: 6, width: tableW, height: 14, rx: 2, fill: '#ffffff' }));
-    label(svgEl, VB.w / 2, 16, 'OFFICIAL TABLE', '#0b2030');
-    label(svgEl, WATER.x0 + 6, 14, 'GOAL JUDGE', '#8fb0c4', 'start', 5.5);
-    label(svgEl, WATER.x1 - 6, 14, 'GOAL JUDGE', '#8fb0c4', 'end', 5.5);
+    label(svgEl, VB.w / 2, 16, T('pool.officialTable'), '#0b2030');
+    label(svgEl, WATER.x0 + 6, 14, T('pool.goalJudge'), '#8fb0c4', 'start', 5.5);
+    label(svgEl, WATER.x1 - 6, 14, T('pool.goalJudge'), '#8fb0c4', 'end', 5.5);
 
     // water
     svgEl.appendChild(svg('rect', { x: WATER.x0, y: WATER.y0, width: WATER.w, height: WATER.h, fill: 'url(#waterGrad)', stroke: '#0a5860', 'stroke-width': 1.5 }));
@@ -171,7 +175,7 @@ const POOL = (() => {
         rx: 3, fill, stroke, 'stroke-width': 1, 'stroke-dasharray': '4 3' }));
     }
     [SUB_L, SUBZONE].forEach(z => box(z, 'rgba(15,58,47,0.65)', '#3fd08a'));
-    label(svgEl, (WATER.x0 + WATER.x1) / 2, SUBZONE.y1 + 9, 'FLYING SUBSTITUTION — ONE HALF PER TEAM', '#8fe0bc', 'middle', 5);
+    label(svgEl, (WATER.x0 + WATER.x1) / 2, SUBZONE.y1 + 9, T('pool.flyingSub'), '#8fe0bc', 'middle', 5);
 
     // ---- exclusion / re-entry: red right-angle bracket in each corner ----
     const bracket = (cx, cy, sx, sy) => {

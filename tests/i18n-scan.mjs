@@ -4,8 +4,10 @@
    The app's policy (js/i18n.js header) is: UI CHROME is translated in EN/DE/FR/IT, while
    tactical/coaching CONTENT stays English-first on purpose. This scanner enforces the first
    half. It reads the rendering source and reports every literal that reaches a user's eyes
-   without going through T(): text between tags, and the attributes a user actually reads
-   (placeholder / title / aria-label), plus toast() calls.
+   without going through T(): text between tags, the attributes a user actually reads
+   (placeholder / title / aria-label), toast() calls, and `el.textContent = '...'` — the last
+   of those hid the pool's GOAL JUDGE label and "Signing in…" through three whole tranches,
+   because neither ever passes through markup.
 
    Run standalone to see the list:   node tests/i18n-scan.mjs
    Import scanFile() from the smoke suite to fail the build on regressions.
@@ -134,6 +136,30 @@ function readTemplate(src, open, out) {
 
 const lineOf = (src, idx) => src.slice(0, idx).split('\n').length;
 
+/* The app shell. index.html is static markup, so none of the JS passes apply to it — and it
+   is where the whole playbook toolbar lives. A string here is translated by carrying
+   data-i18n / data-i18n-ph / data-i18n-title, which I18N.apply() swaps at runtime; anything
+   else is English forever. This surface was unguarded through four tranches. */
+function scanHtml(relPath, src, push) {
+  const body = src.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, s => ' '.repeat(s.length))
+                  .replace(/<!--[\s\S]*?-->/g, s => ' '.repeat(s.length));
+  let m;
+  const el = /<([a-z][a-z0-9]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>([^<>]{2,})</gi;
+  while ((m = el.exec(body))) {
+    if (/\bdata-i18n\s*=/.test(m[2])) continue;                 // swapped at runtime
+    push(m.index + m[0].length - m[3].length - 1, m[3], 'html');
+  }
+  const attr = /\b(placeholder|title|aria-label)\s*=\s*"([^"]{2,})"/gi;
+  while ((m = attr.exec(body))) {
+    const tagStart = body.lastIndexOf('<', m.index);
+    const tag = body.slice(tagStart, m.index);
+    const want = m[1].toLowerCase() === 'placeholder' ? 'data-i18n-ph' : 'data-i18n-' + m[1].toLowerCase();
+    if (tag.includes(want)) continue;
+    if (m[1].toLowerCase() === 'aria-label' && tag.includes('data-i18n-aria')) continue;
+    push(m.index, m[2], m[1].toLowerCase());
+  }
+}
+
 export function scanFile(relPath) {
   const src = readFileSync(join(APP, relPath), 'utf8');
   const findings = [];
@@ -142,6 +168,8 @@ export function scanFile(relPath) {
     if (!s || !looksLikeProse(s) || isAllowed(s)) return;
     findings.push({ file: relPath, line: lineOf(src, idx), kind, text: s });   // full text — the CLI truncates for display, callers need it whole to match source
   };
+
+  if (/\.html?$/i.test(relPath)) { scanHtml(relPath, src, push); return findings; }
 
   // 1) text between tags, inside template literals only (so we don't scan comments/CSS)
   let m;
@@ -184,6 +212,13 @@ export function scanFile(relPath) {
   const toast = /\btoast\(\s*(['"])((?:[^\\]|\\.)*?)\1/g;
   while ((m = toast.exec(src))) push(m.index, m[2], 'toast');
 
+  /* 4) el.textContent = '…' — visible text that never passes through markup at all, so
+     passes 1 and 2 are blind to it. By definition textContent IS what the user reads, which
+     makes this the rare pattern with no false positives worth speaking of. This is how
+     "Signing in…" and the pool's GOAL JUDGE label stayed English through three tranches. */
+  const textContent = /\.textContent\s*=\s*(['"])((?:[^'"\\\n]|\\.)*?)\1/g;
+  while ((m = textContent.exec(src))) push(m.index, m[2], 'textContent');
+
   return findings;
 }
 
@@ -193,13 +228,13 @@ export function scanAll(files) {
 
 /* The rendering surface. js/*.js content modules (commands/help/data/testlog/shot) are
    deliberately excluded: those hold coaching content, which is English-first by policy. */
-export const UI_FILES = ['js/app.js', 'js/film.js', 'js/help.js', 'js/gameplan.js', 'js/tactics.js'];
+export const UI_FILES = ['js/app.js', 'js/film.js', 'js/help.js', 'js/gameplan.js', 'js/tactics.js', 'js/pool.js', 'js/animate.js', 'index.html'];
 
 /* A RATCHET, not a target. The backlog is burned down view by view; this number may only
    ever go DOWN. Its job is to make the next hard-coded string fail the build on the day it
    is written — which is the only thing that stops this drifting again, and is exactly how
    the app ended up with 73 translated keys and 392 untranslated ones. */
-export const BASELINE = { 'js/app.js': 0, 'js/film.js': 0, 'js/help.js': 0, 'js/gameplan.js': 0, 'js/tactics.js': 0 };
+export const BASELINE = { 'js/app.js': 0, 'js/film.js': 0, 'js/help.js': 0, 'js/gameplan.js': 0, 'js/tactics.js': 0, 'js/pool.js': 0, 'js/animate.js': 0, 'index.html': 176 };   // measured, not chosen — the app shell was unguarded until now
 
 // compare real paths — import.meta.url is percent-encoded and this repo lives under "Mobile Documents"
 if (fileURLToPath(import.meta.url) === process.argv[1]) {

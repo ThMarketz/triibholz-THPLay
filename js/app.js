@@ -45,7 +45,7 @@
   };
   function simulateSignIn(which, btn) {
     btn.classList.add('loading');
-    btn.querySelector('span').textContent = 'Signing in…';
+    btn.querySelector('span').textContent = T('ui.signingIn');
     setTimeout(() => {
       btn.classList.remove('loading');
       btn.querySelector('span').textContent = which==='apple' ? 'Sign in with Apple' : 'Sign in with Google';
@@ -1127,7 +1127,7 @@
     $('controls').hidden = true; $('pool-empty').hidden = false;
     resetAdjust();
     $('mode-toggle').hidden = true; $('problem-overlay').hidden = true;
-    $('scenario-title').textContent = 'Select a scenario';
+    $('scenario-title').textContent = T('lib.select');
     $('scenario-desc').textContent = ''; $('scenario-desc').style.display = '';
     $('edit-btn').hidden = true;
     if ($('dl-btn')) { $('dl-btn').hidden = true; $('share-btn').hidden = true; }
@@ -1206,7 +1206,7 @@
     });
     const leg = POOL.svg('text', { x: POOL.WATER.x0 + 4, y: POOL.WATER.y1 - 4, 'font-size': 5.4,
       fill: '#cfe9f2', opacity: 0.85, 'font-family': 'Helvetica, Arial, sans-serif' });
-    leg.textContent = 'green ~70% · yellow ~30% · rest <10% — coach’s guide, not a measurement';
+    leg.textContent = T('ui.shotLegend');
     zl.appendChild(leg);
   }
   function applyZones() {
@@ -1630,7 +1630,7 @@
     if (masked) {
       const note = document.createElement('div');
       note.className='assign-mask-note';
-      note.textContent = 'Think it through first — reveal the solution to see what each position does.';
+      note.textContent = T('ui.thinkItThrough');
       wrap.appendChild(note);
     }
     const order = ['1','2','3','4','5','6','GK'];
@@ -2264,7 +2264,7 @@
         if (!r.ok) throw new Error('send-' + r.status);
         toast(scope === 'player' ? T('ui.noteSent') : T('ui.sentToWholeTeam'));
         close(); loadAnnouncements();
-      } catch (e) { toast(T('ui.couldNotSend') + e.message + ')'); btn.disabled = false; btn.textContent = 'Send'; }
+      } catch (e) { toast(T('ui.couldNotSend') + e.message + ')'); btn.disabled = false; btn.textContent = T('ui.send'); }
     };
   }
 
@@ -3396,7 +3396,14 @@
       I18N.onChange(()=>{
         refreshLangSwitches();
         updateUserPill();
-        if ($('app-screen').classList.contains('active')) switchView(state.view);
+        if ($('app-screen').classList.contains('active')) {
+          switchView(state.view);
+          /* The pool's own markings — OFFICIAL TABLE, GOAL JUDGE, the substitution zone — are
+             drawn into the SVG once, so they keep whatever language the board was built in.
+             switchView only rebuilds the board when no play is open; re-open the current one
+             so the markings follow the language too. */
+          if (state.view === 'playbook' && state.selectedId) openScenario(state.selectedId);
+        }
         if ($('setup-screen').classList.contains('active')) updatePositionBlock();
       });
     }
