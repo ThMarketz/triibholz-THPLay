@@ -1031,6 +1031,29 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .plan-why .why-row{display:block;padding:2px 0}
 .ses.ses-fromgap{background:rgba(255,209,102,.07);border-radius:8px}
 
+/* ---- Matches & results from wpmatch.ch (v1.37) ---- */
+.wpm-card{margin-bottom:14px}
+.wpm-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.wpm-head .muted{font-size:11px;margin-left:auto;padding:0}
+.wpm-pick{display:flex;gap:8px;margin:8px 0}
+.wpm-pick input{flex:1;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--ink);font:inherit}
+.wpm-teamlist{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.wpm-group{margin:10px 0}
+.wpm-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line-soft);font-size:.84rem}
+.wpm-row:last-child{border-bottom:0}
+.wpm-when{flex:0 0 120px;color:var(--ink-dim);font-size:.78rem}
+.wpm-opp{flex:1 1 auto;min-width:0}
+.wpm-opp .muted{font-size:.72rem;padding:0}
+.wpm-score{flex:0 0 auto;font-variant-numeric:tabular-nums}
+.wpm-acts{flex:0 0 auto;display:flex;gap:4px;align-items:center}
+.wpm-tbc .wpm-when{font-style:italic;opacity:.75}
+.wpm-win{color:#5fd99e}.wpm-loss{color:#ff9d9d}.wpm-draw{color:var(--ink-dim)}
+.wpm-us{background:rgba(31,192,212,.10)}
+.wpm-boxscore{border:1px solid var(--line);border-radius:10px;padding:10px;margin:10px 0;background:rgba(255,255,255,.02)}
+.wpm-box-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+.wpm-table-wrap{margin-top:10px;font-size:.85rem;color:var(--ink-dim)}
+.wpm-table-wrap summary{cursor:pointer;padding:4px 0}
+
 /* ---- Announcements: bell panel + compose modal (v1.35) ---- */
 #announce-wrap .icon-btn{position:relative}
 #announce-badge{margin-left:4px}

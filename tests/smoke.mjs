@@ -15,9 +15,9 @@ window.TextDecoder = window.TextDecoder || TD;   // TESTLOG's XLSX reader needs 
 window.DecompressionStream = window.DecompressionStream || globalThis.DecompressionStream;   // jsdom has neither; Node does
 window.Response = window.Response || globalThis.Response;
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -1215,6 +1215,69 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('Cancel removes the compose modal', !q('#announce-compose-modal'));
     document.body.click(); await wait(10);
     ok('clicking outside the bell panel closes it', q('#announce-panel').hidden === true);
+  }
+
+  console.log('\n[6w] wpmatch.ch — normalising an undocumented third-party API (WPMATCH)');
+  {
+    const { WPMATCH } = window.__T;
+    // A FROZEN CORPUS of real wpmatch.ch shapes, captured 2026-09-14. These tests must never
+    // touch the network: the source is someone else's box, and a red gate should mean OUR bug.
+    const played = { id: 11084, slug: '260078', date: '2026-05-05T20:00:00', date_gmt: '2026-05-05T18:00:00',
+      link: 'https://wpmatch.ch/event/260078/', title: { rendered: 'SC Horgen &#8211; Lugano Sharks' },
+      teams: [3281, 5438], main_results: ['17', '7'], day: 'ENDED', leagues: [202], venues: [104],
+      results: { '3281': { firstquarter:'4', secondquarter:'7', thirdquarter:'2', fourrdquarter:'4', ps:null, goals:'17', manup:'40.0', pstwo:'100.0', outcome:['win'] },
+                 '5438': { firstquarter:'1', secondquarter:'1', thirdquarter:'2', fourrdquarter:'3', ps:null, goals:'7', manup:'0.0', pstwo:'33.3', outcome:['loss'] },
+                 '0': { firstquarter:'1st Quarter', goals:'Goals', manup:'% Extra Player' } },
+      performance: { '3281': { '3322': { number:'1', goals:'0', exclusionfoul:'0', played:true, status:'lineup' },
+                               '3330': { number:'3', goals:'2', exclusionfoul:"1 (13 <b>1. 0:16</b>')", played:true, status:'lineup' }, '0': { goals:'', played:'' } },
+                     '5438': { '4001': { number:'2', goals:'3', exclusionfoul:'0', played:true, status:'sub' }, '0': { goals:'', played:'' } },
+                     '0': { played:'Played', goals:'Goals', goalon:'Goals 6on6', goalextraplayer:'Goals Extra Player', penaltygoals:'Penalty Goals', exclusionfoul:'Exclusion Fouls' } } };
+    const placeholder = { id: 36737, slug: '271465', date: '2027-12-31T18:15:00', date_gmt: '2027-12-30T23:00:00',
+      link: 'https://wpmatch.ch/event/271465/', title: { rendered: 'Lausanne Aquatique U14 &#8211; SC Horgen U14 Women' },
+      teams: [5728, -1], main_results: [], day: 'PLANNED', leagues: [], venues: [] };
+    const unrecorded = { id: 9, slug: '9', date_gmt: '2026-01-01T10:00:00', title: { rendered: 'A &#8211; B' }, teams: [1, 2], main_results: ['0','0'], day: 'ENDED', venues: [7] };
+
+    ok('the "Array" corruption is stripped however many items it prefixes', WPMATCH.stripArray('ArrayArrayArray[{"a":1}]') === '[{"a":1}]' && WPMATCH.stripArray('[{"a":1}]') === '[{"a":1}]');
+    ok('a corrupted body still parses', WPMATCH.parse('ArrayArray[{"a":1}]')[0].a === 1);
+    ok('entity-encoded titles are decoded once, not twice', WPMATCH.decodeEntities('SC Horgen &#8211; Lugano &amp; Co') === 'SC Horgen – Lugano & Co' && WPMATCH.decodeEntities('&amp;#8211;') === '&#8211;');
+    ok('a title splits into home and away on the en dash', (() => { const s = WPMATCH.splitTitle('SC Horgen &#8211; Lugano Sharks'); return s.home === 'SC Horgen' && s.away === 'Lugano Sharks'; })());
+    ok('a title that is not "home – away" returns null rather than guessing', WPMATCH.splitTitle('Swiss-Cup Final') === null);
+
+    const fx = WPMATCH.normFixture(played, { venueById: { 104: 'Horgen FB / Käpfnach' } });
+    ok('the game id and the WP post id are kept apart', fx.gameId === '260078' && fx.postId === 11084);
+    ok('date_gmt is given the Z it is missing on the wire', fx.startsAt === '2026-05-05T18:00:00Z');
+    ok('the venue name is resolved from the taxonomy', fx.venueName === 'Horgen FB / Käpfnach');
+    // the 43%-of-matches bug: '7' > '17' is true as a string
+    const away = WPMATCH.normFixture(Object.assign({}, played, { main_results: ['7', '17'] }), {});
+    ok('scores are compared as NUMBERS, so 7–17 is a loss not a win', WPMATCH.resultFor(away, 3281).outcome === 'loss' && WPMATCH.resultFor(fx, 3281).outcome === 'win');
+    ok('the opponent and home/away side are reported from our point of view', (() => { const r = WPMATCH.resultFor(fx, 5438); return r.us === 'away' && r.ours === 7 && r.opponent.name === 'SC Horgen'; })());
+    ok('an unrecorded 0–0 ENDED match is not presented as a draw', (() => { const u = WPMATCH.normFixture(unrecorded, {}); return u.homeScore === null && WPMATCH.resultFor(u, 1) === null; })());
+    const ph = WPMATCH.normFixture(placeholder, {});
+    ok('a fixture with no venue that has not been played is flagged date-TBC', ph.dateTBC === true && ph.status === 'planned');
+    ok('a -1 team id is surfaced as "to be decided"', ph.away.tbd === true);
+
+    const box = WPMATCH.normBox(played);
+    ok('the box score reads per-quarter scores, including their misspelled 4th', JSON.stringify(box.lines[3281].quarters) === '[4,7,2,4]');
+    ok('% extra player survives as a number', box.lines[3281].manup === 40 && box.lines[5438].manup === 0);
+    ok('the label row is never mistaken for a player', box.rosters[3281].length === 2 && !box.rosters[3281].some(p => p.playerId === 0));
+    ok('player labels come from performance["0"], which is the row that actually has them', box.playerLabels.exclusionfoul === 'Exclusion Fouls' && box.playerLabels.goalextraplayer === 'Goals Extra Player');
+    ok('a stat carrying markup shows its count, with the detail stripped to plain text', WPMATCH.statNumber("1 (13 <b>1. 0:16</b>')") === '1' && !/[<>]/.test(WPMATCH.statDetail("1 (13 <b>1. 0:16</b>')")));
+    ok('rosters are ordered by cap number', box.rosters[3281][0].cap === '1');
+    ok('an unplayed event does not throw when its performance block is an array', (() => { try { const b = WPMATCH.normBox(Object.assign({}, placeholder, { results: [], performance: [] })); return b.rosters[5728].length === 0 && b.lines[5728] === null; } catch (e) { return false; } })());
+
+    const tables = [
+      WPMATCH.normTable({ id: 1, title: { rendered: 'NLA TEST' }, data: { '3281': { pts: '32', t: '20' }, '0': { pts: 'Pts' } } }),
+      WPMATCH.normTable({ id: 2, title: { rendered: 'National League A &#8211; Ranking' }, data: { '3281': { pts: '24', t: '14' }, '5438': { pts: '9', t: '14' }, '0': { pts: 'Pts' } } }),
+    ];
+    ok('a standings label row is not rendered as a team', tables[1].rows.length === 2 && !tables[1].rows.some(r => r.teamId === 0));
+    ok('a stale "TEST" table never wins over the real ranking', WPMATCH.pickTable(tables, 3281).id === 2);
+    ok('a team absent from every table yields none rather than the wrong one', WPMATCH.pickTable(tables, 99999) === null);
+
+    const evs = WPMATCH.toCalendarEvents([fx, ph], { id: 3281, name: 'SC Horgen' });
+    ok('a fixture becomes a calendar event with a STABLE id, so re-importing updates in place', evs[0].id === 'wpm-260078' && evs[0].type === 'match');
+    ok('the calendar entry keeps UTC, not the local wall clock', evs[0].start === '2026-05-05T18:00:00Z');
+    ok('a date-TBC fixture becomes a harmless all-day marker, never a 23:00 alarm', (() => { const e = evs.find(x => x.id === 'wpm-271465'); return e.allDay === true && e.reminderMin === 0 && /date TBC/.test(e.title); })());
+    ok('deep links use the payload\'s own URL rather than a rebuilt one', WPMATCH.matchUrl(fx) === 'https://wpmatch.ch/event/260078/');
   }
 
   console.log('\n[7] Basics + i18n');

@@ -524,6 +524,51 @@ await page.uncheck('#goal-usetests');
 await page.click('#goal-generate'); await page.waitForTimeout(500);
 ok('unticking it falls back to the focus choices, and says so', /focus choices only/.test(await page.locator('.plan-why').textContent()) && (await page.locator('.ses-fromgap').count())===0);
 
+console.log('\n[10d] Matches & results from wpmatch.ch (cache pre-seeded — the gate must not depend on a third-party site)');
+await page.evaluate(() => {
+  localStorage.setItem('thplay.wpmatch.team', JSON.stringify({ id: 3281, name: 'SC Horgen', slug: 'sc-horgen', url: 'https://wpmatch.ch/team/sc-horgen/', searchTerm: 'Horgen' }));
+  const fx = [
+    { gameId:'260078', postId:11084, url:'https://wpmatch.ch/event/260078/', startsAt:'2026-05-05T18:00:00Z', localTime:'2026-05-05T20:00:00',
+      title:'SC Horgen – Lugano Sharks', home:{id:3281,tbd:false,name:'SC Horgen'}, away:{id:5438,tbd:false,name:'Lugano Sharks'},
+      status:'ended', homeScore:17, awayScore:7, dateTBC:false, leagueIds:[202], venueId:104, venueName:'Horgen FB / Käpfnach' },
+    { gameId:'260099', postId:11099, url:'https://wpmatch.ch/event/260099/', startsAt:'2026-05-12T18:00:00Z', localTime:'2026-05-12T20:00:00',
+      title:'SC Kreuzlingen – SC Horgen', home:{id:5999,tbd:false,name:'SC Kreuzlingen'}, away:{id:3281,tbd:false,name:'SC Horgen'},
+      status:'ended', homeScore:17, awayScore:7, dateTBC:false, leagueIds:[202], venueId:7, venueName:'Egelsee' },
+    { gameId:'271465', postId:36737, url:'https://wpmatch.ch/event/271465/', startsAt:'2027-12-30T23:00:00Z', localTime:'2027-12-31T18:15:00',
+      title:'TBD – SC Horgen', home:{id:-1,tbd:true,name:''}, away:{id:3281,tbd:false,name:'SC Horgen'},
+      status:'planned', homeScore:null, awayScore:null, dateTBC:true, leagueIds:[], venueId:null, venueName:'' },
+  ];
+  localStorage.setItem('thplay.wpmatch.cache.fx.3281', JSON.stringify({ at: Date.now(), data: fx }));
+  localStorage.setItem('thplay.wpmatch.cache.tbl.3281', JSON.stringify({ at: Date.now(), data: {
+    id: 2, name: 'National League A – Ranking', url:'https://wpmatch.ch/table/nla/', leagueIds:[202], seasonIds:[337], looksLikeTest:false,
+    labels: { t:'P', w:'W', d:'D', l:'L', pts:'Pts' },
+    rows: [ { teamId:3281, name:'SC Horgen', t:'14', w:'11', d:'1', l:'2', pts:'24' }, { teamId:5438, name:'Lugano Sharks', t:'14', w:'4', d:'1', l:'9', pts:'9' } ] } }));
+  localStorage.setItem('thplay.wpmatch.cache.venues', JSON.stringify({ at: Date.now(), data: { 104:'Horgen FB / Käpfnach', 7:'Egelsee' } }));
+});
+await page.reload({ waitUntil:'networkidle' }); await page.waitForTimeout(600);
+await page.click('.nav-btn[data-view="season"]'); await page.waitForTimeout(600);
+ok('the Matches section renders inside Season for the saved team', (await page.locator('#wpm-section .wpm-card').count())===1 && /SC Horgen/.test(await page.locator('.wpm-card h2').textContent()));
+ok('played and upcoming fixtures are grouped separately', (await page.locator('.wpm-row').count())>=3 && /Recent results/i.test(await page.locator('#wpm-section').textContent()));
+const homeWin = page.locator('.wpm-row', { hasText: 'Lugano Sharks' });
+ok('a home win reads from our point of view and is marked as a win', /vs/.test(await homeWin.textContent()) && (await homeWin.locator('.wpm-win').count())===1);
+const awayLoss = page.locator('.wpm-row', { hasText: 'SC Kreuzlingen' });
+ok('the SAME 17–7 scoreline read from the away side is a LOSS, not a win', /at/.test(await awayLoss.textContent()) && (await awayLoss.locator('.wpm-loss').count())===1 && /7–17/.test(await awayLoss.textContent()));
+ok('a placeholder fixture says date TBC and never invents an opponent', /date TBC/.test(await page.locator('.wpm-row.wpm-tbc').textContent()) && /Opponent/.test(await page.locator('.wpm-row.wpm-tbc').textContent()));
+ok('the league table shows with our own row highlighted', (await page.locator('.wpm-table-wrap').count())===1 && (await page.locator('.wpm-us').count())>=1);
+ok('every match deep-links back to wpmatch.ch, with attribution', (await page.locator('.wpm-row a[href^="https://wpmatch.ch/event/"]').count())>=2 && /Swiss Aquatics Match Center/.test(await page.locator('.wpm-card').textContent()));
+const calBefore = await page.evaluate(() => (JSON.parse(localStorage.getItem('thplay.calendar.v1')||'[]')).length);
+await page.click('#wpm-tocal'); await page.waitForTimeout(400);
+const calAfter = await page.evaluate(() => JSON.parse(localStorage.getItem('thplay.calendar.v1')||'[]'));
+ok('dated fixtures import into the season calendar, TBC ones are left out', calAfter.length === calBefore + 2 && calAfter.some(e => e.id==='wpm-260078') && !calAfter.some(e => e.id==='wpm-271465'));
+ok('the imported match keeps UTC, so a subscribed calendar is not hours out', (calAfter.find(e=>e.id==='wpm-260078')||{}).start === '2026-05-05T18:00:00Z');
+await page.click('#wpm-tocal'); await page.waitForTimeout(400);
+ok('re-importing updates in place instead of duplicating', (await page.evaluate(() => JSON.parse(localStorage.getItem('thplay.calendar.v1')||'[]').filter(e=>e.id==='wpm-260078').length))===1);
+await page.screenshot({ path:OUT+'/qa_38_wpmatch.png' });
+await page.evaluate(() => { localStorage.removeItem('thplay.wpmatch.team'); ['fx.3281','tbl.3281','venues'].forEach(k=>localStorage.removeItem('thplay.wpmatch.cache.'+k)); });
+await page.reload({ waitUntil:'networkidle' }); await page.waitForTimeout(500);
+await page.click('.nav-btn[data-view="season"]'); await page.waitForTimeout(500);
+ok('with no team chosen it explains itself and offers a search instead of looking broken', (await page.locator('#wpm-search').count())===1 && /Pick your club/i.test(await page.locator('.wpm-card').textContent()));
+
 console.log('\n[11] Announcements — coach → player and coach → team, across two SEPARATE devices');
 // the analysis backend's data volume is NOT wiped between test runs, and the demo
 // accounts are fixed emails — so previous runs' announcements pile up server-side.

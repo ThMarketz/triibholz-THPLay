@@ -1793,6 +1793,8 @@
         <div><h1>Season <button class="help-chip" data-help="season" title="How Season works">？</button></h1>
         <p class="dash-sub">Set a goal → get a periodised plan, and a calendar your whole team can subscribe to.</p></div></div>
 
+      <div id="wpm-section"></div>
+
       <div class="season-cols">
         <section class="season-card">
           <h2>🎯 Goal → training plan</h2>
@@ -1842,9 +1844,176 @@
     $('ev-add').onclick = addCalendarEvent;
     $('cal-export').onclick = exportICS;
     $('cal-subscribe').onclick = publishFeed;
+    renderWpMatch();
     if (season.plan) renderPlan();
     renderAgenda();
   }
+  /* ======================================================
+     MATCHES & RESULTS — the club's real fixtures, results, box scores and
+     league table from wpmatch.ch (Swiss Aquatics' own match centre).
+     It lives in Season because Season already owns the schedule: the
+     calendar, the .ics export and the subscribe feed are one card away.
+     Everything is cached, so a wpmatch outage degrades to stale-but-
+     stamped data rather than a blank screen.
+     ====================================================== */
+  const WPM_TTL = 6 * 3600 * 1000;        // fixtures/tables: the source rebuilds daily
+  const WPM_BOX_TTL = 30 * 24 * 3600 * 1000;   // a played match's box score never changes
+  const wpm = { busy: false, openBox: null, error: '' };
+
+  const wpmAgo = at => { const m = Math.round((Date.now() - at) / 60000); return m < 60 ? m + ' min ago' : (m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'); };
+
+  function renderWpMatch() {
+    const host = $('wpm-section'); if (!host || typeof WPMATCH === 'undefined') return;
+    const team = WPMATCH.loadTeam();
+    if (!team) {
+      host.innerHTML = `<section class="season-card wpm-card">
+        <h2>🤽 Matches &amp; results <span class="rightbar-hint">from wpmatch.ch</span></h2>
+        <p class="fa-note">Pick your club's team once and its fixtures, results, box scores and league table appear here — and can be added to the calendar above.</p>
+        <div class="wpm-pick"><input type="text" id="wpm-search" placeholder="Search your team (e.g. Horgen)" value=""><button class="btn-primary sm" id="wpm-search-go">Search</button></div>
+        <div id="wpm-results"></div>
+        <p class="fa-note">Data: Swiss Aquatics Match Center · <a href="${WPMATCH.SITE}" target="_blank" rel="noopener">wpmatch.ch</a></p>
+      </section>`;
+      wireWpMatch(); return;
+    }
+    const fxBox = WPMATCH.cacheGet('fx.' + team.id, WPM_TTL);
+    const tblBox = WPMATCH.cacheGet('tbl.' + team.id, WPM_TTL);
+    const fixtures = (fxBox && fxBox.data) || [];
+    const now = Date.now();
+    const upcoming = fixtures.filter(f => f.status !== 'ended').sort((a, b) => String(a.startsAt).localeCompare(String(b.startsAt)));
+    const played = fixtures.filter(f => f.status === 'ended' && f.homeScore != null).sort((a, b) => String(b.startsAt).localeCompare(String(a.startsAt)));
+    const table = tblBox && tblBox.data;
+
+    const row = (f) => {
+      const r = WPMATCH.resultFor(f, team.id);
+      const side = WPMATCH.opponentOf(f, team.id);
+      const when = f.dateTBC ? 'date TBC' : (f.localTime ? fmtDay(f.startsAt) + ' · ' + f.localTime.slice(11, 16) : fmtDay(f.startsAt));
+      const opp = side ? side.opponent.name : (f.home.name && f.away.name ? f.home.name + ' – ' + f.away.name : f.title);
+      const score = r ? `<b class="wpm-${r.outcome}">${r.ours}–${r.theirs}</b>` : '';
+      return `<div class="wpm-row${f.dateTBC ? ' wpm-tbc' : ''}">
+        <span class="wpm-when">${escapeHtml(when)}</span>
+        <span class="wpm-opp">${side ? (side.us === 'home' ? 'vs ' : 'at ') : ''}${escapeHtml(opp || f.title)}${f.venueName ? ` <span class="muted">${escapeHtml(f.venueName)}</span>` : ''}</span>
+        <span class="wpm-score">${score}</span>
+        <span class="wpm-acts">${f.homeScore != null ? `<button class="btn-ghost xs" data-wpm-box="${escapeHtml(f.gameId)}">Stats</button>` : ''}<a class="btn-ghost xs" href="${escapeHtml(WPMATCH.matchUrl(f))}" target="_blank" rel="noopener">↗</a></span>
+      </div>`;
+    };
+
+    host.innerHTML = `<section class="season-card wpm-card">
+      <h2>🤽 Matches &amp; results <span class="rightbar-hint">${escapeHtml(team.name)}</span></h2>
+      <div class="wpm-head">
+        <a class="btn-ghost xs" href="${escapeHtml(WPMATCH.teamUrl(team))}" target="_blank" rel="noopener">Team page ↗</a>
+        <button class="btn-ghost xs" id="wpm-refresh">${wpm.busy ? 'Refreshing…' : '⟳ Refresh'}</button>
+        <button class="btn-ghost xs" id="wpm-change">Change team</button>
+        ${fixtures.length ? `<button class="btn-primary xs" id="wpm-tocal">＋ Add ${upcoming.filter(f => !f.dateTBC).length || played.length} to calendar</button>` : ''}
+        <span class="muted">${fxBox ? 'updated ' + wpmAgo(fxBox.at) + (fxBox.stale ? ' · refreshing' : '') : 'not loaded yet'}</span>
+      </div>
+      ${wpm.error ? `<p class="fa-note">${escapeHtml(wpm.error)}</p>` : ''}
+      ${!fixtures.length && !wpm.busy ? `<p class="fa-note">No fixtures loaded yet — press ⟳ Refresh.</p>` : ''}
+
+      ${fixtures.length ? `<div class="wpm-group"><div class="ef-label">Upcoming (${upcoming.length})</div>
+        ${upcoming.length ? upcoming.slice(0, 8).map(row).join('') : '<div class="muted">Nothing scheduled yet — the next season\'s dates usually appear as “date TBC” first.</div>'}</div>
+
+      <div class="wpm-group"><div class="ef-label">Recent results (${played.length})</div>
+        ${played.slice(0, 8).map(row).join('') || '<div class="muted">No played matches found.</div>'}</div>` : ''}
+
+      <div id="wpm-box"></div>
+
+      ${table ? `<details class="wpm-table-wrap"><summary>${escapeHtml(table.name)}</summary>
+        <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>#</th><th>Team</th>${['t', 'w', 'd', 'l', 'pts'].map(k => `<th>${escapeHtml(table.labels[k] || k.toUpperCase())}</th>`).join('')}</tr></thead>
+          <tbody>${table.rows.map((r, i) => `<tr${r.teamId === team.id ? ' class="wpm-us"' : ''}><td>${i + 1}</td><td>${escapeHtml(r.name || String(r.teamId))}</td>${['t', 'w', 'd', 'l', 'pts'].map(k => `<td>${escapeHtml(String(r[k] == null ? '—' : r[k]))}</td>`).join('')}</tr>`).join('')}</tbody>
+        </table></div></details>` : ''}
+
+      <p class="fa-note">Data: Swiss Aquatics Match Center · <a href="${escapeHtml(WPMATCH.matchUrl({ url: WPMATCH.SITE }))}" target="_blank" rel="noopener">wpmatch.ch</a>. Read-only, and not affiliated with this app.</p>
+    </section>`;
+    wireWpMatch();
+    if (!fxBox || fxBox.stale) wpmRefresh(true);   // first paint shows cache, then quietly catches up
+  }
+
+  async function wpmRefresh(quiet) {
+    const team = WPMATCH.loadTeam(); if (!team || wpm.busy) return;
+    wpm.busy = true; wpm.error = ''; if (!quiet) renderWpMatch();
+    try {
+      let venueById = (WPMATCH.cacheGet('venues', 7 * 24 * 3600 * 1000) || {}).data;
+      if (!venueById) { venueById = await WPMATCH.fetchVenues(); WPMATCH.cachePut('venues', venueById); }
+      const fixtures = await WPMATCH.fetchFixtures(team, { search: team.searchTerm || team.name, venueById });
+      WPMATCH.cachePut('fx.' + team.id, fixtures);
+      try {
+        const tables = await WPMATCH.fetchTables(team);
+        const picked = WPMATCH.pickTable(tables, team.id);
+        if (picked) {
+          const nameById = {}; fixtures.forEach(f => { [f.home, f.away].forEach(s => { if (s.id && s.name) nameById[s.id] = s.name; }); });
+          picked.rows = picked.rows.map(r => Object.assign({ name: nameById[r.teamId] || '' }, r)).sort((a, b) => (+b.pts || 0) - (+a.pts || 0));
+          WPMATCH.cachePut('tbl.' + team.id, picked);
+        }
+      } catch (e) { /* a missing table must never cost us the fixtures */ }
+    } catch (e) {
+      wpm.error = e.code === 'unreachable'
+        ? 'Could not reach wpmatch.ch — showing what was last loaded on this device.'
+        : 'wpmatch.ch returned something unexpected — showing what was last loaded on this device.';
+    }
+    wpm.busy = false; renderWpMatch();
+  }
+
+  async function wpmOpenBox(gameId) {
+    const host = $('wpm-box'); if (!host) return;
+    const cached = WPMATCH.cacheGet('box.' + gameId, WPM_BOX_TTL);
+    let box = cached && cached.data;
+    if (!box) {
+      host.innerHTML = '<div class="muted">Loading the box score…</div>';
+      try { box = await WPMATCH.fetchBox(gameId); WPMATCH.cachePut('box.' + gameId, box); }
+      catch (e) { host.innerHTML = '<div class="muted">Could not load that box score.</div>'; return; }
+    }
+    const team = WPMATCH.loadTeam() || {};
+    const nameFor = id => { const f = ((WPMATCH.cacheGet('fx.' + team.id) || {}).data || []).find(x => x.gameId === gameId); if (!f) return String(id); return f.home.id === id ? f.home.name : (f.away.id === id ? f.away.name : String(id)); };
+    const L = box.playerLabels || {};
+    const cols = ['goals', 'goalon', 'goalextraplayer', 'penaltygoals', 'exclusionfoul'].filter(k => L[k]);
+    host.innerHTML = `<div class="wpm-boxscore">
+      <div class="wpm-box-head"><b>${escapeHtml(box.title)}</b><button class="btn-ghost xs" id="wpm-box-close">✕</button></div>
+      <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>Team</th>${box.quarterKeys.map((k, i) => `<th>${escapeHtml((box.scoreLabels && box.scoreLabels[k]) || 'Q' + (i + 1))}</th>`).join('')}<th>${escapeHtml((box.scoreLabels && box.scoreLabels.goals) || 'Goals')}</th><th>${escapeHtml((box.scoreLabels && box.scoreLabels.manup) || '% Extra')}</th></tr></thead>
+        <tbody>${box.teamIds.map(id => { const l = box.lines[id]; return `<tr${id === team.id ? ' class="wpm-us"' : ''}><td>${escapeHtml(nameFor(id))}</td>${(l ? l.quarters : [null, null, null, null]).map(q => `<td>${q == null ? '—' : q}</td>`).join('')}<td><b>${l && l.goals != null ? l.goals : '—'}</b></td><td>${l && l.manup != null ? l.manup + '%' : '—'}</td></tr>`; }).join('')}</tbody></table></div>
+      ${box.teamIds.filter(id => (box.rosters[id] || []).length).map(id => `<div class="ef-label">${escapeHtml(nameFor(id))}</div>
+        <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>#</th>${cols.map(k => `<th>${escapeHtml(L[k])}</th>`).join('')}</tr></thead>
+          <tbody>${box.rosters[id].map(p => `<tr><td>${escapeHtml(p.cap)}</td>${cols.map(k => { const v = p.stats[k]; const n = WPMATCH.statNumber(v), d = WPMATCH.statDetail(v); return `<td${d && d !== n ? ` title="${escapeHtml(d)}"` : ''}>${escapeHtml(n || '0')}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`).join('')}
+      <p class="fa-note">Official record · <a href="${escapeHtml(box.url)}" target="_blank" rel="noopener">open on wpmatch.ch ↗</a></p>
+    </div>`;
+    const cl = $('wpm-box-close'); if (cl) cl.onclick = () => { host.innerHTML = ''; };
+    host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function wireWpMatch() {
+    const go = $('wpm-search-go'), inp = $('wpm-search');
+    if (go && inp) {
+      const run = async () => {
+        const q = inp.value.trim(); if (!q) return;
+        const out = $('wpm-results'); out.innerHTML = '<div class="muted">Searching…</div>';
+        try {
+          const teams = await WPMATCH.searchTeams(q);
+          out.innerHTML = teams.length
+            ? `<div class="wpm-teamlist">${teams.map(t => `<button class="btn-ghost sm" data-wpm-team="${t.id}" data-name="${escapeHtml(t.name)}" data-slug="${escapeHtml(t.slug)}" data-url="${escapeHtml(t.url)}">${escapeHtml(t.name)}</button>`).join('')}</div>`
+            : '<div class="muted">No team of that name on wpmatch.ch.</div>';
+          out.querySelectorAll('[data-wpm-team]').forEach(b => b.onclick = () => {
+            WPMATCH.saveTeam({ id: +b.dataset.wpmTeam, name: b.dataset.name, slug: b.dataset.slug, url: b.dataset.url, searchTerm: q });
+            renderWpMatch(); wpmRefresh();
+          });
+        } catch (e) { out.innerHTML = '<div class="muted">Could not reach wpmatch.ch just now.</div>'; }
+      };
+      go.onclick = run; inp.onkeydown = e => { if (e.key === 'Enter') run(); };
+    }
+    const rf = $('wpm-refresh'); if (rf) rf.onclick = () => wpmRefresh(false);
+    const ch = $('wpm-change'); if (ch) ch.onclick = () => { WPMATCH.saveTeam(null); renderWpMatch(); };
+    const tc = $('wpm-tocal'); if (tc) tc.onclick = () => {
+      const team = WPMATCH.loadTeam();
+      const fixtures = ((WPMATCH.cacheGet('fx.' + team.id) || {}).data) || [];
+      const evs = WPMATCH.toCalendarEvents(fixtures.filter(f => !f.dateTBC), team);
+      const cur = CALENDAR.load(); const byId = new Map(cur.map(e => [e.id, e]));
+      let added = 0, updated = 0;
+      evs.forEach(e => { if (byId.has(e.id)) { Object.assign(byId.get(e.id), e); updated++; } else { cur.push(e); added++; } });
+      CALENDAR.save(cur);
+      toast(`${added} match${added === 1 ? '' : 'es'} added${updated ? `, ${updated} updated` : ''}`);
+      renderAgenda();
+    };
+    document.querySelectorAll('[data-wpm-box]').forEach(b => b.onclick = () => wpmOpenBox(b.dataset.wpmBox));
+  }
+
   function goalFromForm() {
     return {
       title: $('goal-title').value.trim() || 'Season goal',
