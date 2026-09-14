@@ -467,9 +467,11 @@ ok('the "Log a test result" tile opens its own modal', await page.locator('#dev-
 await page.selectOption('#dev-test-id', 'free50');
 await page.fill('#dev-test-result', '34.0');
 await page.click('#dev-test-add'); await page.waitForTimeout(200);
-ok('a saved test result reads as at-target on the benchmark card', (await page.locator('.dev-bench-card.dev-bench-met').count())>=1);
+ok('a number the PLAYER logged themselves does not read as at-target yet', (await page.locator('.dev-bench-card.dev-bench-met').count())===0
+  && /self-reported, waiting for a coach/.test(await page.locator('.dev-bench').textContent()));
 await page.locator('.dev-history').first().locator('summary').click(); await page.waitForTimeout(100);
-ok('the result also lands in the (collapsible) history table', /34/.test(await page.locator('.dev-table').first().textContent()));
+ok('the result also lands in the (collapsible) history table, marked self-reported', /34/.test(await page.locator('.dev-table').first().textContent())
+  && (await page.locator('#view-development .status-chip.pending').count())>=1);
 const devDl = page.waitForEvent('download', { timeout: 8000 });
 await page.click('#dev-export-tests');
 const devDlFile = await devDl.catch(()=>null);
@@ -477,7 +479,50 @@ ok('the test log downloads as a real CSV file', !!devDlFile && /\.csv$/.test(dev
 await page.screenshot({ path:OUT+'/qa_35_development.png' });
 await page.reload({ waitUntil:'networkidle' }); await page.waitForTimeout(600);
 await page.click('.nav-btn[data-view="development"]'); await page.waitForTimeout(400);
-ok('the goal and the test result persist after a reload', /Sub-35 on the 50 free/.test(await page.locator('.dev-hero-goal').textContent()) && (await page.locator('.dev-bench-card.dev-bench-met').count())>=1);
+ok('the goal and the pending state both survive a reload', /Sub-35 on the 50 free/.test(await page.locator('.dev-hero-goal').textContent())
+  && (await page.locator('.dev-bench-card.dev-bench-met').count())===0
+  && (await page.locator('#view-development .status-chip.pending').count())>=1);
+
+console.log('\n[10b] Squad view + a coach confirming a self-reported result');
+await page.click('#logout-btn'); await page.waitForTimeout(300);
+await page.click('.demo-btn[data-demo="coach"]'); await page.waitForTimeout(500); await skipTour(page);
+await page.click('.nav-btn[data-view="development"]'); await page.waitForTimeout(400);
+ok('a coach lands on the squad table, one row per approved player', (await page.locator('.dev-team-table').count())===1 && (await page.locator('.dev-team-row').count())>=2);
+ok('the squad header counts the results waiting for this coach', /awaiting your confirmation/i.test(await page.locator('.dev-stats').textContent()));
+const devRow = page.locator('.dev-team-row', { hasText: 'Demo Player' });
+ok('the player\'s row shows the number as self-reported, and does NOT read as progress', /self-reported/.test(await devRow.textContent()) && (await devRow.locator('.dev-team-ok').count())===0);
+await page.selectOption('#dev-team-sort', 'home'); await page.waitForTimeout(200);
+ok('the squad table can be sorted to put the quietest players first', (await page.locator('.dev-team-row').count())>=2);
+await page.locator('.dev-team-row', { hasText: 'Demo Player' }).click(); await page.waitForTimeout(400);
+ok('tapping a row opens that player\'s own record', (await page.locator('.dev-bench-grid').count())===1 && /Demo Player/.test(await page.locator('.dev-hero-id h1').textContent()));
+ok('with a confirmation queue at the top', (await page.locator('[data-test-verify]').count())>=1);
+await page.screenshot({ path:OUT+'/qa_36_squad_verify.png' });
+await page.locator('[data-test-verify]').first().click(); await page.waitForTimeout(400);
+ok('confirming it makes the number count towards the target', (await page.locator('.dev-bench-card.dev-bench-met').count())>=1);
+await page.click('#dev-back-team'); await page.waitForTimeout(300);
+ok('◀ Squad goes back, and the row now counts it as real progress', (await page.locator('.dev-team-table').count())===1
+  && /1\/9/.test(await page.locator('.dev-team-row', { hasText: 'Demo Player' }).textContent())
+  && !/self-reported/.test(await page.locator('.dev-team-row', { hasText: 'Demo Player' }).textContent()));
+
+console.log('\n[10c] The season plan leans on the test log, and says why');
+await page.click('.nav-btn[data-view="development"]'); await page.waitForTimeout(300);
+if (await page.locator('#dev-back-team').count()) { await page.click('#dev-back-team'); await page.waitForTimeout(200); }
+await page.locator('.dev-team-row', { hasText: 'Demo Player' }).click(); await page.waitForTimeout(300);
+await page.locator('.dev-coach-tools summary').click(); await page.waitForTimeout(150);   // the picker lives in the collapsed coach tools
+await page.selectOption('#dev-roster-select', ''); await page.waitForTimeout(300);        // back to the coach's own record
+await page.click('[data-open-modal="test"]'); await page.waitForTimeout(150);
+await page.selectOption('#dev-test-id', 'free50');
+await page.fill('#dev-test-result', '41.0');                                          // well off the 36.0 target
+await page.click('#dev-test-add'); await page.waitForTimeout(300);
+await page.click('.nav-btn[data-view="season"]'); await page.waitForTimeout(400);
+ok('the goal form offers to use the test log', (await page.locator('#goal-usetests').count())===1 && await page.locator('#goal-usetests').isChecked());
+await page.click('#goal-generate'); await page.waitForTimeout(500);
+ok('the plan says which test made it lean', /50 m freestyle/.test(await page.locator('.plan-why').textContent()) && /to go/.test(await page.locator('.plan-why').textContent()));
+ok('and marks the session it put first', (await page.locator('.ses-fromgap').count())>=1);
+await page.screenshot({ path:OUT+'/qa_37_plan_why.png' });
+await page.uncheck('#goal-usetests');
+await page.click('#goal-generate'); await page.waitForTimeout(500);
+ok('unticking it falls back to the focus choices, and says so', /focus choices only/.test(await page.locator('.plan-why').textContent()) && (await page.locator('.ses-fromgap').count())===0);
 
 console.log('\n[11] Announcements — coach → player and coach → team, across two SEPARATE devices');
 // the analysis backend's data volume is NOT wiped between test runs, and the demo

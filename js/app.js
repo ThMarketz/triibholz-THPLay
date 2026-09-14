@@ -173,6 +173,7 @@
     // reset per-session view state — logout/login must not leak the previous
     // user's open scenario, focus or problem/solution mode
     state.selectedId = null; state.focus = null; state.mode = 'solution';
+    devViewing = null; devTeamMode = true; devTeamSort = 'name';   // coach A must not land on the player coach B was viewing
     if (state.viewer) { state.viewer.stop(); state.viewer = null; }
     state.scenarios = DATA.load();
     const streak = DATA.touchStreak(state.user.email);
@@ -524,37 +525,52 @@
   const HOME_KEY = e => 'thplay.hometraining.' + (e || '').toLowerCase();
   function loadDev(email) {
     let d; try { d = JSON.parse(localStorage.getItem(DEV_KEY(email))); } catch (e) { d = null; }
-    return Object.assign({ info: { name: '', birthYear: '', band: '', position: '', isGK: false, talentCard: '', cardValidUntil: '', lastPiste: '', tier: 0, goalBlock: '', goalWords: '' }, tests: [], swimWeeks: [] }, d || {});
+    const out = Object.assign({ info: { name: '', birthYear: '', band: '', position: '', isGK: false, talentCard: '', cardValidUntil: '', lastPiste: '', tier: 0, goalBlock: '', goalWords: '' }, tests: [], swimWeeks: [] }, d || {});
+    // one choke point: every reader sees a concrete status. Normalising in memory only —
+    // writing here would rewrite the whole squad's storage on every paint of the team view.
+    (out.tests || []).forEach(t => { if (t) t.status = TESTLOG.normalizeTestStatus(t.status); });
+    return out;
   }
   function saveDev(email, d) { try { localStorage.setItem(DEV_KEY(email), JSON.stringify(d)); } catch (e) {} }
   function loadHome(email) { let d; try { d = JSON.parse(localStorage.getItem(HOME_KEY(email))); } catch (e) { d = null; } return Object.assign({ log: [] }, d || {}); }
   function saveHome(email, d) { try { localStorage.setItem(HOME_KEY(email), JSON.stringify(d)); } catch (e) {} }
+  // loadDev() always returns a full default shape, so "never opened it" and "logged nothing"
+  // look identical — probe storage directly instead of inferring from the object
+  const devHasRecord = e => { try { return localStorage.getItem(DEV_KEY(e)) != null || localStorage.getItem(HOME_KEY(e)) != null; } catch (x) { return false; } };
   const devCanCoach = () => ['coach', 'trainer', 'super-admin'].includes(state.user.role);
   let devViewing = null;   // the email whose record is on screen; null → self
+  let devTeamMode = true;  // coaches land on the squad table; a player can never reach it
+  let devTeamSort = 'name';
   function devTargetEmail() { return state.user.role === 'player' ? state.user.email : (devViewing || state.user.email); }
 
   function renderDevelopment() {
     const root = $('view-development');
+    if (devCanCoach() && devTeamMode) { renderDevTeam(root); return; }   // the only gate — devCanCoach() is false for a player
     const email = devTargetEmail();
     const dev = loadDev(email), home = loadHome(email);
     const isSelf = email === state.user.email;
     const canEditThis = isSelf || devCanCoach();
     const wk = TESTLOG.weekKeyOf(new Date().toISOString().slice(0, 10));
     const mascot = TESTLOG.mascotState(home.log, wk);
+    const row = TESTLOG.squadRow(dev, home, wk);   // same arithmetic the squad table uses
     const roster = devCanCoach() ? DATA.loadUsers().filter(u => u.role === 'player' && u.status === 'approved').sort((a, b) => (a.name || '').localeCompare(b.name || '')) : [];
 
     const testCat = TESTLOG.testsFor(!!dev.info.isGK);
     const testRows = (dev.tests || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    const latestByTest = {}; (dev.tests || []).forEach(t => { if (!latestByTest[t.test] || t.date > latestByTest[t.test].date) latestByTest[t.test] = t; });
+    // a self-reported number is visible but never authoritative until a coach confirms it
+    const latest = TESTLOG.latestResults(dev.tests || []);
     const swimRows = (dev.swimWeeks || []).slice().sort((a, b) => (b.week || '').localeCompare(a.week || ''));
-    const thisWeekSwim = swimRows.find(r => r.week === TESTLOG.mondayOf(new Date()));
-    const metCount = testCat.filter(t => { const l = latestByTest[t.label]; return l && TESTLOG.evaluate(t, l.result, dev.info.tier).met === true; }).length;
+    const metCount = row.metVerified;
+    const pendingCount = row.pendingCount;
+    const reviewRows = (dev.tests || []).filter(t => t.status === 'pending' || t.status === 'denied').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const tierLabel = TESTLOG.TIERS[dev.info.tier] || TESTLOG.TIERS[0];
     const displayName = dev.info.name || (isSelf ? state.user.name : (roster.find(u => u.email === email) || {}).name) || email;
 
     // one progress card per test — a bar you can read in a glance, not a spreadsheet row
     const benchCard = (t) => {
-      const last = latestByTest[t.label] || latestByTest[t.id];
+      // colour, fill and "at target" come ONLY from confirmed results
+      const last = latest.official[t.label] || latest.official[t.id];
+      const waiting = latest.pending[t.label] || latest.pending[t.id];
       const ev = last ? TESTLOG.evaluate(t, last.result, dev.info.tier) : null;
       let pct = 0, state_ = 'untested';
       if (ev && ev.target != null) { state_ = ev.met ? 'met' : 'gap'; pct = ev.met ? 100 : Math.max(4, Math.min(96, 100 * (t.lower ? ev.target / ev.value : ev.value / ev.target))); }
@@ -563,6 +579,7 @@
         <div class="dev-bench-top"><b>${escapeHtml(t.label)}</b>${t.piste ? ' <span class="tag" title="Shared with the official Swiss Aquatics PISTE test">PISTE</span>' : ''}</div>
         <div class="dev-bench-bar"><span style="width:${pct}%"></span></div>
         <div class="dev-bench-bottom"><span>${last ? escapeHtml(String(last.result)) + ' ' + escapeHtml(t.unit) : 'not tested yet'}</span><span class="muted">${ev ? escapeHtml(ev.deltaText) : (t.targets[dev.info.tier] != null ? 'target ' + escapeHtml(String(t.targets[dev.info.tier])) : '')}</span></div>
+        ${waiting ? `<div class="dev-bench-pending">⏳ ${escapeHtml(String(waiting.result))} ${escapeHtml(t.unit)} — self-reported, waiting for a coach</div>` : ''}
       </div>`;
     };
 
@@ -571,6 +588,7 @@
         <div class="dev-hero-mascot">${(typeof FX !== 'undefined') ? FX.mascot(84, mascot.mood) : ''}</div>
         <div class="dev-hero-info">
           <div class="dev-hero-id"><h1>${escapeHtml(displayName)} <button class="help-chip" data-help="development" title="How this works">？</button></h1><span class="tag">${escapeHtml(tierLabel)}</span>${dev.info.position ? `<span class="tag">Pos ${escapeHtml(dev.info.position)}</span>` : ''}${dev.info.isGK ? `<span class="tag">GK</span>` : ''}
+            ${devCanCoach() ? `<button class="btn-ghost sm" id="dev-back-team">◀ Squad</button>` : ''}
             ${canEditThis ? `<button class="btn-ghost sm" id="dev-edit-profile">Edit profile</button>` : ''}</div>
           <div class="dev-hero-goal">${dev.info.goalBlock ? `🎯 ${escapeHtml(dev.info.goalBlock)}` : (canEditThis ? 'No goal set yet — tap Edit profile' : 'No goal set yet')}</div>
           <div class="dev-hero-line">${escapeHtml(mascot.line)}${mascot.streak > 0 ? ` · 🔥 ${mascot.streak}-week streak` : ''}</div>
@@ -579,14 +597,25 @@
 
       <div class="dev-stats">
         <div class="dev-stat"><b>${metCount}/${testCat.length}</b><span>tests at target</span></div>
-        <div class="dev-stat"><b>${Math.round(mascot.compliance * 100)}%</b><span>home training this week</span></div>
-        <div class="dev-stat"><b>${(thisWeekSwim ? thisWeekSwim.total : 0).toLocaleString()} m</b><span>swum this week</span></div>
-        <div class="dev-stat"><b>${(dev.tests || []).length}</b><span>tests logged, all time</span></div>
+        <div class="dev-stat"><b>${Math.round(row.compliance * 100)}%</b><span>home training this week</span></div>
+        <div class="dev-stat"><b>${row.metres.toLocaleString()} m</b><span>swum this week</span></div>
+        <div class="dev-stat"><b>${(dev.tests || []).length}</b><span>tests logged, all time${pendingCount ? ' · ' + pendingCount + ' awaiting' : ''}</span></div>
       </div>
 
       ${roster.length ? `<details class="dev-coach-tools"><summary>👥 Coach tools — viewing <b>${devViewing ? escapeHtml((roster.find(u => u.email === devViewing) || {}).name || devViewing) : 'myself'}</b></summary>
         <div class="dev-coach-row"><select id="dev-roster-select" class="focus-select"><option value="">Myself</option>${roster.map(u => `<option value="${escapeHtml(u.email)}" ${devViewing === u.email ? 'selected' : ''}>${escapeHtml(u.name || u.email)}${u.position ? ' · ' + escapeHtml(u.position) : ''}</option>`).join('')}</select>
           <button class="btn-ghost sm" id="dev-import-btn">⬆ Import team logbook (.xlsx / .csv)</button><input type="file" id="dev-import-file" accept=".xlsx,.csv" hidden multiple></div></details>` : ''}
+
+      ${devCanCoach() && reviewRows.length ? `<div class="dev-card dev-review">
+        <h3>🧪 Awaiting your confirmation <span class="rightbar-hint">${pendingCount} self-reported</span></h3>
+        ${reviewRows.map(r => `<div class="dev-review-row">
+          <span class="drv-main"><b>${escapeHtml(r.test)}</b> <span class="drv-res">${escapeHtml(String(r.result))} ${escapeHtml(r.unit || '')}</span>
+            <span class="muted">${escapeHtml(r.date)}${r.testedBy ? ' · ' + escapeHtml(r.testedBy) : ''}${r.remark ? ' · ' + escapeHtml(r.remark) : ''}</span></span>
+          <span class="drv-actions">${r.status === 'denied' ? '<span class="status-chip denied">rejected</span>' : ''}
+            <button class="btn-primary sm" data-test-verify="${r.id}">Confirm</button>
+            ${r.status === 'pending' ? `<button class="btn-ghost sm danger" data-test-deny="${r.id}">Reject</button>` : ''}</span>
+        </div>`).join('')}
+      </div>` : ''}
 
       ${canEditThis ? `<div class="dev-actions">
         <button class="dev-tile" data-open-modal="test"><span class="dev-tile-ic">🧪</span>Log a test result</button>
@@ -611,8 +640,10 @@
       </div>
 
       <details class="dev-history"><summary>Test log history (${testRows.length})</summary>
-        <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>Date</th><th>Test</th><th>Result</th><th>Tested by</th><th>Remark</th>${canEditThis ? '<th></th>' : ''}</tr></thead>
-          <tbody>${testRows.map(r => `<tr><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.test)}</td><td>${escapeHtml(String(r.result))} ${escapeHtml(r.unit || '')}</td><td>${escapeHtml(r.testedBy || '')}</td><td class="muted">${escapeHtml(r.remark || '')}</td>${canEditThis ? `<td><button class="btn-ghost sm danger" data-test-del="${r.id}">✕</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="6" class="muted">No tests logged yet.</td></tr>`}</tbody></table></div>
+        <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>Date</th><th>Test</th><th>Result</th><th>Tested by</th><th>Status</th><th>Remark</th>${canEditThis ? '<th></th>' : ''}</tr></thead>
+          <tbody>${testRows.map(r => `<tr><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.test)}</td><td>${escapeHtml(String(r.result))} ${escapeHtml(r.unit || '')}</td><td>${escapeHtml(r.testedBy || '')}</td>
+            <td><span class="status-chip ${r.status}">${r.status === 'approved' ? 'confirmed' : r.status === 'denied' ? 'rejected' : 'self-reported'}</span>${r.verifiedBy ? ` <span class="muted">${escapeHtml(r.verifiedBy)}${r.verifiedAt ? ' · ' + escapeHtml(r.verifiedAt) : ''}</span>` : ''}</td>
+            <td class="muted">${escapeHtml(r.remark || '')}</td>${canEditThis ? `<td>${(devCanCoach() || (isSelf && r.status === 'pending')) ? `<button class="btn-ghost sm danger" data-test-del="${r.id}">✕</button>` : ''}</td>` : ''}</tr>`).join('') || `<tr><td colspan="${canEditThis ? 7 : 6}" class="muted">No tests logged yet.</td></tr>`}</tbody></table></div>
         <button class="btn-ghost sm" id="dev-export-tests">⬇ Download CSV</button>
       </details>
       <details class="dev-history"><summary>Swim weeks history (${swimRows.length})</summary>
@@ -648,8 +679,11 @@
           <select id="dev-test-id">${testCat.map(t => `<option value="${t.id}">${escapeHtml(t.label)}</option>`).join('')}</select>
           <input type="text" id="dev-test-date" placeholder="Date (YYYY-MM-DD)" value="${new Date().toISOString().slice(0, 10)}">
           <input type="text" id="dev-test-result" placeholder="Result (e.g. 37.4 or 1:22)">
-          <input type="text" id="dev-test-by" placeholder="Tested by" value="${escapeHtml(devCanCoach() ? state.user.name : 'Coaching staff')}">
+          ${devCanCoach()
+            ? `<input type="text" id="dev-test-by" placeholder="Tested by" value="${escapeHtml(state.user.name)}">`
+            : `<input type="text" id="dev-test-by" readonly value="${escapeHtml(state.user.name)}">`}
           <input type="text" id="dev-test-remark" placeholder="Remark (optional)">
+          ${devCanCoach() ? '' : '<p class="fa-note">Your coach confirms the number before it counts towards your targets — log it honestly, it shows up either way.</p>'}
         </div>
         <div class="modal-foot"><button class="btn-ghost" data-close-modal="dev-test-modal">Cancel</button><button class="btn-primary" id="dev-test-add">Save result</button></div>
       </div></div>
@@ -669,11 +703,95 @@
     wireDevelopment(root, email, dev, home, wk, canEditThis);
   }
 
+  /* ---- the coach's squad table: every player at a glance, one row each ----
+     Numbers come from TESTLOG.squadRow, the same function the single-player
+     strip uses, so the two views can never quietly disagree. */
+  function renderDevTeam(root) {
+    const roster = devCanCoach() ? DATA.loadUsers().filter(u => u.role === 'player' && u.status === 'approved').sort((a, b) => (a.name || '').localeCompare(b.name || '')) : [];
+    const wk = TESTLOG.weekKeyOf(new Date().toISOString().slice(0, 10));   // once per render, never per row
+    const rows = roster.map(u => {
+      const started = devHasRecord(u.email);
+      const dev = loadDev(u.email), home = loadHome(u.email);
+      return { u, started, r: started ? TESTLOG.squadRow(dev, home, wk) : null, tier: dev.info.tier, isGK: dev.info.isGK };
+    });
+    const live = rows.filter(x => x.started && x.r);
+    const keeping = live.filter(x => x.r.compliance >= 0.6).length;      // same floor as the streak/mood thresholds
+    const noRecord = rows.filter(x => !x.started).length;
+    const selfReported = live.reduce((n, x) => n + x.r.metUnverified, 0);
+    const awaiting = live.reduce((n, x) => n + x.r.pendingCount, 0);
+    const sorters = {
+      name: (a, b) => (a.u.name || '').localeCompare(b.u.name || ''),
+      home: (a, b) => (a.r ? a.r.compliance : 2) - (b.r ? b.r.compliance : 2),
+      tests: (a, b) => (a.r ? a.r.metVerified / (a.r.total || 1) : 2) - (b.r ? b.r.metVerified / (b.r.total || 1) : 2),
+      tested: (a, b) => String((a.r && a.r.lastDate) || '9999').localeCompare(String((b.r && b.r.lastDate) || '9999')),
+    };
+    const sorted = rows.slice().sort(sorters[devTeamSort] || sorters.name);
+
+    const cell = (x) => {
+      if (!x.started) return `<td colspan="6" class="muted">No record yet — nothing logged or imported on this device</td>`;
+      const r = x.r;
+      const pct = Math.round(r.compliance * 100);
+      const testCls = (r.metVerified > 0 && r.metVerified === r.total) ? 'dev-team-ok' : (r.hasTests ? 'dev-team-gap' : '');
+      return `<td><span class="tag">${escapeHtml(TESTLOG.TIERS[x.tier] || TESTLOG.TIERS[0])}</span></td>
+        <td class="${testCls}">${r.hasTests ? `${r.metVerified}/${r.total}${r.metUnverified ? ` <span class="muted">+${r.metUnverified} self-reported</span>` : ''}` : '—'}</td>
+        <td>${r.lastDate ? escapeHtml(r.lastDate) + (r.lastVerified ? '' : ' <span class="tag tag-self">self</span>') : '—'}</td>
+        <td><div class="dev-bench-bar"><span style="width:${pct}%"></span></div> ${pct}% ${(typeof FX !== 'undefined') ? FX.mascot(22, r.mood) : ''}</td>
+        <td>${r.streak > 0 ? '🔥 ' + r.streak : '—'}</td>
+        <td>${r.hasSwim ? r.metres.toLocaleString() : '—'}</td>`;
+    };
+
+    root.innerHTML = `
+      <div class="dev-hero">
+        <div class="dev-hero-info">
+          <div class="dev-hero-id"><h1>Squad development <button class="help-chip" data-help="development" title="How this works">？</button></h1></div>
+          <div class="dev-hero-line">Development records live on each device — this shows what was logged or imported <b>here</b>. Unlike announcements, it does not sync.</div>
+        </div>
+      </div>
+
+      <div class="dev-stats">
+        <div class="dev-stat"><b>${roster.length}</b><span>players on the roster</span></div>
+        <div class="dev-stat"><b>${keeping}/${live.length || 0}</b><span>keeping up home training</span></div>
+        <div class="dev-stat"><b>${noRecord}</b><span>no record yet</span></div>
+        <div class="dev-stat"><b>${awaiting}</b><span>results awaiting your confirmation</span></div>
+      </div>
+
+      <details class="dev-coach-tools" open><summary>👥 Coach tools${selfReported ? ` — ${selfReported} self-reported result${selfReported > 1 ? 's' : ''} not yet confirmed` : ''}</summary>
+        <div class="dev-coach-row">
+          <select id="dev-team-sort" class="focus-select">
+            <option value="name" ${devTeamSort === 'name' ? 'selected' : ''}>Sort: name</option>
+            <option value="home" ${devTeamSort === 'home' ? 'selected' : ''}>Sort: home training, lowest first</option>
+            <option value="tests" ${devTeamSort === 'tests' ? 'selected' : ''}>Sort: tests at target, lowest first</option>
+            <option value="tested" ${devTeamSort === 'tested' ? 'selected' : ''}>Sort: last tested, oldest first</option>
+          </select>
+          <button class="btn-ghost sm" id="dev-import-btn">⬆ Import team logbook (.xlsx / .csv)</button><input type="file" id="dev-import-file" accept=".xlsx,.csv" hidden multiple>
+        </div>
+      </details>
+
+      <div class="dev-card">
+        <h3>👥 Every player <span class="rightbar-hint">this week</span></h3>
+        <div class="dev-table-wrap"><table class="dev-table dev-team-table">
+          <thead><tr><th>Player</th><th>Tier</th><th>Tests at target</th><th>Last tested</th><th>Home training (self-logged)</th><th>Streak</th><th>Metres (self-declared)</th></tr></thead>
+          <tbody>${sorted.map(x => `<tr class="dev-team-row" data-dev-open="${escapeHtml(x.u.email)}">
+            <td><button class="btn-ghost sm">${escapeHtml(x.u.name || x.u.email)}</button>${x.u.position ? ` <span class="tag">Pos ${escapeHtml(x.u.position)}</span>` : ''}${x.isGK ? ' <span class="tag">GK</span>' : ''}</td>
+            ${cell(x)}</tr>`).join('') || `<tr><td colspan="7" class="muted">No approved players on the roster yet.</td></tr>`}</tbody>
+        </table></div>
+      </div>`;
+    wireDevTeam(root);
+  }
+  function wireDevTeam(root) {
+    root.querySelectorAll('[data-dev-open]').forEach(el => el.onclick = () => { devViewing = el.dataset.devOpen; devTeamMode = false; renderDevelopment(); });
+    const ss = root.querySelector('#dev-team-sort');
+    if (ss) ss.onchange = () => { devTeamSort = ss.value; renderDevTeam(root); };
+    wireDevImport(root);
+  }
+
   function devToggleModal(root, id, show) { const m = root.querySelector('#' + id); if (m) m.hidden = show == null ? !m.hidden : !show; }
 
   function wireDevelopment(root, email, dev, home, wk, canEditThis) {
     const rs = root.querySelector('#dev-roster-select');
-    if (rs) rs.onchange = () => { devViewing = rs.value || null; renderDevelopment(); };
+    if (rs) rs.onchange = () => { devViewing = rs.value || null; devTeamMode = false; renderDevelopment(); };
+    const backTeam = root.querySelector('#dev-back-team');
+    if (backTeam) backTeam.onclick = () => { devTeamMode = true; renderDevelopment(); };
 
     root.querySelectorAll('[data-open-modal]').forEach(b => b.onclick = () => devToggleModal(root, 'dev-' + b.dataset.openModal + '-modal', true));
     root.querySelectorAll('[data-close-modal]').forEach(b => b.onclick = () => devToggleModal(root, b.dataset.closeModal, false));
@@ -702,10 +820,24 @@
     if (addTest) addTest.onclick = () => {
       const id = root.querySelector('#dev-test-id').value, t = TESTLOG.testById(id, !!dev.info.isGK);
       const result = root.querySelector('#dev-test-result').value.trim(); if (!t || !result) { toast('Pick a test and enter a result'); return; }
-      dev.tests = dev.tests || []; dev.tests.push({ id: 'd' + Math.random().toString(36).slice(2, 9), date: root.querySelector('#dev-test-date').value || new Date().toISOString().slice(0, 10), name: dev.info.name || email, test: t.label, result, unit: t.unit, testedBy: root.querySelector('#dev-test-by').value, remark: root.querySelector('#dev-test-remark').value });
-      saveDev(email, dev); toast('Test result saved'); renderDevelopment();
+      // authority comes from the role at WRITE time — never from a DOM value a player could set
+      const official = devCanCoach(), today = new Date().toISOString().slice(0, 10);
+      dev.tests = dev.tests || []; dev.tests.push({ id: 'd' + Math.random().toString(36).slice(2, 9), date: root.querySelector('#dev-test-date').value || today, name: dev.info.name || email, test: t.label, result, unit: t.unit, testedBy: root.querySelector('#dev-test-by').value, remark: root.querySelector('#dev-test-remark').value,
+        status: official ? 'approved' : 'pending', verifiedBy: official ? state.user.name : '', verifiedAt: official ? today : '' });
+      saveDev(email, dev); toast(official ? 'Test result saved' : 'Logged — waiting for your coach to confirm it'); renderDevelopment();
     };
     root.querySelectorAll('[data-test-del]').forEach(b => b.onclick = () => { dev.tests = (dev.tests || []).filter(t => t.id !== b.dataset.testDel); saveDev(email, dev); renderDevelopment(); });
+    // a coach confirms or rejects a self-reported number
+    function devSetTestStatus(id, status) {
+      if (!devCanCoach()) return;
+      const t = (dev.tests || []).find(x => x.id === id); if (!t) return;
+      t.status = status; t.verifiedBy = state.user.name; t.verifiedAt = new Date().toISOString().slice(0, 10);
+      saveDev(email, dev);
+      DATA.logActivity(status === 'approved' ? 'approve' : 'deny', `${state.user.name} ${status === 'approved' ? 'confirmed' : 'rejected'} ${dev.info.name || email}'s ${t.test} result (${t.result})`, state.user.name);
+      toast(status === 'approved' ? 'Result confirmed' : 'Result rejected'); renderDevelopment();
+    }
+    root.querySelectorAll('[data-test-verify]').forEach(b => b.onclick = () => devSetTestStatus(b.dataset.testVerify, 'approved'));
+    root.querySelectorAll('[data-test-deny]').forEach(b => b.onclick = () => devSetTestStatus(b.dataset.testDeny, 'denied'));
     // add a swim week
     const addSwim = root.querySelector('#dev-swim-add');
     if (addSwim) addSwim.onclick = () => {
@@ -718,14 +850,19 @@
     // export
     const exT = root.querySelector('#dev-export-tests'); if (exT) exT.onclick = () => downloadBlob(TESTLOG.toCSV(dev.tests || [], TESTLOG.TEST_COLS), (dev.info.name || 'player').replace(/[^\w]+/g, '-') + '-test-log.csv', 'text/csv');
     const exS = root.querySelector('#dev-export-swim'); if (exS) exS.onclick = () => downloadBlob(TESTLOG.toCSV(dev.swimWeeks || [], TESTLOG.SWIM_COLS), (dev.info.name || 'player').replace(/[^\w]+/g, '-') + '-swim-weeks.csv', 'text/csv');
-    // team import (coach/trainer/admin only) — .xlsx or .csv, matched by player name against the roster
+    wireDevImport(root);
+  }
+
+  // team import (coach/trainer/admin only) — .xlsx or .csv, matched by player name against
+  // the roster. Its own function so the squad view can offer it too, where it belongs.
+  function wireDevImport(root) {
     const impBtn = root.querySelector('#dev-import-btn'), impFile = root.querySelector('#dev-import-file');
     if (impBtn) impBtn.onclick = () => impFile.click();
     if (impFile) impFile.onchange = async () => {
       const files = Array.from(impFile.files || []); impFile.value = ''; if (!files.length) return;
       const roster = DATA.loadUsers().filter(u => u.role === 'player');
       const byName = n => roster.find(u => (u.name || '').trim().toLowerCase() === String(n || '').trim().toLowerCase());
-      let addedTests = 0, addedWeeks = 0, unmatched = new Set(), bad = 0;
+      let addedTests = 0, addedWeeks = 0, confirmedTests = 0, unmatched = new Set(), bad = 0;
       for (const f of files) {
         try {
           let testSheetRows = [], swimSheetRows = [];
@@ -744,8 +881,15 @@
           testSheetRows.filter(r => r.test && r.result).forEach(r => {
             const u = byName(r.name); if (!u) { unmatched.add(r.name || '(blank)'); return; }
             const d = loadDev(u.email); d.tests = d.tests || [];
-            const dup = d.tests.some(x => x.date === r.date && x.test === r.test && String(x.result) === String(r.result));
-            if (!dup) { d.tests.push({ id: 'd' + Math.random().toString(36).slice(2, 9), date: r.date, name: r.name, test: r.test, result: r.result, unit: r.unit, testedBy: r.testedBy, remark: r.remark }); saveDev(u.email, d); addedTests++; }
+            const today = new Date().toISOString().slice(0, 10);
+            // a bulk import is coach-entered by construction — the button only exists for a coach
+            const status = TESTLOG.normalizeTestStatus(r.status), by = r.verifiedBy || state.user.name, at = r.verifiedAt || today;
+            const dup = d.tests.find(x => x.date === r.date && x.test === r.test && String(x.result) === String(r.result));
+            if (!dup) { d.tests.push({ id: 'd' + Math.random().toString(36).slice(2, 9), date: r.date, name: r.name, test: r.test, result: r.result, unit: r.unit, testedBy: r.testedBy, remark: r.remark, status, verifiedBy: by, verifiedAt: at }); saveDev(u.email, d); addedTests++; }
+            else if (dup.status !== 'approved' && status === 'approved') {
+              // the player self-logged it first; the coach's workbook is the authority — upgrade rather than skip
+              dup.status = 'approved'; dup.verifiedBy = by; dup.verifiedAt = at; saveDev(u.email, d); confirmedTests++;
+            }
           });
           swimSheetRows.filter(r => r.week).forEach(r => {
             const u = byName(r.name); if (!u) { unmatched.add(r.name || '(blank)'); return; }
@@ -755,7 +899,7 @@
           });
         } catch (e) { bad++; }
       }
-      toast(`Imported ${addedTests} test result${addedTests === 1 ? '' : 's'} and ${addedWeeks} swim week${addedWeeks === 1 ? '' : 's'}` + (unmatched.size ? ` · ${unmatched.size} name${unmatched.size > 1 ? 's' : ''} not on the roster` : '') + (bad ? ` · ${bad} file${bad > 1 ? 's' : ''} could not be read` : ''));
+      toast(`Imported ${addedTests} test result${addedTests === 1 ? '' : 's'} and ${addedWeeks} swim week${addedWeeks === 1 ? '' : 's'}` + (confirmedTests ? ` · ${confirmedTests} self-reported now confirmed` : '') + (unmatched.size ? ` · ${unmatched.size} name${unmatched.size > 1 ? 's' : ''} not on the roster` : '') + (bad ? ` · ${bad} file${bad > 1 ? 's' : ''} could not be read` : ''));
       renderDevelopment();
     };
   }
@@ -1643,6 +1787,7 @@
     const c = $('view-season');
     if (typeof PLANNER==='undefined' || typeof CALENDAR==='undefined') { c.innerHTML='<div class="muted">Season tools unavailable.</div>'; return; }
     const today = new Date(); const target = new Date(today.getTime()+70*86400000);
+    const myTests = (typeof TESTLOG!=='undefined' && state.user) ? (loadDev(state.user.email).tests || []).length : 0;
     c.innerHTML = `<div class="season-wrap">
       <div class="dash-head with-mascot">${(typeof FX!=='undefined')?FX.mascot(38):''}
         <div><h1>Season <button class="help-chip" data-help="season" title="How Season works">？</button></h1>
@@ -1662,6 +1807,7 @@
             </div>
             <div class="goal-focus"><span class="ef-label">Focus</span>
               ${FOCUS_LIST.map(([k,l])=>`<label class="chip-check"><input type="checkbox" value="${k}" ${['shooting','tactics'].includes(k)?'checked':''}> ${l}</label>`).join('')}
+              <label class="chip-check" title="Lean the plan toward whatever your test log says you're furthest behind on"><input type="checkbox" id="goal-usetests" ${myTests ? 'checked' : 'disabled'}> Use my test results (${myTests})</label>
             </div>
             <button class="btn-primary sm" id="goal-generate">Generate plan</button>
           </div>
@@ -1704,13 +1850,21 @@
       title: $('goal-title').value.trim() || 'Season goal',
       startDate: $('goal-start').value, targetDate: $('goal-target').value,
       daysPerWeek: +$('goal-days').value,
-      focus: [...document.querySelectorAll('.goal-focus input:checked')].map(i=>i.value),
+      focus: [...document.querySelectorAll('.goal-focus input[type="checkbox"]:checked')].filter(i=>i.id!=='goal-usetests').map(i=>i.value),
     };
   }
+  /* the signed-in player's own measured gaps — empty for a coach with no record, which
+     is the safe default: the plan then comes out exactly as it always did */
+  function devGapsForPlan() {
+    const box = $('goal-usetests');
+    if (!box || !box.checked || typeof TESTLOG==='undefined' || !state.user) return [];
+    const d = loadDev(state.user.email);
+    return TESTLOG.focusGaps(d.tests || [], { tier: d.info.tier, isGK: !!d.info.isGK, today: new Date().toISOString().slice(0,10) });
+  }
   function generatePlanFromForm() {
-    season.plan = PLANNER.generatePlan(goalFromForm());
+    season.plan = PLANNER.generatePlan(goalFromForm(), { gaps: devGapsForPlan() });
     renderPlan();
-    toast('Plan generated');
+    toast(season.plan.leadFocus ? 'Plan generated — leaning on your test log' : 'Plan generated');
   }
   function renderPlan() {
     const p = season.plan; if (!p) return;
@@ -1720,10 +1874,24 @@
         <span class="pw-n">Week ${mc.week}</span><span class="pw-phase">${escapeHtml(mc.phase)}${mc.deload?' · deload':''}</span>
         <span class="pw-load"><i class="lv vol" style="width:${mc.load.volume}%"></i></span>
         <span class="pw-rpe">vol ${mc.load.volume} · int ${mc.load.intensity}</span></summary>
-      <div class="pw-sessions">${mc.sessions.map(s=>`<div class="ses"><span class="ses-focus ${s.focus}">${escapeHtml(s.focus)}</span>
+      <div class="pw-sessions">${mc.sessions.map(s=>`<div class="ses${s.fromGap?' ses-fromgap':''}"${s.fromGap?' title="Picked from your test log — your biggest measured gap, on your freshest day"':''}><span class="ses-focus ${s.focus}">${escapeHtml(s.focus)}</span>
         <span class="ses-main"><strong>${escapeHtml(s.title)}</strong><span class="muted">${s.durationMin}min · RPE ${s.rpe} · ${escapeHtml((s.drills||[]).slice(0,2).join(' · '))}</span></span></div>`).join('')}</div>
       </details>`).join('');
+    // say WHY the plan leans the way it does — a plan that silently changes shape is worse than one that explains itself
+    const focusLabel = k => (FOCUS_LIST.find(f => f[0] === k) || [k, k])[1].toLowerCase();
+    let why;
+    if (p.emphasisBoost && Object.keys(p.emphasisBoost).length) {
+      why = Object.keys(p.emphasisBoost).map(f => {
+        const g = (p.gaps || []).find(x => x.focus === f);
+        return `<div class="why-row">⬆ more <b>${escapeHtml(focusLabel(f))}</b>${g ? ` — ${escapeHtml(g.label)}: ${escapeHtml(g.deltaText)}${g.verified ? '' : ' <span class="muted">(self-reported)</span>'}` : ''}</div>`;
+      }).join('') + (p.leadFocus ? `<div class="why-row muted">Your first session each week targets ${escapeHtml(focusLabel(p.leadFocus))}.</div>` : '')
+        + `<div class="why-row muted">The test catalogue measures physical qualities only — shooting and tactics stay your own choices.</div>`;
+    } else {
+      const noneLogged = !$('goal-usetests') || $('goal-usetests').disabled;
+      why = `<div class="why-row muted">Based on your focus choices only — ${noneLogged ? 'no test results logged yet' : 'nothing in your test log stands out right now'}. <button class="btn-ghost xs" id="plan-why-log">Log a test →</button></div>`;
+    }
     out.innerHTML = `<div class="plan-summary">Peak for <strong>${escapeHtml(new Date(p.goal.targetDate).toLocaleDateString())}</strong> · ${p.weeks} weeks · ${p.goal.daysPerWeek}/wk</div>
+      <div class="plan-why">${why}</div>
       <div class="phase-band">${phases}</div>
       <div class="plan-weeks">${weeks}</div>
       <button class="btn-primary sm" id="plan-tocal">＋ Add all ${PLANNER.planToEvents(p).length} sessions to the calendar</button>`;
@@ -1735,6 +1903,7 @@
       toast(`${add.length} sessions added to the calendar`);
       renderAgenda();
     };
+    const whyLog = $('plan-why-log'); if (whyLog) whyLog.onclick = () => switchView('development');
   }
   function addCalendarEvent() {
     const date = $('ev-date').value, time = $('ev-time').value || '18:00';

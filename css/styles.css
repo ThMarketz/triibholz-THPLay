@@ -1010,6 +1010,27 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .dev-table th{color:var(--ink-faint);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.03em}
 .dev-modal .modal-body{display:flex;flex-direction:column;gap:10px}
 
+/* ---- coach verification + squad table + plan reasoning (v1.36) ---- */
+/* a pending number gets NO colour — that IS the message */
+.dev-bench-pending{font-size:.72rem;color:var(--ink-faint);margin-top:4px;opacity:.85}
+.dev-review-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 0;border-bottom:1px solid var(--line)}
+.dev-review-row:last-child{border-bottom:0}
+.drv-main{display:flex;flex-direction:column;gap:2px;flex:1 1 220px;font-size:.84rem}
+.drv-main .muted{font-size:.72rem}
+.drv-res{color:var(--ink);font-weight:600}
+.drv-actions{display:flex;align-items:center;gap:6px}
+.dev-team-row{cursor:pointer}
+.dev-team-row:hover{background:rgba(255,255,255,.03)}
+.dev-team-table td{white-space:nowrap;vertical-align:middle}
+.dev-team-table .dev-bench-bar{width:64px;margin:0;display:inline-block;vertical-align:middle}
+.dev-team-table .mascot{vertical-align:middle}
+.dev-team-ok{color:#5fd99e}
+.dev-team-gap{color:#ffd166}
+.tag-self{background:#3a2f14;color:#ffd166}
+.plan-why{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;background:rgba(255,209,102,.05);font-size:.8rem}
+.plan-why .why-row{display:block;padding:2px 0}
+.ses.ses-fromgap{background:rgba(255,209,102,.07);border-radius:8px}
+
 /* ---- Announcements: bell panel + compose modal (v1.35) ---- */
 #announce-wrap .icon-btn{position:relative}
 #announce-badge{margin-left:4px}

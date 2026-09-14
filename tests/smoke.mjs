@@ -484,6 +484,24 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('ends on a Taper', plan.mesocycles[plan.mesocycles.length-1].name==='Taper');
     ok('taper cuts volume below mid-plan', plan.microcycles[plan.microcycles.length-1].load.volume < plan.microcycles[6].load.volume);
     ok('each week has the requested session count', plan.microcycles.every(m=>m.sessions.length===4));
+    // leaning the plan on measured weaknesses — must never change a plan that was not given gaps
+    {
+      const goal = { title:'Peak', startDate:'2026-09-01', targetDate:'2026-11-24', daysPerWeek:4, focus:['shooting','tactics'] };
+      const plain = JSON.stringify(PLANNER.generatePlan(goal));
+      ok('a plan with no test data is byte-for-byte what it always was', plain === JSON.stringify(PLANNER.generatePlan(goal, {})) && plain === JSON.stringify(PLANNER.generatePlan(goal, { gaps: [] })));
+      ok('and carries no extra keys', !/emphasisBoost|leadFocus/.test(plain));
+      ok('the gap→bump ladder is stepped, not proportional', PLANNER.boostFromGaps([{focus:'power',gap:0.10}]).lead === null
+        && PLANNER.boostFromGaps([{focus:'power',gap:0.30}]).weights.power === 1
+        && PLANNER.boostFromGaps([{focus:'power',gap:0.90}]).weights.power === 2);
+      ok('at most two focus areas ever lean, so periodisation still dominates', Object.keys(PLANNER.boostFromGaps([{focus:'power',gap:.9},{focus:'skills',gap:.8},{focus:'endurance',gap:.7}]).weights).length === 2);
+      ok('recovery and match can never be boosted', PLANNER.boostFromGaps([{focus:'recovery',gap:.9},{focus:'match',gap:.9}]).lead === null);
+      const boosted = PLANNER.generatePlan(goal, { gaps: [{ focus:'endurance', gap:0.9 }] });
+      ok('the weakest area gets the first session of every week it is trained in', boosted.microcycles.filter(w=>w.phase!=='Taper').every(w => w.sessions[0].focus==='endurance' && w.sessions[0].fromGap===true));
+      ok('without changing the shape of the plan', boosted.weeks === plan.weeks && boosted.microcycles.every((w,i)=>w.sessions.length===plan.microcycles[i].sessions.length));
+      const str = PLANNER.generatePlan(goal, { gaps: [{ focus:'strength', gap:1.2 }] });
+      ok('a strength gap never injects dryland into a Taper week', str.microcycles.filter(w=>w.phase==='Taper').every(w=>!w.sessions.some(s=>s.focus==='strength')));
+      ok('and the taper still ends each week on recovery', str.microcycles.filter(w=>w.phase==='Taper').every(w=>w.sessions[w.sessions.length-1].focus==='recovery'));
+    }
     const evs = PLANNER.planToEvents(plan);
     ok('plan converts to calendar events', evs.length===52 && evs.every(e=>e.type==='training' && e.start && e.notes));
     const match = { id:'m1', type:'match', title:'vs Red Sharks', start:'2026-11-08T17:00:00Z', location:'City Pool', opponent:'Red Sharks', reminderMin:120 };
@@ -1042,7 +1060,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('goalkeeper tests are a separate catalogue', TESTLOG.testsFor(true).some(t=>t.id==='eggbeaterPush') && !TESTLOG.testsFor(false).some(t=>t.id==='eggbeaterPush'));
     ok('four field + two GK tests are flagged as shared with the official PISTE test', TESTLOG.FIELD_TESTS.filter(t=>t.piste).length>=4 && TESTLOG.GK_TESTS.filter(t=>t.piste).length>=2);
     // CSV round-trip
-    const rows = [{ date:'2026-10-06', name:'Joya', test:'50 m freestyle', result:'37.4', unit:'s', testedBy:'Coaching staff', remark:'first test, with a comma' }];
+    const rows = [{ date:'2026-10-06', name:'Joya', test:'50 m freestyle', result:'37.4', unit:'s', testedBy:'Coaching staff', remark:'first test, with a comma', status:'approved', verifiedBy:'Coach Ruiz', verifiedAt:'2026-10-06' }];
     const csv = TESTLOG.toCSV(rows, TESTLOG.TEST_COLS);
     ok('CSV export is readable and round-trips exactly, including a comma in a field', JSON.stringify(TESTLOG.rowsFromCSV(TESTLOG.parseCSV(csv), TESTLOG.TEST_COLS))===JSON.stringify(rows));
     // home training + the mascot
@@ -1081,8 +1099,63 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     const parsed = TESTLOG.rowsFromSheetTable(sheets['Testresultate'], TESTLOG.TEST_COLS);
     ok('German column headers (Datum/Resultat/Getestet von…) map onto the same fields as the English ones', parsed.length===1 && parsed[0].date==='2026-10-06' && parsed[0].test==='50 m Kraul' && parsed[0].result==='37.4' && parsed[0].testedBy==='Trainerteam');
 
+    // --- coach verification: a self-reported number is never authoritative ---
+    ok('a stored entry from before this feature is never downgraded', TESTLOG.normalizeTestStatus('') === 'approved' && TESTLOG.normalizeTestStatus(undefined) === 'approved');
+    ok('a German "bestätigt" column reads as confirmed', TESTLOG.normalizeTestStatus('bestätigt') === 'approved' && TESTLOG.normalizeTestStatus('bestaetigt') === 'approved');
+    ok('an unrecognised token never grants authority', TESTLOG.normalizeTestStatus('whatever') === 'pending');
+    {
+      const mixed = [
+        { test:'50 m freestyle', date:'2026-10-01', result:'37.0', status:'approved' },
+        { test:'50 m freestyle', date:'2026-10-08', result:'28.0', status:'pending' },
+        { test:'25 m freestyle', date:'2026-10-08', result:'9.0', status:'denied' },
+      ];
+      const l = TESTLOG.latestResults(mixed);
+      ok('an absurd newer self-report never displaces the confirmed number', l.official['50 m freestyle'].result === '37.0' && l.pending['50 m freestyle'].result === '28.0');
+      ok('a rejected result counts for nothing at all', !l.official['25 m freestyle'] && !l.pending['25 m freestyle']);
+    }
+    // --- squad row: the numbers the coach's table shows ---
+    {
+      const wk2 = TESTLOG.weekKeyOf('2026-09-14');
+      const empty = TESTLOG.squadRow({ info:{} }, { log:[] }, wk2);
+      ok('a fresh record reads as empty rather than throwing', empty.met === 0 && empty.metVerified === 0 && empty.lastDate === null && empty.metres === 0 && empty.hasTests === false);
+      ok('the denominator is per player: 9 field tests, 7 for a goalkeeper', empty.total === 9 && TESTLOG.squadRow({ info:{ isGK:true } }, { log:[] }, wk2).total === 7);
+      const one = t => TESTLOG.squadRow({ info:{ tier:0 }, tests:[{ test:'50 m freestyle', date:'2026-09-10', result:'34.0', status:t }] }, { log:[] }, wk2);
+      ok('a confirmed result counts towards the squad table, a self-reported one is split out', one('approved').metVerified === 1 && one('pending').metVerified === 0 && one('pending').metUnverified === 1);
+      ok('a goalkeeper baseline test with no tier target is never counted as met', TESTLOG.squadRow({ info:{ isGK:true, tier:0 }, tests:[{ test:'Push-up height from eggbeater', date:'2026-09-10', result:'20', status:'approved' }] }, { log:[] }, wk2).met === 0);
+      ok('"last tested" counts an imported row whose label matches no catalogue entry', TESTLOG.squadRow({ info:{}, tests:[{ test:'50 m Kraul', date:'2026-11-02', result:'37.4' }] }, { log:[] }, wk2).lastDate === '2026-11-02');
+    }
+    // --- focus gaps: what the season plan leans on ---
+    {
+      const g = TESTLOG.focusGaps([{ date:'2026-09-01', test:'50 m freestyle', result:'37.4' }], { tier:0 });
+      ok('a missed target becomes a gap on the right focus', g.length === 1 && g[0].focus === 'power' && /1\.4s to go/.test(g[0].deltaText));
+      const both = TESTLOG.focusGaps([
+        { date:'2026-09-01', test:'50 m freestyle', result:'37.4' },      // 1.4 of a 5s ladder = 0.28
+        { date:'2026-09-01', test:'Passing distance', result:'14' },      // 6 of a 10m ladder = 0.60
+      ], { tier:0 });
+      ok('gaps are comparable across units — 6 m of passing outranks 1.4 s of swimming', both[0].focus === 'skills' && both[0].gap > both[1].gap);
+      ok('a met result produces no gap at all', TESTLOG.focusGaps([{ date:'2026-09-01', test:'50 m freestyle', result:'34.0' }], { tier:0 }).length === 0);
+      ok('a self-reported gap is discounted, never excluded', (() => {
+        const self = TESTLOG.focusGaps([{ date:'2026-09-01', test:'50 m freestyle', result:'37.4', status:'pending' }], { tier:0 })[0];
+        const conf = TESTLOG.focusGaps([{ date:'2026-09-01', test:'50 m freestyle', result:'37.4', status:'approved' }], { tier:0 })[0];
+        return self && conf && self.gap < conf.gap;
+      })());
+      ok('the same test name resolves against the player\'s own catalogue', TESTLOG.focusGaps([{ date:'2026-09-01', test:'Ball overhead hold (3 kg)', result:'80' }], { tier:0 })[0].target === 90
+        && TESTLOG.focusGaps([{ date:'2026-09-01', test:'Ball overhead hold (3 kg)', result:'80' }], { tier:0, isGK:true })[0].target === 105);
+      ok('a rep count no longer reports its gap in seconds', !/s to go/.test(TESTLOG.evaluate(TESTLOG.testById('jumpsCrossbar', false), '8', 0).deltaText));
+    }
+
     // UI: the nav item, the hero + mascot, stat strip, logging home training, the modal flows
     q('.nav-btn[data-view="development"]').click(); await wait(40);
+    // a coach/admin lands on the squad table — their own test record is not the point
+    ok('a coach lands on the squad table, one row per approved player', !!q('.dev-team-table') && qa('.dev-team-row').length >= 2);
+    ok('a player with no record is shown as such, never as a zero', /No record yet/.test(q('.dev-team-table').textContent));
+    qa('.dev-team-row')[0].click(); await wait(40);   // drill into a player's own record
+    ok('tapping a row opens that player\'s full record', !!q('.dev-bench-grid') && !!q('#dev-back-team'));
+    q('#dev-back-team').click(); await wait(30);
+    ok('◀ Squad returns to the table', !!q('.dev-team-table'));
+    qa('.dev-team-row')[0].click(); await wait(40);
+    // switch back to my own record via the roster picker — the rest of this section is a self-view
+    q('#dev-roster-select').value = ''; q('#dev-roster-select').dispatchEvent(new window.Event('change')); await wait(40);
     ok('My Development view renders with a hero mascot and a goal line', !!q('.dev-hero-mascot .mascot') && !!q('.dev-hero-goal'));
     ok('a glanceable stat strip is shown', qa('.dev-stat').length===4);
     ok('the six real home-training activities are listed', qa('.dev-home-item').length===6 && /Wall passing/.test(q('.dev-home-list').textContent));
@@ -1265,6 +1338,49 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('demo persona (no teamCode) sees no team-stamped play', !titles.some(t => t.includes(OWN_T) || t.includes(OTHER_T)));
     ok('demo persona still sees the un-stamped sample plays', qa('#scenario-list .scn-card:not(.scn-new)').length > 0);
     DATA.save(DATA.load().filter(s => s.id !== 'priv-own' && s.id !== 'priv-other'));
+  }
+
+  console.log('\n[11] A self-reported result counts for nothing until a coach confirms it');
+  {
+    // legacy data first: a record written before this feature must not be retroactively downgraded
+    window.localStorage.setItem('thplay.testlog.player@demo.triibholz', JSON.stringify({
+      info: { name:'Demo Player', tier:0, isGK:false },
+      tests: [{ id:'legacy1', date:'2026-08-01', test:'25 m freestyle', result:'15.0', unit:'s', testedBy:'Coach Ruiz', remark:'' }],
+      swimWeeks: [],
+    }));
+    q('#logout-btn').click(); await wait(20);
+    qa('.demo-btn').find(b=>b.dataset.demo==='player').click(); await wait(60);
+    if (q('#tour-skip')) q('#tour-skip').click();
+    q('.nav-btn[data-view="development"]').click(); await wait(50);
+    ok('a player never sees the squad table', !q('.dev-team-table') && !q('[data-dev-open]') && !!q('.dev-hero-mascot .mascot'));
+    ok('a pre-existing result is still counted — no silent downgrade', qa('.dev-bench-card.dev-bench-met').length === 1 && /confirmed/.test(q('.dev-table').textContent));
+
+    q('[data-open-modal="test"]').click(); await wait(20);
+    ok('a player cannot claim someone else ran the test', q('#dev-test-by').hasAttribute('readonly') && q('#dev-test-by').value === 'Demo Player');
+    q('#dev-test-id').value = 'free50'; q('#dev-test-result').value = '28.0'; q('#dev-test-add').click(); await wait(40);
+    ok('an absurd self-reported number does NOT turn a card green', !qa('.dev-bench-card.dev-bench-met').some(c => /50 m freestyle/.test(c.textContent)));
+    ok('it still shows on the player\'s own card, marked as waiting', /self-reported, waiting for a coach/.test(q('.dev-bench').textContent) && /28/.test(q('.dev-bench').textContent));
+    ok('the tests-at-target count is unmoved by it', /^1\/9$/.test(q('.dev-stat b').textContent.trim()));
+    ok('the history row reads self-reported', qa('#view-development .status-chip.pending').length === 1);
+    ok('a player has no way to confirm anything', qa('[data-test-verify]').length === 0 && qa('[data-test-deny]').length === 0);
+
+    // now the coach confirms it
+    q('#logout-btn').click(); await wait(20);
+    qa('.demo-btn').find(b=>b.dataset.demo==='coach').click(); await wait(50);
+    if (q('#tour-skip')) q('#tour-skip').click();
+    q('.nav-btn[data-view="development"]').click(); await wait(50);
+    ok('the squad table flags the waiting result to the coach', /awaiting your confirmation/i.test(q('.dev-stats').textContent));
+    const playerRow = qa('.dev-team-row').find(r => /Demo Player/.test(r.textContent));
+    ok('the player\'s row shows the number as self-reported, not as progress', !!playerRow && /self-reported/.test(playerRow.textContent) && !playerRow.querySelector('.dev-team-ok'));
+    playerRow.click(); await wait(50);
+    ok('the coach sees a confirmation queue on the player\'s record', qa('[data-test-verify]').length === 1);
+    q('[data-test-verify]').click(); await wait(50);
+    ok('confirming it makes the number count', qa('.dev-bench-card.dev-bench-met').some(c => /50 m freestyle/.test(c.textContent)));
+    ok('and it is stamped with who confirmed it', (() => {
+      const rec = JSON.parse(window.localStorage.getItem('thplay.testlog.player@demo.triibholz'));
+      const t = rec.tests.find(x => x.test === '50 m freestyle');
+      return t.status === 'approved' && t.verifiedBy === 'Demo Coach' && !!t.verifiedAt;
+    })());
   }
 
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);

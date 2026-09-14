@@ -112,12 +112,15 @@ const HELP = (() => {
     development: { icon:'📈', title:'My Development — your own log, your own goal', steps:[
       'This is <strong>your data, not the team\'s</strong>. Your profile, your self-set goal, your test results and your home-training streak — only you, and your coach or trainer, ever see it.',
       '<strong>Profile &amp; self target:</strong> your season tier picks which target column the benchmarks below compare you against. Write your goal in your own words — there is no wrong answer.',
-      '<strong>Test results</strong> are logged against your season\'s benchmarks — the same tests a real club testing programme uses, four of them shared with the official Swiss Aquatics PISTE test. A green row means you\'re at target; yellow shows exactly how far to go.',
+      '<strong>Test results</strong> are logged against your season\'s benchmarks — the same tests a real club testing programme uses, four of them shared with the official Swiss Aquatics PISTE test. A green card means a <strong>confirmed</strong> result at target; yellow shows exactly how far to go.',
+      '<strong>Anything you log yourself is saved straight away and shown as waiting.</strong> Your coach confirms it from your record, and only then does it move a benchmark card or the tests-at-target count. A coach\'s own entries, and an imported club workbook, are confirmed already.',
+      '<strong>Coaches</strong> open this menu on a <strong>squad view</strong>: one row per player — home training this week, tests at target, when they were last tested — and tapping a row opens that player\'s full record.',
       '<strong>Home training</strong> is the part you control completely: wall passing, mobility, a shoulder-band routine, bodyweight strength, ball feel, watching matches — a small weekly target for each. Log a session and the mascot notices; keep it up and it thrives, let it go quiet and it says so.',
       '<strong>Swim weeks</strong> count club metres and home/self metres side by side, plus sessions attended — exactly how a real training log tracks it.',
       'Coaches and trainers can <strong>import a whole team\'s existing logbook</strong> (.xlsx or .csv) in one go, matched to the roster by name; players can download their own test log and swim weeks as a CSV at any time.',
     ], tips:[
       'There are no bad numbers here. Only starting points. Honest entries matter more than fast ones.',
+      'Confirmation is a fairness mechanism, not a security control — the record lives in this browser, so it keeps everyone honest about what counts, it does not make the file tamper-proof.',
       'A coach viewing a player\'s record sees the same thing the player does — nothing is hidden, and nothing is shared beyond the coaching team.',
     ]},
 
@@ -142,6 +145,7 @@ const HELP = (() => {
 
     season: { icon:'📅', title:'Season — plan &amp; calendar', steps:[
       '<strong>Goal → plan:</strong> name your goal, set the date you want to <em>peak</em> for, pick training days/week and focus, then <strong>Generate plan</strong>. You get a periodised plan — General Prep → Specific Prep → Competition → Taper — with a weekly load wave and water-polo sessions.',
+      '<strong>The plan also reads your own test log.</strong> Whatever you are furthest behind on gets extra sessions and the first — freshest — session of each week, and the plan says which test drove it. Self-reported results count for less than coach-confirmed ones, and unticking <strong>Use my test results</strong> turns it off. The test catalogue measures physical qualities only, so shooting and tactics stay your own choices.',
       'Press <strong>Add all sessions to the calendar</strong> to drop the whole plan onto your schedule.',
       '<strong>Calendar:</strong> add matches and events (with time &amp; location). <strong>⬇ Export .ics</strong> gives a file that opens in Apple Calendar, Google Calendar or Outlook.',
       '<strong>🔗 Subscribe (all devices):</strong> publishes a live feed URL. Subscribe to it once on each phone/computer and it <strong>auto-updates</strong> whenever you publish new matches — iOS, Android and Windows all support subscribed calendars.',

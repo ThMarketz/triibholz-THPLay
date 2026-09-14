@@ -80,6 +80,143 @@ const TESTLOG = (() => {
     return { value, target, met, deltaText };
   }
 
+  /* ---------------- 1b) who vouches for a result ----------------
+     A player may log anything on their own record — self-tracking is the point.
+     But a number only counts towards a target once a coach has confirmed it.
+     Same vocabulary as the app's existing login-approval queue (pending/approved/
+     denied) so the mental model — and the status-chip styling — already exist.
+
+     A stored entry with NO status is legacy: it was written under the old rules,
+     mostly by a coach's own import, so it is grandfathered as `approved`. What
+     marks it as never-coach-signed is the EMPTY verifiedBy, not a downgrade —
+     defaulting old data to `pending` would silently un-green every existing card. */
+  const TEST_STATUSES = ['pending', 'approved', 'denied'];
+  const APPROVED_WORDS = ['approved', 'verified', 'confirmed', 'ok', 'yes', 'true', '1', 'ja', 'bestätigt', 'bestaetigt'];
+  const PENDING_WORDS = ['pending', 'open', 'offen', 'self', 'selbst', 'self-reported'];
+  const DENIED_WORDS = ['denied', 'rejected', 'no', 'false', 'nein', 'abgelehnt'];
+  function normalizeTestStatus(s) {
+    const v = String(s == null ? '' : s).trim().toLowerCase();
+    if (!v) return 'approved';                       // legacy / a workbook with no such column
+    if (APPROVED_WORDS.includes(v)) return 'approved';
+    if (PENDING_WORDS.includes(v)) return 'pending';
+    if (DENIED_WORDS.includes(v)) return 'denied';
+    return 'pending';                                // never grant authority to a token we don't understand
+  }
+  const isOfficialResult = entry => normalizeTestStatus(entry && entry.status) === 'approved';
+
+  /* latestResults(tests) → { official, pending } — newest entry per test name in each.
+     A denied entry lands in neither: it is neither authoritative nor awaiting anything. */
+  function latestResults(tests) {
+    const official = {}, pending = {};
+    (tests || []).forEach(t => {
+      if (!t || !t.test) return;
+      const st = normalizeTestStatus(t.status);
+      if (st === 'denied') return;
+      const into = st === 'approved' ? official : pending;
+      if (!into[t.test] || String(t.date || '') > String(into[t.test].date || '')) into[t.test] = t;
+    });
+    return { official, pending };
+  }
+
+  /* ---------------- 1c) one player's row, for the squad table ----------------
+     Built only from the functions above so the squad view and the player's own
+     stat strip can never disagree — they are the same arithmetic. */
+  function squadRow(dev, home, weekKey) {
+    dev = dev || {}; const info = dev.info || {};
+    const cat = testsFor(!!info.isGK);
+    const latest = latestResults(dev.tests || []);
+    const at = (map, t) => map[t.label] || map[t.id];   // imports store the workbook's own label
+    const isMet = (map, t) => { const l = at(map, t); return !!l && evaluate(t, l.result, info.tier || 0).met === true; };
+    const met = cat.filter(t => isMet(latest.official, t) || isMet(latest.pending, t)).length;
+    const metVerified = cat.filter(t => isMet(latest.official, t)).length;
+    const dates = (dev.tests || []).map(t => t.date || '').filter(Boolean).sort();
+    const lastDate = dates.length ? dates[dates.length - 1] : null;
+    const newest = lastDate ? (dev.tests || []).filter(t => t.date === lastDate)[0] : null;
+    const m = mascotState((home && home.log) || [], weekKey);
+    const week = (dev.swimWeeks || []).find(r => r.week === weekKey);
+    return {
+      total: cat.length, met, metVerified, metUnverified: met - metVerified,
+      pendingCount: (dev.tests || []).filter(t => normalizeTestStatus(t.status) === 'pending').length,
+      lastDate, lastVerified: isOfficialResult(newest),
+      compliance: m.compliance, mood: m.mood, streak: m.streak,
+      metres: week ? (+week.total || 0) : 0,
+      hasTests: (dev.tests || []).length > 0, hasSwim: (dev.swimWeeks || []).length > 0,
+    };
+  }
+
+  /* ---------------- 1d) which training focus a test speaks to ----------------
+     Maps the catalogue onto the six focus areas the season planner knows. This is
+     a coaching judgement, not arithmetic — each line says why. NOTE what is NOT
+     here: no field test maps to 'shooting' or 'tactics', because this catalogue
+     measures physical qualities. A field player's test log can therefore never
+     pull a plan toward shooting or tactics, and the UI says so rather than
+     implying the plan is fully data-driven. */
+  const TEST_FOCUS = {
+    // field
+    free25: 'power',          // the 25 m sprint IS the counter-attack break
+    free50: 'power',          // top-end swim speed; there is no 50 m swim in a game
+    free100: 'endurance',     // speed-endurance — the 8×100 set is what moves it
+    swim200: 'endurance',     // aerobic base under four quarters
+    dropoff8x25: 'endurance', // fade across 8 sprints = repeat-sprint ability
+    passDist: 'skills',       // the only ball-in-hand measure in the catalogue
+    ballOverhead: 'strength', // 3 kg isometric hold = shoulder/trunk strength-endurance
+    jumpsCrossbar: 'power',   // repeated maximal eggbeater lift
+    swimPerWeek: 'endurance', // a weekly kilometre shortfall is an aerobic-volume shortfall
+    // goalkeeper
+    eggbeaterPush: 'power',   // explosive rise — the keeper's defining power quality
+    sideShuttle: 'power',     // 4×5 m lateral = repeated maximal accelerations
+    lungeSteps: 'strength',   // 30 s rep count = dryland leg strength-endurance
+    ballOverheadGk: 'strength',
+    throwHalfway: 'skills',   // the outlet throw starts the counter
+    penalty5m: 'shooting',    // the only session where a keeper faces shots
+    catchRate: null,          // outcome confounded by who shot at you; no session to route it to
+  };
+
+  /* how far apart the easiest and hardest tier targets are — one "step of development" */
+  function testSpan(test) {
+    const ts = (test && test.targets || []).filter(v => v != null);
+    return ts.length > 1 ? Math.abs(ts[ts.length - 1] - ts[0]) : 0;
+  }
+
+  /* focusGaps(tests, info) → [{focus, gap, …}] worst first.
+     Gaps are normalised against the catalogue's own tier ladder, so a gap means the
+     same amount of work whatever the unit: 1.4 s off a 50 m free (span 5 s) = 0.28,
+     6 m off a passing target (span 10 m) = 0.60 — correctly the bigger gap, which a
+     raw delta (6 vs 1.4) or a fraction-of-target would both rank differently.
+     Self-reported results still count, at a discount: this output only nudges a
+     training plan, and excluding them would make the feature inert for exactly the
+     players it exists for. */
+  function focusGaps(tests, info) {
+    info = info || {};
+    const cat = testsFor(!!info.isGK);
+    const newest = {};
+    (tests || []).forEach(r => {
+      if (!r || !r.test) return;
+      const t = cat.find(x => x.label === r.test) || cat.find(x => x.id === r.test);
+      if (!t || !TEST_FOCUS[t.id]) return;
+      if (normalizeTestStatus(r.status) === 'denied') return;
+      if (info.today && r.date) {
+        const ageDays = (Date.parse(info.today + 'T00:00:00Z') - Date.parse(r.date + 'T00:00:00Z')) / 86400000;
+        if (isFinite(ageDays) && ageDays > (info.maxAgeDays || 365)) return;
+      }
+      if (!newest[t.id] || String(r.date || '') > String(newest[t.id].r.date || '')) newest[t.id] = { t, r };
+    });
+    const out = [];
+    Object.keys(newest).forEach(id => {
+      const { t, r } = newest[id];
+      const ev = evaluate(t, r.result, info.tier || 0);
+      if (!ev || ev.met !== false) return;            // met, or no comparable target
+      const span = testSpan(t);
+      let gap = span > 0 ? Math.abs(ev.value - ev.target) / span
+        : (ev.target ? Math.abs(ev.value - ev.target) / Math.abs(ev.target) : 0);
+      const official = isOfficialResult(r);
+      gap = Math.min(1.5, gap) * (official ? 1 : 0.7);   // cap first so one typo can't swamp a plan
+      out.push({ focus: TEST_FOCUS[t.id], gap: +gap.toFixed(3), testId: t.id, label: t.label,
+        deltaText: ev.deltaText, value: ev.value, target: ev.target, date: r.date || '', verified: official });
+    });
+    return out.sort((a, b) => b.gap - a.gap);
+  }
+
   /* ---------------- 2) home training — the weekly programme + the mascot ---------------- */
   const HOME_ACTIVITIES = [
     { id: 'wallPassing', label: 'Wall passing', perWeek: 3, minutes: 15, note: 'Right hand, left hand, catch and release in one motion. Beat last week’s count.', showsUpIn: 'Catching under pressure, weak-hand passing, reaction time.' },
@@ -151,6 +288,10 @@ const TESTLOG = (() => {
     { key: 'test', label: 'Test', syn: ['test'] }, { key: 'result', label: 'Result', syn: ['resultat', 'ergebnis'] },
     { key: 'unit', label: 'Unit', syn: ['einheit'] }, { key: 'testedBy', label: 'Tested by', syn: ['getestet von', 'getestet'] },
     { key: 'remark', label: 'Remark', syn: ['bemerkung', 'notiz'] },
+    // appended AFTER remark so a club's familiar column order is unchanged; all syn entries lowercase (headerMatches compares lowercased)
+    { key: 'status', label: 'Status', syn: ['freigabe', 'bestaetigt', 'bestätigt'] },
+    { key: 'verifiedBy', label: 'Verified by', syn: ['bestätigt von', 'bestaetigt von', 'freigegeben von'] },
+    { key: 'verifiedAt', label: 'Verified on', syn: ['bestätigt am', 'bestaetigt am', 'freigegeben am'] },
   ];
   const SWIM_COLS = [
     { key: 'week', label: 'Week (Monday)', syn: ['woche (datum montag)', 'woche'] }, { key: 'name', label: 'Name', syn: ['name', 'spielerin'] },
@@ -276,6 +417,8 @@ const TESTLOG = (() => {
 
   return {
     TIERS, FIELD_TESTS, GK_TESTS, testsFor, testById, parseResultValue, fmtSeconds, evaluate,
+    TEST_STATUSES, normalizeTestStatus, isOfficialResult, latestResults, squadRow,
+    TEST_FOCUS, testSpan, focusGaps,
     HOME_ACTIVITIES, mondayOf, weekKeyOf, weekCompliance, streakWeeks, MOODS, mascotState,
     toCSV, parseCSV, TEST_COLS, SWIM_COLS, rowsFromCSV, rowsFromSheetTable,
     readXLSX, zipEntries,

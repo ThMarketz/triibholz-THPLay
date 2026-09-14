@@ -44,6 +44,60 @@ there, just tucked behind a "history" disclosure so it doesn't dominate the page
 roster picker and team-import tool live behind a collapsed "Coach tools" disclosure so a
 player's own view stays player-sized.
 
+## Who vouches for a number
+
+A player can log anything on their own record — self-tracking is the point, and an honest
+bad number is worth more than a missing one. But a self-entered result is stored as
+**self-reported** and counts for nothing official until a coach confirms it:
+
+- the benchmark card stays grey and the bar does not move;
+- the "tests at target" count ignores it;
+- the player still sees their own number on the card, marked as waiting.
+
+A coach confirms (or rejects) from the player's record, reached through the squad view.
+A coach's own entries — and any bulk `.xlsx`/`.csv` import, which is coach-only by
+construction — land confirmed immediately. If a player self-logged a number and the coach
+later imports the same row from the club workbook, the existing entry is **upgraded** rather
+than skipped as a duplicate.
+
+Two deliberate decisions worth knowing:
+
+- **Nothing is retroactively invalidated.** A result stored before this existed counts as
+  confirmed. What marks it as never-coach-signed is an empty "Verified by", not a downgrade.
+- **This is a fairness mechanism, not a security control.** The record lives in the
+  browser's own storage, so a determined player could edit it in devtools. What is
+  guaranteed is that there is no *path in the app* to self-verification.
+
+## The squad view
+
+Coaches and trainers land on a squad table instead of their own (meaningless) record: one
+row per approved player — tier, tests at target, when they were last tested, home-training
+compliance this week with the mascot mood, streak, and metres. Sort by any of the "lowest
+first" orders to see who needs attention. Tapping a row opens that player's full record,
+exactly as the player sees it.
+
+Self-reported results are shown separately (`+2 self-reported`) and never colour a row as
+progress. Players who have never opened the view read as "No record yet" rather than as a
+misleading zero, and are excluded from the squad averages.
+
+## Feeding the season plan
+
+The Season planner can read the signed-in player's own test log (**Use my test results**,
+on by default when there is anything to use). Whatever they are furthest behind on gets
+extra sessions in the weekly mix *and* the first — freshest — session of each week, and the
+plan states which test drove it: *"⬆ more speed & power — 50 m freestyle: 1.4s to go"*.
+
+Gaps are compared across units by normalising against the catalogue's own tier ladder, so
+"how many steps behind" means the same thing whether the test is in seconds, metres or reps
+— 6 m short of a passing target outranks 1.4 s on the 50 free, which a raw delta would get
+backwards. Self-reported results are discounted to 70%, not excluded. At most two focus
+areas ever lean, and a gap can never inject a session type the phase does not train (a
+strength gap stays out of a Taper week).
+
+The test catalogue measures physical qualities only, so **shooting and tactics can never be
+driven by test data** for an outfield player — the plan says so rather than implying it is
+fully data-driven.
+
 ## Privacy
 
 This is the player's own record. It is visible to the player and to coach/trainer/
