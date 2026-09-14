@@ -1065,6 +1065,16 @@ const I18N = (() => {
       'dev.thMetres':'Metres',
       'dev.thSelfDeclared':'self-declared',
       'help.modalTitle':'How to use',
+      /* Film Room demo match — the sample a new coach meets first */
+      'film.demo.title':'Sample match analysis (demo)',
+      'film.demo.c1':'Block the near-side lane; keeper low on the near post',
+      'film.demo.n1':'Left wing left free — the slide from 4 came late.',
+      'film.demo.n2':'4-2 swing finished high far side — textbook.',
+      'film.demo.c3':'Good front on the hole; shot under pressure',
+      'film.demo.c4':'Sprint back — first man must stop the ball carrier',
+      'film.demo.n4':'Trailer arrived unmarked.',
+      'film.demo.c5':'Move the legs earlier — no wrestling at 2 m',
+      'film.demo.n5':'Late slide forced the foul.',
     },
     de: {
       'app.tagline':'Strategien & Laufwege — fürs Team und für jede Position.',
@@ -2116,6 +2126,16 @@ const I18N = (() => {
       'dev.thMetres':'Meter',
       'dev.thSelfDeclared':'Selbstangabe',
       'help.modalTitle':'Anleitung',
+      /* Film Room demo match — the sample a new coach meets first */
+      'film.demo.title':'Beispiel-Spielanalyse (Demo)',
+      'film.demo.c1':'Kurze Seite blocken; Goalie tief am kurzen Pfosten',
+      'film.demo.n1':'Linker Flügel blieb frei — die Hilfe aus der 4 kam zu spät.',
+      'film.demo.n2':'4-2-Umlauf hoch in die lange Ecke abgeschlossen — wie aus dem Lehrbuch.',
+      'film.demo.c3':'Center gut gefrontet; Schuss unter Druck',
+      'film.demo.c4':'Zurücksprinten — der Erste muss den Ballführenden stoppen',
+      'film.demo.n4':'Der Nachrückende kam ungedeckt durch.',
+      'film.demo.c5':'Früher die Beine bewegen — kein Gerangel auf 2 m',
+      'film.demo.n5':'Hilfe kam zu spät — daher das Foul.',
     },
     fr: {
       'app.tagline':'Stratégies & déplacements — pour l’équipe et pour chaque poste.',
@@ -3167,6 +3187,16 @@ const I18N = (() => {
       'dev.thMetres':'Mètres',
       'dev.thSelfDeclared':'auto-déclarés',
       'help.modalTitle':'Mode d’emploi',
+      /* Film Room demo match — the sample a new coach meets first */
+      'film.demo.title':'Exemple d’analyse de match (démo)',
+      'film.demo.c1':'Ferme la ligne de tir côté proche ; gardien bas au premier poteau',
+      'film.demo.n1':'Ailier gauche laissé libre — l’aide du 4 est arrivée trop tard.',
+      'film.demo.n2':'Rotation 4-2 conclue en haut côté opposé — un cas d’école.',
+      'film.demo.c3':'Bien passé devant le centre ; tir sous pression',
+      'film.demo.c4':'Sprinte en défense — le premier doit arrêter le porteur du ballon',
+      'film.demo.n4':'L’attaquant qui suivait est arrivé libre.',
+      'film.demo.c5':'Bouge les jambes plus tôt — pas de lutte à 2 m',
+      'film.demo.n5':'Aide trop tardive — obligé de faire faute.',
     },
     it: {
       'app.tagline':'Strategie & movimenti — per la squadra e per ogni ruolo.',
@@ -4218,6 +4248,16 @@ const I18N = (() => {
       'dev.thMetres':'Metri',
       'dev.thSelfDeclared':'autodichiarati',
       'help.modalTitle':'Come si usa',
+      /* Film Room demo match — the sample a new coach meets first */
+      'film.demo.title':'Analisi partita di esempio (demo)',
+      'film.demo.c1':'Chiudi la traiettoria corta; portiere basso sul palo vicino',
+      'film.demo.n1':'Ala sinistra lasciata libera — scivolamento dal 4 in ritardo.',
+      'film.demo.n2':'Giro di palla nel 4-2 chiuso nell’angolo alto lontano — da manuale.',
+      'film.demo.c3':'Buon anticipo sul centroboa; tiro sotto pressione',
+      'film.demo.c4':'Sprinta a rientrare — il primo ferma chi porta la palla',
+      'film.demo.n4':'L’attaccante in seconda ondata è arrivato libero.',
+      'film.demo.c5':'Muovi prima le gambe — niente lotta a 2 m',
+      'film.demo.n5':'Scivolamento in ritardo — fallo obbligato.',
     },
   };
 

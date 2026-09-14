@@ -1384,6 +1384,29 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
   qa('#film-plan .plan-chip').find(b=>b.dataset.ins==='o-drive-kick').click(); await wait(10);
   ok('ticking an instruction stores it on the match', (FILM.load().find(x=>x.id===(FILM.load()[0].id))||{}).plan!==undefined && JSON.stringify(FILM.load()).includes('"o-drive-kick"') && q('#plan-count').textContent.includes('1 instruction'));
   ok('📣 Team debriefs panel present for everyone', !!q('#film-debriefs') && !!q('#debrief-list'));
+
+  /* The demo match used to ship as English text and is already in everyone's localStorage.
+     It migrates to keys so it picks up the language — but an edited note is something the
+     coach authored, and overwriting that would be destroying their work to tidy ours. */
+  {
+    const KEY = 'thplay.film.v1';
+    const saved = window.localStorage.getItem(KEY);
+    const MINE = 'Left wing was fine actually — my own note';
+    window.localStorage.setItem(KEY, JSON.stringify({ sessions: [{
+      id: 'demo-match', title: 'Sample match analysis (demo)', createdBy: 'Coach Ruiz',
+      source: { kind: 'youtube', id: 'x' },
+      events: [
+        { id: 'a', t: 95, type: 'goal-against', counter: 'Block the near-side lane; keeper low on the near post', note: MINE },
+        { id: 'b', t: 312, type: 'goal-against', counter: 'Sprint back — first man must stop the ball carrier', note: 'Trailer arrived unmarked.' },
+      ],
+    }] }));
+    const migrated = window.__T.FILM.load().find(x => x.id === 'demo-match');
+    ok('an old English demo match migrates to keys', migrated.title === 'film.demo.title' &&
+       migrated.events[0].counter === 'film.demo.c1' && migrated.events[1].note === 'film.demo.n4');
+    ok('but a note the coach edited is left exactly as they wrote it', migrated.events[0].note === MINE);
+    ok('and the migration is persisted, not redone every read', JSON.parse(window.localStorage.getItem(KEY)).sessions[0].title === 'film.demo.title');
+    if (saved === null) window.localStorage.removeItem(KEY); else window.localStorage.setItem(KEY, saved);
+  }
   // debriefs are team-scoped by the user's teamCode — the record has no .team/.club, and reading
   // those once sent every club's debriefs to one shared 'club' bucket on the backend
   ok('debrief team = the user\'s teamCode', FILM.teamOf({ teamCode: 'SC-HORGEN' }) === 'SC-HORGEN');

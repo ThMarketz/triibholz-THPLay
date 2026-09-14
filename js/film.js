@@ -14,32 +14,61 @@ const FILM = (() => {
   const uid = () => 'f' + Math.random().toString(36).slice(2, 9);
   function seed() {
     return [{
-      id: 'demo-match', title: 'Sample match analysis (demo)', createdBy: 'Coach Ruiz',
+      id: 'demo-match', title: 'film.demo.title', createdBy: 'Coach Ruiz',
       source: { kind: 'youtube', id: 'tQ2Qh7yFTyA' },
       events: [
         { id: uid(), t: 95,  type: 'goal-against', situation: 'man-down', pos: '5', zone: 'BL',
-          origin: { x: 250, y: 150 }, verdict: 'wrong', counter: 'Block the near-side lane; keeper low on the near post',
-          note: 'Left wing left free — the slide from 4 came late.' },
+          origin: { x: 250, y: 150 }, verdict: 'wrong', counter: 'film.demo.c1',
+          note: 'film.demo.n1' },
         { id: uid(), t: 152, type: 'goal-for', situation: 'man-up', pos: '2', zone: 'TR',
           origin: { x: 238, y: 84 }, verdict: 'right', counter: '',
-          note: '4-2 swing finished high far side — textbook.' },
+          note: 'film.demo.n2' },
         { id: uid(), t: 241, type: 'shot-against-saved', situation: '6v6', pos: '6', zone: 'MC',
-          origin: { x: 232, y: 110 }, verdict: 'right', counter: 'Good front on the hole; shot under pressure',
+          origin: { x: 232, y: 110 }, verdict: 'right', counter: 'film.demo.c3',
           note: '' },
         { id: uid(), t: 312, type: 'goal-against', situation: 'counter', pos: '3', zone: 'BL',
-          origin: { x: 262, y: 132 }, verdict: 'wrong', counter: 'Sprint back — first man must stop the ball carrier',
-          note: 'Trailer arrived unmarked.' },
+          origin: { x: 262, y: 132 }, verdict: 'wrong', counter: 'film.demo.c4',
+          note: 'film.demo.n4' },
         { id: uid(), t: 388, type: 'exclusion-against', situation: '6v6', pos: '4', zone: '',
-          origin: null, verdict: 'wrong', counter: 'Move the legs earlier — no wrestling at 2 m',
-          note: 'Late slide forced the foul.' },
+          origin: null, verdict: 'wrong', counter: 'film.demo.c5',
+          note: 'film.demo.n5' },
       ],
     }];
+  }
+  /* The demo match used to ship as English text and is already sitting in the localStorage of
+     everyone who has opened the app. Swap that text for the keys so it picks up the language
+     too — but ONLY where it still matches the original word for word. A coach who edited a
+     note has authored something, and we do not overwrite that. */
+  const DEMO_WAS = {
+    'Sample match analysis (demo)': 'film.demo.title',
+    'Block the near-side lane; keeper low on the near post': 'film.demo.c1',
+    'Left wing left free — the slide from 4 came late.': 'film.demo.n1',
+    '4-2 swing finished high far side — textbook.': 'film.demo.n2',
+    'Good front on the hole; shot under pressure': 'film.demo.c3',
+    'Sprint back — first man must stop the ball carrier': 'film.demo.c4',
+    'Trailer arrived unmarked.': 'film.demo.n4',
+    'Move the legs earlier — no wrestling at 2 m': 'film.demo.c5',
+    'Late slide forced the foul.': 'film.demo.n5',
+  };
+  function migrateDemo(sessions) {
+    let touched = false;
+    (sessions || []).forEach(s => {
+      if (!s || s.id !== 'demo-match') return;
+      if (DEMO_WAS[s.title]) { s.title = DEMO_WAS[s.title]; touched = true; }
+      (s.events || []).forEach(e => {
+        if (DEMO_WAS[e.counter]) { e.counter = DEMO_WAS[e.counter]; touched = true; }
+        if (DEMO_WAS[e.note]) { e.note = DEMO_WAS[e.note]; touched = true; }
+      });
+    });
+    return touched;
   }
   function load() {
     try {
       const raw = localStorage.getItem(KEY);
       if (raw === null) { const s = seed(); localStorage.setItem(KEY, JSON.stringify({ sessions: s })); return s; }
-      return (JSON.parse(raw) || {}).sessions || [];
+      const sessions = (JSON.parse(raw) || {}).sessions || [];
+      if (migrateDemo(sessions)) save(sessions);
+      return sessions;
     } catch (e) { return seed(); }
   }
   function save(sessions) { try { localStorage.setItem(KEY, JSON.stringify({ sessions })); } catch (e) {} }
@@ -104,6 +133,11 @@ const FILM = (() => {
   /* A recognised tactic's name is DATA — it is baked into saved play titles and into the
      stored scouting report, so tactics.js keeps it English. Only the on-screen name is
      translated, and it falls back to whatever the analysis produced. */
+  /* The demo match ships as translation KEYS so a Swiss junior does not meet the Film Room
+     in English. Every other session holds what a real coach actually typed, so this resolves
+     a key when it finds one and passes any other text through untouched. Resolved at render,
+     not at seed time — seeding the text would freeze whichever language ran first. */
+  const dt = v => { const t = String(v == null ? '' : v); if (!t) return t; const x = TX(t); return x === t ? t : x; };
   const tacName = (id, fallback) => { const k = 'tac.' + id, v = TX(k); return v === k ? fallback : v; };
   const sitLabel = x => { if (!x) return ''; const k = 'film.sit.' + x, v = TX(k); return v === k ? x : v; };
   const SITUATIONS = ['6v6','man-up','man-down','penalty','counter','other'];
@@ -206,7 +240,7 @@ const FILM = (() => {
       if (top) out.push(TX('film.insightGoalsFavour', { zone: top[0], n: top[1], total: gf.length }));
     }
     const counters = s.events.filter(e=>e.verdict==='wrong' && e.counter);
-    if (counters.length) out.push(TX('film.correctionList') + counters.map(e=>`<em>${esc(e.counter)}</em>`).slice(0,3).join(' · '));
+    if (counters.length) out.push(TX('film.correctionList') + counters.map(e=>`<em>${esc(dt(e.counter))}</em>`).slice(0,3).join(' · '));
     if (!out.length) out.push(TX('film.insightsEmpty'));
     return out;
   }
@@ -683,7 +717,7 @@ const FILM = (() => {
     });
     out.querySelectorAll('[data-board]').forEach(b => b.onclick = () => {
       const p = sc.plays[+b.dataset.board];
-      if (typeof ctx.openPlay === 'function') ctx.openPlay({ title: `${cur.title} — ${p.name} @ ${fmt(p.tStart)}`, description: (p.steps || []).join(' → '), situation: p.situation, frames: p.frames, notes: p.notes });
+      if (typeof ctx.openPlay === 'function') ctx.openPlay({ title: `${dt(cur.title)} — ${p.name} @ ${fmt(p.tStart)}`, description: (p.steps || []).join(' → '), situation: p.situation, frames: p.frames, notes: p.notes });
     });
   }
   /* ---------- Debriefs: share with the team, comments ---------- */
@@ -705,7 +739,7 @@ const FILM = (() => {
         items.push({ t0: p.tStart, t1: p.tEnd, title: `${fmt(p.tStart)} · ${p.offense === usSide ? 'us' : 'them'} · ${p.name}`, note: (p.steps || []).join(' → '), result: resultOf(p), asked, followed, clipUrl, frames: p.frames, notes: p.notes });
       }
       if (st) st.textContent = ' — ' + TX('film.publishing');
-      const body = { team: teamOf(ctx.user), title: TX('film.debriefTitle', { title: cur.title }), matchTitle: cur.title, author: ctx.user && ctx.user.name, us, summary: (sc.narrative || []).concat(sc.summary || []).slice(0, 12), plan: rows, items };
+      const body = { team: teamOf(ctx.user), title: TX('film.debriefTitle', { title: dt(cur.title) }), matchTitle: dt(cur.title), author: ctx.user && ctx.user.name, us, summary: (sc.narrative || []).concat(sc.summary || []).slice(0, 12), plan: rows, items };
       const r = await fetch(scoutBase() + '/api/debriefs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       if (!r.ok) throw new Error('debrief-' + r.status);
       if (st) st.textContent = ' — ' + TX('film.sharedSeeBelow'); ctx.toast(TX('film.debriefShared'));
@@ -785,7 +819,7 @@ const FILM = (() => {
     out.querySelectorAll('[data-confirm]').forEach(b => b.onclick = () => {
       const it = model.items.find(x => x.id === b.dataset.confirm); if (!it || !it.frame) { ctx.toast(TX('film.nothingToOpen')); return; }
       ANALYSIS.setItemState(model, it.id, 'confirmed');
-      ctx.rebuild(sitFromFrame(it.frame), 'offense', `${cur.title} — ${it.label}`, TX('film.fromVideoAnalysis'), it.frame);
+      ctx.rebuild(sitFromFrame(it.frame), 'offense', `${dt(cur.title)} — ${it.label}`, TX('film.fromVideoAnalysis'), it.frame);
     });
     out.querySelectorAll('[data-reject]').forEach(b => b.onclick = () => {
       ANALYSIS.setItemState(model, b.dataset.reject, 'rejected');
@@ -823,7 +857,7 @@ const FILM = (() => {
     out.querySelector('#track-save').onclick = () => {
       const att = Object.keys(frame.att).length, def = Object.keys(frame.def).length, n = Math.max(att, def);
       const sit = n >= 6 ? '6v6' : n === 5 ? '6v5' : n === 4 ? '5v4' : n >= 3 ? '4v3' : n === 2 ? '3v2' : '2v1';
-      ctx.rebuild(sit, 'offense', TX('film.trackedPositionsTitle', { title: cur.title }), TX('film.trackedPositionsDesc'), frame);
+      ctx.rebuild(sit, 'offense', TX('film.trackedPositionsTitle', { title: dt(cur.title) }), TX('film.trackedPositionsDesc'), frame);
     };
   }
 
@@ -853,7 +887,7 @@ const FILM = (() => {
           <div class="film-list">
             ${sessions.map(s=>`<button class="film-item ${cur&&cur.id===s.id?'active':''}" data-id="${s.id}">
               <span class="fi-kind">${s.source.kind==='youtube'?'▶':s.source.kind==='file'?'🎞':'🔗'}</span>
-              <span class="fi-main"><strong>${esc(s.title)}</strong><span>${TX('film.taggedBy', { n: s.events.length, by: esc(s.createdBy||'') })}</span></span>
+              <span class="fi-main"><strong>${esc(dt(s.title))}</strong><span>${TX('film.taggedBy', { n: s.events.length, by: esc(s.createdBy||'') })}</span></span>
             </button>`).join('') || `<div class="muted">${TX('film.noMatches')}</div>`}
           </div>
         </aside>
@@ -970,8 +1004,8 @@ const FILM = (() => {
               <button class="fe-t" data-seek="${e.t}">${fmt(e.t)}</button>
               <span class="fe-main"><strong>${TX(T.label)}</strong>
                 <span>${esc(sitLabel(e.situation))}${e.pos?` · ${TX('film.posLabel', { n: esc(e.pos) })}`:''}${e.zone?` · ${e.zone}`:''}${e.verdict?` · ${e.verdict==='right'?TX('film.right'):TX('film.wrong')}`:''}</span>
-                ${e.counter?`<span class="fe-counter">🎯 ${esc(e.counter)}</span>`:''}
-                ${e.note?`<span class="fe-note">${esc(e.note)}</span>`:''}</span>
+                ${e.counter?`<span class="fe-counter">🎯 ${esc(dt(e.counter))}</span>`:''}
+                ${e.note?`<span class="fe-note">${esc(dt(e.note))}</span>`:''}</span>
               <span class="fe-actions">
                 ${ctx.canEdit?`<button class="btn-ghost sm" data-rebuild="${e.id}" title="${TX('film.rebuildTitle')}">${TX('film.boardBtn')}</button>`:''}
                 ${ctx.canEdit?`<button class="btn-ghost sm danger" data-del="${e.id}">✕</button>`:''}
@@ -1050,8 +1084,8 @@ const FILM = (() => {
       const e = s.events.find(x=>x.id===b.dataset.rebuild); if (!e) return;
       const T = typeOf(e.type);
       const phase = T.against ? 'defense' : 'offense';
-      const title = `${s.title} ${fmt(e.t)} — ${T.label.replace(/^[^\s]+\s/,'')}`;
-      const desc = [e.note, e.counter && TX('film.fixNote', { text: e.counter })].filter(Boolean).join(' · ') || TX('film.rebuiltFromVideo');
+      const title = `${dt(s.title)} ${fmt(e.t)} — ${T.label.replace(/^[^\s]+\s/,'')}`;
+      const desc = [dt(e.note), e.counter && TX('film.fixNote', { text: dt(e.counter) })].filter(Boolean).join(' · ') || TX('film.rebuiltFromVideo');
       ctx.rebuild(mapToBoard(e.situation), phase, title, desc, e.frame || null);
     });
   }
@@ -1125,7 +1159,7 @@ const FILM = (() => {
         note: main.querySelector('#film-note').value.trim(),
       });
       save(sessions);
-      if (typeof DATA !== 'undefined') DATA.logActivity('play', `${ctx.user.name} tagged ${typeOf(type).label} at ${fmt(t)} in “${s.title}”`, ctx.user.name);
+      if (typeof DATA !== 'undefined') DATA.logActivity('play', `${ctx.user.name} tagged ${typeOf(type).label} at ${fmt(t)} in “${dt(s.title)}”`, ctx.user.name);
       renderSession();
       ctx.toast(TX('film.momentSaved'));
     };
