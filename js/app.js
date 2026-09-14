@@ -94,14 +94,13 @@
   }
   function updatePositionBlock() {
     const isPlayer = state.setup.role === 'player';
-    const T = (typeof I18N!=='undefined') ? I18N.t : (k=>k);
     $('position-block').style.display = isPlayer ? '' : 'none';
     $('position-block').querySelector('.setup-label').textContent = isPlayer ? T('setup.posReq') : T('setup.posOpt');
     $('role-note').textContent = state.setup.role === 'super-admin' ? T('setup.noteAdmin') : T('setup.noteStaff');
     $('setup-continue').textContent = state.setup.role === 'super-admin' ? T('setup.enterAdmin') : T('setup.request');
   }
   function submitSetup() {
-    if (state.setup.role === 'player' && !state.setup.position) { toast('Pick your position'); return; }
+    if (state.setup.role === 'player' && !state.setup.position) { toast(T('ui.pickYourPosition')); return; }
     const idn = state._pendingIdentity;
     const role = state.setup.role;
     const status = role === 'super-admin' ? 'approved' : 'pending';
@@ -213,7 +212,7 @@
     if (typeof PRIVACY==='undefined') return '';
     const rep = PRIVACY.report(PRIVACY.load());
     const lines = PRIVACY.insightsText(rep);
-    return `<h3 class="dash-h3">🔒 Anonymous learnings <button class="help-chip" data-help="privacy" title="How confidentiality works">？</button></h3>
+    return `<h3 class="dash-h3">${T('ui.anonymousLearnings')} <button class="help-chip" data-help="privacy" title="${T('ui.howConfidentialityWorks')}">？</button></h3>
       <div class="insights-box">${lines.length ? lines.map(l=>`<div class="ins-row">${escapeHtml(l)}</div>`).join('')
         : `<div class="muted">Patterns appear once at least ${PRIVACY.K_MIN} plays of a kind exist. Private tactics are never shown — only anonymous patterns (no names, no text).</div>`}</div>`;
   }
@@ -227,7 +226,7 @@
     let html = `<div class="dash-wrap"><div class="dash-head with-mascot">${mascot}
       <div><h1>${greeting()}, ${escapeHtml(u.name.split(' ')[0])}</h1>
       <p class="dash-sub">${roleL(u.role)}${u.position?` · Position ${u.position}`:''}</p></div>
-      <button class="help-chip" data-help="dashboard" title="How to use the dashboard">？</button></div>`;
+      <button class="help-chip" data-help="dashboard" title="${T('ui.howToUseThe')}">？</button></div>`;
 
     if (u.role === 'player') {
       const total = scn.length;
@@ -238,21 +237,21 @@
       </div>
       <div class="progress-card">
         <div class="pc-item"><span class="pc-v">${u.xp||0}</span><span class="pc-k">XP</span></div>
-        <div class="pc-item"><span class="pc-v">🔥 ${u.streak||0}</span><span class="pc-k">day streak</span></div>
+        <div class="pc-item"><span class="pc-v">🔥 ${u.streak||0}</span><span class="pc-k">${T('ui.dayStreak')}</span></div>
         <div class="pc-badges">${badgesHtml(u.badges)}</div>
-        <button class="btn-primary sm" data-challenge="1">🏆 Challenge</button>
+        <button class="btn-primary sm" data-challenge="1">${T('ui.challenge')}</button>
       </div>
-      <h3 class="dash-h3">Study your role</h3>
+      <h3 class="dash-h3">${T('ui.studyYourRole')}</h3>
       <div class="dash-list">${scn.slice(0,5).map(s=>scnRow(s)).join('')||'<div class="muted">No plays yet.</div>'}</div>`;
     } else if (u.role === 'super-admin') {
       const users = DATA.loadUsers();
       const pend = users.filter(x=>x.status==='pending');
       html += `<div class="dash-grid">
         ${card(pend.length?'warn':'', `<span class="dc-k">Pending approvals</span><span class="dc-v big">${pend.length}</span>${pend.length?'<button class="btn-primary sm" data-go="admin">Review now</button>':'<span class="dc-note">All caught up</span>'}`)}
-        ${card('', `<span class="dc-k">People</span><span class="dc-v big">${users.filter(x=>x.status==='approved').length}</span><span class="dc-note">${users.length} total accounts</span>`)}
+        ${card('', `<span class="dc-k">${T('ui.people')}</span><span class="dc-v big">${users.filter(x=>x.status==='approved').length}</span><span class="dc-note">${users.length} total accounts</span>`)}
         ${card('', `<span class="dc-k">Plays in library</span><span class="dc-v big">${scn.length}</span><span class="dc-note">recorded movement patterns</span>`)}
       </div>
-      <h3 class="dash-h3">Live activity</h3>
+      <h3 class="dash-h3">${T('ui.liveActivity')}</h3>
       <div class="dash-list">${acts.slice(0,8).map(activityRow).join('')||'<div class="muted">No activity yet.</div>'}</div>`;
     } else { // coach / trainer
       const users = DATA.loadUsers();
@@ -261,7 +260,7 @@
         ${card('', `<span class="dc-k">Plays</span><span class="dc-v big">${scn.length}</span><button class="btn-primary sm" data-go="playbook">Open playbook</button>`)}
         ${card('', `<span class="dc-k">You can</span><span class="dc-v">Record &amp; adjust</span><span class="dc-note">pause any play and drag players — or build one from scratch</span><button class="btn-primary sm" data-newplay>＋ New play</button>`)}
       </div>
-      <h3 class="dash-h3">Recent changes</h3>
+      <h3 class="dash-h3">${T('ui.recentChanges')}</h3>
       <div class="dash-list">${acts.filter(a=>a.type==='play').slice(0,6).map(activityRow).join('')||'<div class="muted">No edits yet — open the Playbook and press “+ New”.</div>'}</div>`;
       html += insightsPanelHtml();
     }
@@ -321,14 +320,14 @@
   }
   function runChallenge(){
     const qs = buildChallenge();
-    if (!qs.length){ toast('No plays available to challenge yet'); return; }
+    if (!qs.length){ toast(T('ui.noPlaysAvailableTo')); return; }
     let i=0, score=0;
     const ov=document.createElement('div'); ov.className='modal-backdrop'; ov.id='challenge-modal';
     document.body.appendChild(ov);
     function step(){
       const q=qs[i];
       ov.innerHTML=`<div class="modal challenge-modal">
-        <div class="modal-head"><h3>🏆 Challenge — ${i+1}/${qs.length}</h3><button class="modal-x" id="ch-x">✕</button></div>
+        <div class="modal-head"><h3>${T('ui.challenge2', { a: i+1, b: qs.length })}</h3><button class="modal-x" id="ch-x">✕</button></div>
         <div class="modal-body">
           <p class="ch-q">In <strong>“${escapeHtml(q.title)}”</strong> (${q.situation}), which player finishes the play?</p>
           <div class="ch-opts">${q.options.map(o=>`<button class="ch-opt" data-o="${o}">${o==='GK'?'Goalkeeper':'Player '+o}</button>`).join('')}</div>
@@ -343,7 +342,7 @@
         if(correct){ score++; if(typeof FX!=='undefined') FX.sound('tick'); }
         ov.querySelectorAll('.ch-opt').forEach(x=> x.classList.add(x.dataset.o===q.correct?'right':(x===b?'wrong':'mute')));
         const w=ov.querySelector('#ch-why'); w.hidden=false;
-        w.innerHTML = correct? '<strong>Correct!</strong> That’s the finisher.' : `<strong>Not quite.</strong> Player ${q.correct} finishes this one.`;
+        w.innerHTML = correct? '<strong>Correct!</strong> That’s the finisher.' : `<strong>${T('ui.notQuite')}</strong> Player ${q.correct} finishes this one.`;
         ov.querySelector('#ch-next').hidden=false;
       });
       ov.querySelector('#ch-next').onclick=()=>{ i++; if(i>=qs.length) finish(); else step(); };
@@ -358,7 +357,7 @@
         <div class="trivia-score-ring">${score}<small>/${qs.length}</small></div>
         <h2>${perfect?'Flawless!':score>=qs.length*0.6?'Nice work':'Keep studying'}</h2>
         <p class="dash-sub">+${score*8} XP</p>
-        <button class="btn-primary" id="ch-done">Done</button></div></div>`;
+        <button class="btn-primary" id="ch-done">${T('ui.done')}</button></div></div>`;
       ov.querySelector('#ch-done').onclick=close;
       if (typeof FX!=='undefined'){ if(perfect) FX.celebrate('Flawless!', score+'/'+qs.length+' correct'); else FX.confetti(40); }
     }
@@ -471,16 +470,15 @@
   function renderBasics() {
     const v = $('view-basics');
     const legendHtml = `<div class="basics-legend">
-        <span class="bl"><span class="bl-dot att"></span>Attack (white)</span>
-        <span class="bl"><span class="bl-dot def"></span>Defence (black)</span>
-        <span class="bl"><span class="bl-dot gk"></span>Goalkeeper (red)</span>
-        <span class="bl"><span class="bl-dot ball"></span>Ball (orange)</span>
+        <span class="bl"><span class="bl-dot att"></span>${T('ui.attackWhite')}</span>
+        <span class="bl"><span class="bl-dot def"></span>${T('ui.defenceBlack')}</span>
+        <span class="bl"><span class="bl-dot gk"></span>${T('ui.goalkeeperRed')}</span>
+        <span class="bl"><span class="bl-dot ball"></span>${T('ui.ballOrange')}</span>
       </div>`;
-    const T = (typeof I18N!=='undefined') ? I18N.t : (k=>k);
     v.innerHTML = `<div class="dash-wrap">
       <div class="dash-head"><h1>${T('basics.title')}</h1>
         <p class="dash-sub">${T('basics.sub')}</p>
-        <button class="help-chip" data-help="basics" title="How to use Basics">？</button></div>
+        <button class="help-chip" data-help="basics" title="${T('ui.howToUseBasics')}">？</button></div>
       <div id="rules-mount"></div>
       <div class="basics-grid">
         ${BASICS.map(c=>`<div class="basics-card">
@@ -489,7 +487,7 @@
           ${c.legend?legendHtml:''}
         </div>`).join('')}
       </div>
-      <h3 class="dash-h3">Roles &amp; responsibilities</h3>
+      <h3 class="dash-h3">${T('ui.rolesAndResponsibilities')}</h3>
       <div class="basics-grid resp-grid">
         ${RESPONSIBILITIES.map(c=>`<div class="basics-card resp-card">
           <div class="basics-h"><span class="basics-ic">${c.icon}</span><h3>${c.title}</h3></div>
@@ -501,8 +499,8 @@
         <button class="btn-ghost" data-go="trivia">${T('basics.testTrivia')}</button>
       </div>
       <p class="basics-src">Fundamentals summarised from
-        <a href="https://vancouvervipers.ca/water-polo-basics/" target="_blank" rel="noopener">Vancouver Vipers — Water Polo Basics</a>,
-        <a href="https://www.wikihow.com/Play-Water-Polo" target="_blank" rel="noopener">wikiHow — Play Water Polo</a>,
+        <a href="https://vancouvervipers.ca/water-polo-basics/" target="_blank" rel="noopener">${T('ui.vancouverVipersWaterPolo')}</a>,
+        <a href="https://www.wikihow.com/Play-Water-Polo" target="_blank" rel="noopener">${T('ui.wikihowPlayWaterPolo')}</a>,
         and World Aquatics rules. Details vary by level/governing body.</p>
     </div>`;
     v.querySelectorAll('[data-go]').forEach(b=> b.onclick=()=>switchView(b.dataset.go));
@@ -811,19 +809,19 @@
           talentCard: root.querySelector('#dev-card').value, cardValidUntil: root.querySelector('#dev-card-until').value, lastPiste: root.querySelector('#dev-piste').value,
           goalBlock: root.querySelector('#dev-goal-block').value, goalWords: root.querySelector('#dev-goal-words').value,
         });
-        saveDev(email, dev); toast('Profile saved'); renderDevelopment();
+        saveDev(email, dev); toast(T('ui.profileSaved')); renderDevelopment();
       };
     }
     // home training: log one occurrence of an activity this week
     root.querySelectorAll('[data-home-log]').forEach(b => b.onclick = () => {
       home.log.push({ id: 'h' + Math.random().toString(36).slice(2, 9), week: wk, activityId: b.dataset.homeLog, date: new Date().toISOString().slice(0, 10) });
-      saveHome(email, home); toast('Logged — the mascot noticed 🐠'); renderDevelopment();
+      saveHome(email, home); toast(T('ui.loggedTheMascotNoticed')); renderDevelopment();
     });
     // add a test result
     const addTest = root.querySelector('#dev-test-add');
     if (addTest) addTest.onclick = () => {
       const id = root.querySelector('#dev-test-id').value, t = TESTLOG.testById(id, !!dev.info.isGK);
-      const result = root.querySelector('#dev-test-result').value.trim(); if (!t || !result) { toast('Pick a test and enter a result'); return; }
+      const result = root.querySelector('#dev-test-result').value.trim(); if (!t || !result) { toast(T('ui.pickATestAnd')); return; }
       // authority comes from the role at WRITE time — never from a DOM value a player could set
       const official = devCanCoach(), today = new Date().toISOString().slice(0, 10);
       dev.tests = dev.tests || []; dev.tests.push({ id: 'd' + Math.random().toString(36).slice(2, 9), date: root.querySelector('#dev-test-date').value || today, name: dev.info.name || email, test: t.label, result, unit: t.unit, testedBy: root.querySelector('#dev-test-by').value, remark: root.querySelector('#dev-test-remark').value,
@@ -848,7 +846,7 @@
       const week = root.querySelector('#dev-swim-week').value || TESTLOG.mondayOf(new Date());
       const club = +root.querySelector('#dev-swim-club').value || 0, self_ = +root.querySelector('#dev-swim-self').value || 0;
       dev.swimWeeks = dev.swimWeeks || []; dev.swimWeeks.push({ id: 's' + Math.random().toString(36).slice(2, 9), week, name: dev.info.name || email, metersClub: club, metersSelf: self_, total: club + self_, attended: +root.querySelector('#dev-swim-att').value || 0, possible: +root.querySelector('#dev-swim-poss').value || 0 });
-      saveDev(email, dev); toast('Swim week saved'); renderDevelopment();
+      saveDev(email, dev); toast(T('ui.swimWeekSaved')); renderDevelopment();
     };
     root.querySelectorAll('[data-swim-del]').forEach(b => b.onclick = () => { dev.swimWeeks = (dev.swimWeeks || []).filter(r => r.id !== b.dataset.swimDel); saveDev(email, dev); renderDevelopment(); });
     // export
@@ -920,9 +918,9 @@
     const sets = triviaSets();
     v.innerHTML = `<div class="trivia-wrap"><div class="trivia-card" id="trivia-card">
       <div class="trivia-intro">
-        <span class="dc-k">Knowledge check <button class="help-chip" data-help="trivia" title="How trivia works">？</button></span>
+        <span class="dc-k">${T('ui.knowledgeCheck')} <button class="help-chip" data-help="trivia" title="${T('ui.howTriviaWorks')}">？</button></span>
         <h1>${(typeof I18N!=='undefined')?I18N.t('trivia.title'):'Water Polo Trivia'}</h1>
-        <p class="dash-sub">Pick a quiz — your best score for each is saved to your profile.</p>
+        <p class="dash-sub">${T('ui.pickAQuizYour')}</p>
         <div class="trivia-sets">
           ${sets.map(st=>`
             <div class="trivia-set">
@@ -989,9 +987,9 @@
     c.innerHTML = `<div class="trivia-result">
       <div class="trivia-score-ring">${trivia.score}<small>/${total}</small></div>
       <h2>${pct>=80?'Sharp!':pct>=50?'Good work':'Keep studying'}</h2>
-      <p class="dash-sub">Best score saved to your profile.</p>
-      <div class="status-actions"><button class="btn-primary" id="trivia-again">Try again</button>
-      <button class="btn-ghost" data-go="dashboard">Back to dashboard</button></div>
+      <p class="dash-sub">${T('ui.bestScoreSavedTo')}</p>
+      <div class="status-actions"><button class="btn-primary" id="trivia-again">${T('ui.tryAgain')}</button>
+      <button class="btn-ghost" data-go="dashboard">${T('ui.backToDashboard')}</button></div>
     </div>`;
     $('trivia-again').onclick = () => renderTrivia();
     c.querySelector('[data-go]').onclick = () => switchView('dashboard');
@@ -1008,7 +1006,7 @@
     const roleOpts = (cur) => DATA.ROLES.map(r=>`<option value="${r}"${r===cur?' selected':''}>${DATA.roleLabel(r)}</option>`).join('');
 
     v.innerHTML = `<div class="admin-wrap">
-      <div class="admin-head"><h1>Super Admin <button class="help-chip" data-help="admin" title="How the console works">？</button></h1><p class="dash-sub">Approve logins, manage roles, and watch what’s happening.</p></div>
+      <div class="admin-head"><h1>${T('ui.superAdmin')} <button class="help-chip" data-help="admin" title="${T('ui.howTheConsoleWorks')}">？</button></h1><p class="dash-sub">${T('ui.approveLoginsManageRoles')}</p></div>
 
       <section class="admin-sec">
         <h3>Approval queue ${pend.length?`<span class="pill-count">${pend.length}</span>`:''}</h3>
@@ -1021,12 +1019,12 @@
                 <button class="btn-primary sm" data-approve="${u.id}">Approve</button>
                 <button class="btn-ghost sm danger" data-deny="${u.id}">Deny</button>
               </span>
-            </div>`).join('') : '<div class="muted">No pending requests.</div>'}
+            </div>`).join('') : `<div class="muted">${T('ui.noPendingRequests')}</div>`}
         </div>
       </section>
 
       <section class="admin-sec">
-        <h3>People</h3>
+        <h3>${T('ui.people')}</h3>
         <div class="admin-list">
           ${users.map(u=>`
             <div class="admin-row">
@@ -1041,7 +1039,7 @@
       </section>
 
       <section class="admin-sec">
-        <h3>Activity feed</h3>
+        <h3>${T('ui.activityFeed')}</h3>
         <div class="dash-list">${acts.slice(0,30).map(activityRow).join('')||'<div class="muted">Nothing yet.</div>'}</div>
       </section>
     </div>`;
@@ -1454,7 +1452,7 @@
   }
 
   function setMode(mode, autoplay) {
-    if (adjust.dirty) { toast('Save or cancel your changes first'); return; }
+    if (adjust.dirty) { toast(T('ui.saveOrCancelYour')); return; }
     if (adjust.live) exitPausedEditToViewer(0, false);
     state.mode = mode;
     applyMode();
@@ -1564,7 +1562,7 @@
     const bar = $('fs-bar'); if (!bar) return;
     bar.classList.remove('placed'); bar.style.left = ''; bar.style.top = '';
     try { localStorage.removeItem(FSBAR_KEY); } catch (e) {}
-    toast('Controls back at the bottom');
+    toast(T('ui.controlsBackAtThe'));
   }
   function fsBarApplyStored() { const p = fsBarPos(); if (p) fsBarPlace(p.fx, p.fy, false); }
   function fsBarShow(persist) {
@@ -1670,11 +1668,11 @@
     if (typeof SOLVER==='undefined') { c.innerHTML = '<div class="muted">Solutions unavailable.</div>'; return; }
     c.innerHTML = `<div class="sol-wrap">
       <div class="dash-head with-mascot">${(typeof FX!=='undefined')?FX.mascot(38):''}
-        <div><h1>Solutions Lab <button class="help-chip" data-help="solutions" title="How Solutions work">？</button></h1>
-        <p class="dash-sub">Ask a situation in your own words — get what to do, the rules, and a play on the board.</p></div></div>
+        <div><h1>${T('ui.solutionsLab')} <button class="help-chip" data-help="solutions" title="${T('ui.howSolutionsWork')}">？</button></h1>
+        <p class="dash-sub">${T('ui.askASituationIn')}</p></div></div>
       <div class="sol-ask">
-        <input type="text" id="sol-search" placeholder="e.g. I swim alone at the keeper who comes out to 5 m — what do I do, can they foul me?" />
-        <button class="btn-primary sm" id="sol-go">Solve</button>
+        <input type="text" id="sol-search" placeholder="${T('ui.eGISwim')}" />
+        <button class="btn-primary sm" id="sol-go">${T('ui.solve')}</button>
       </div>
       <div class="sol-ex">Try:
         ${['Alone on the keeper who comes out','2-on-1 fast break','They double-team our hole','How do I draw a kick-out','Defend the counter-attack']
@@ -1682,7 +1680,7 @@
       </div>
       <div class="sol-body">
         <div class="sol-results" id="sol-results"></div>
-        <div class="sol-detail" id="sol-detail"><div class="sol-empty">Pick a question on the left, or ask your own above.</div></div>
+        <div class="sol-detail" id="sol-detail"><div class="sol-empty">${T('ui.pickAQuestionOn')}</div></div>
       </div>
     </div>`;
     $('sol-go').onclick = () => runSolve($('sol-search').value);
@@ -1695,7 +1693,7 @@
     const res = (text && text.trim()) ? SOLVER.ask(text) : SOLVER.PROBLEMS.map(p=>({problem:p}));
     const wrap = $('sol-results');
     if (!res.length) {
-      wrap.innerHTML = `<div class="sol-none">No exact match — here’s the closest ideas.</div>`;
+      wrap.innerHTML = `<div class="sol-none">${T('ui.noExactMatchHere')}</div>`;
       listSolutions(SOLVER.PROBLEMS.slice(0,5).map(p=>({problem:p})), true);
       return;
     }
@@ -1726,16 +1724,16 @@
       <p class="sol-q">“${escapeHtml(p.q)}”</p>
       <div class="sol-cols">
         <div class="sol-board-wrap">
-          <svg id="sol-pool" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet" aria-label="Solution board"></svg>
+          <svg id="sol-pool" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet" aria-label="${T('ui.solutionBoard')}"></svg>
           <div class="sol-board-btns">
-            <button class="btn-ghost sm" id="sol-replay">▶ Replay</button>
-            <button class="btn-primary sm" id="sol-save">Save as a play</button>
+            <button class="btn-ghost sm" id="sol-replay">${T('ui.replay')}</button>
+            <button class="btn-primary sm" id="sol-save">${T('ui.saveAsAPlay')}</button>
           </div>
         </div>
         <div class="sol-text">
-          <h3>What to do</h3>
+          <h3>${T('ui.whatToDo')}</h3>
           <ul class="sol-steps">${p.answer.map(a=>`<li>${escapeHtml(a)}</li>`).join('')}</ul>
-          <h3>The rules</h3>
+          <h3>${T('ui.theRules')}</h3>
           <div class="sol-rules">${p.rules.map(r=>`<div class="sol-rule"><strong>${escapeHtml(r.q)}</strong><span>${escapeHtml(r.a)}</span></div>`).join('')}</div>
         </div>
       </div>`;
@@ -1755,7 +1753,7 @@
   }
   function saveSolutionAsPlay(id) {
     const p = SOLVER.byId[id]; const b = SOLVER.board(id); if (!b) return;
-    if (!canEdit()) { toast('Coaches & trainers can save plays'); return; }
+    if (!canEdit()) { toast(T('ui.coachesTrainersCanSave')); return; }
     const scn = {
       id: 'usr-' + Math.abs(hash('sol'+id+(state.user.email||''))),
       title: p.title + ' — solution', description: p.q,
@@ -1773,7 +1771,7 @@
     document.querySelectorAll('#main-nav .nav-btn').forEach(x=>x.classList.toggle('active', x.dataset.view==='playbook'));
     refreshTabs(); renderLibrary();
     openScenario(scn.id);
-    toast('Saved to your playbook ✓');
+    toast(T('ui.savedToYourPlaybook'));
   }
 
   /* ======================================================
@@ -1781,7 +1779,7 @@
      exports/subscribes to iOS / Android / Windows via iCalendar.
      ====================================================== */
   const season = { plan: null };
-  const FOCUS_LIST = [['endurance','Endurance'],['strength','Strength'],['power','Speed & power'],['shooting','Shooting'],['skills','Ball skills'],['tactics','Tactics']];
+  const FOCUS_LIST = () => [['endurance',T('ui.focusEndurance')],['strength',T('ui.focusStrength')],['power',T('ui.focusPower')],['shooting',T('ui.focusShooting')],['skills',T('ui.focusSkills')],['tactics',T('ui.focusTactics')]];
   function d2(n){ return String(n).padStart(2,'0'); }
   function isoDay(d){ return `${d.getFullYear()}-${d2(d.getMonth()+1)}-${d2(d.getDate())}`; }
   function fmtDay(iso){ const d=new Date(iso); return d.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'}); }
@@ -1794,49 +1792,49 @@
     const myTests = (typeof TESTLOG!=='undefined' && state.user) ? (loadDev(state.user.email).tests || []).length : 0;
     c.innerHTML = `<div class="season-wrap">
       <div class="dash-head with-mascot">${(typeof FX!=='undefined')?FX.mascot(38):''}
-        <div><h1>Season <button class="help-chip" data-help="season" title="How Season works">？</button></h1>
-        <p class="dash-sub">Set a goal → get a periodised plan, and a calendar your whole team can subscribe to.</p></div></div>
+        <div><h1>${T('ui.season')} <button class="help-chip" data-help="season" title="${T('ui.howSeasonWorks')}">？</button></h1>
+        <p class="dash-sub">${T('ui.setAGoalGet')}</p></div></div>
 
       <div id="wpm-section"></div>
 
       <div class="season-cols">
         <section class="season-card">
-          <h2>🎯 Goal → training plan</h2>
+          <h2>${T('ui.goalTrainingPlan')}</h2>
           <div class="goal-form">
-            <label>Goal <input type="text" id="goal-title" placeholder="e.g. Peak for the play-offs" value="Peak for the play-offs"></label>
+            <label>${T('ui.goal')} <input type="text" id="goal-title" placeholder="${T('ui.eGPeakFor')}" value="Peak for the play-offs"></label>
             <div class="goal-row">
-              <label>Start <input type="date" id="goal-start" value="${isoDay(today)}"></label>
-              <label>Peak by <input type="date" id="goal-target" value="${isoDay(target)}"></label>
-              <label>Days/week
+              <label>${T('ui.start')} <input type="date" id="goal-start" value="${isoDay(today)}"></label>
+              <label>${T('ui.peakBy')} <input type="date" id="goal-target" value="${isoDay(target)}"></label>
+              <label>${T('ui.daysWeek')}
                 <select id="goal-days">${[2,3,4,5,6].map(n=>`<option ${n===4?'selected':''}>${n}</option>`).join('')}</select>
               </label>
             </div>
-            <div class="goal-focus"><span class="ef-label">Focus</span>
-              ${FOCUS_LIST.map(([k,l])=>`<label class="chip-check"><input type="checkbox" value="${k}" ${['shooting','tactics'].includes(k)?'checked':''}> ${l}</label>`).join('')}
-              <label class="chip-check" title="Lean the plan toward whatever your test log says you're furthest behind on"><input type="checkbox" id="goal-usetests" ${myTests ? 'checked' : 'disabled'}> Use my test results (${myTests})</label>
+            <div class="goal-focus"><span class="ef-label">${T('ui.focus')}</span>
+              ${FOCUS_LIST().map(([k,l])=>`<label class="chip-check"><input type="checkbox" value="${k}" ${['shooting','tactics'].includes(k)?'checked':''}> ${l}</label>`).join('')}
+              <label class="chip-check" title="${T('ui.leanThePlanToward')}"><input type="checkbox" id="goal-usetests" ${myTests ? 'checked' : 'disabled'}> ${T('ui.useMyTestResults', { n: myTests })}</label>
             </div>
-            <button class="btn-primary sm" id="goal-generate">Generate plan</button>
+            <button class="btn-primary sm" id="goal-generate">${T('ui.generatePlan')}</button>
           </div>
           <div id="plan-out"></div>
         </section>
 
         <section class="season-card">
-          <h2>📅 Calendar</h2>
+          <h2>${T('ui.calendar')}</h2>
           <div class="cal-add">
             <div class="goal-row">
               <select id="ev-type">${Object.keys(CALENDAR.TYPES).map(t=>`<option value="${t}">${CALENDAR.TYPES[t]}</option>`).join('')}</select>
-              <input type="text" id="ev-title" placeholder="Title (e.g. vs Red Sharks)">
+              <input type="text" id="ev-title" placeholder="${T('ui.titleEGVs')}">
             </div>
             <div class="goal-row">
               <input type="date" id="ev-date" value="${isoDay(today)}">
               <input type="time" id="ev-time" value="18:00">
-              <input type="text" id="ev-loc" placeholder="Location">
+              <input type="text" id="ev-loc" placeholder="${T('ui.location')}">
             </div>
-            <button class="btn-ghost sm" id="ev-add">＋ Add to calendar</button>
+            <button class="btn-ghost sm" id="ev-add">${T('ui.addToCalendar')}</button>
           </div>
           <div class="cal-actions">
-            <button class="btn-ghost sm" id="cal-export">⬇ Export .ics</button>
-            <button class="btn-ghost sm" id="cal-subscribe">🔗 Subscribe (all devices)</button>
+            <button class="btn-ghost sm" id="cal-export">${T('ui.exportIcs')}</button>
+            <button class="btn-ghost sm" id="cal-subscribe">${T('ui.subscribeAllDevices')}</button>
           </div>
           <div id="cal-subscribe-out"></div>
           <div id="cal-agenda"></div>
@@ -1871,9 +1869,9 @@
     const team = WPMATCH.loadTeam();
     if (!team) {
       host.innerHTML = `<section class="season-card wpm-card">
-        <h2>🤽 Matches &amp; results <span class="rightbar-hint">from wpmatch.ch</span></h2>
-        <p class="fa-note">Pick your club's team once and its fixtures, results, box scores and league table appear here — and can be added to the calendar above.</p>
-        <div class="wpm-pick"><input type="text" id="wpm-search" placeholder="Search your team (e.g. Horgen)" value=""><button class="btn-primary sm" id="wpm-search-go">Search</button></div>
+        <h2>${T('ui.matchesAndResults')} <span class="rightbar-hint">${T('ui.fromWpmatchCh')}</span></h2>
+        <p class="fa-note">${T('ui.pickYourClubS')}</p>
+        <div class="wpm-pick"><input type="text" id="wpm-search" placeholder="${T('ui.searchYourTeamE')}" value=""><button class="btn-primary sm" id="wpm-search-go">${T('ui.search')}</button></div>
         <div id="wpm-results"></div>
         <p class="fa-note">Data: Swiss Aquatics Match Center · <a href="${WPMATCH.SITE}" target="_blank" rel="noopener">wpmatch.ch</a></p>
       </section>`;
@@ -1897,21 +1895,21 @@
         <span class="wpm-when">${escapeHtml(when)}</span>
         <span class="wpm-opp">${side ? (side.us === 'home' ? 'vs ' : 'at ') : ''}${escapeHtml(opp || f.title)}${f.venueName ? ` <span class="muted">${escapeHtml(f.venueName)}</span>` : ''}</span>
         <span class="wpm-score">${score}</span>
-        <span class="wpm-acts">${f.homeScore != null ? `<button class="btn-ghost xs" data-wpm-box="${escapeHtml(f.gameId)}">Stats</button>` : ''}<a class="btn-ghost xs" href="${escapeHtml(WPMATCH.matchUrl(f))}" target="_blank" rel="noopener">↗</a></span>
+        <span class="wpm-acts">${f.homeScore != null ? `<button class="btn-ghost xs" data-wpm-box="${escapeHtml(f.gameId)}">${T('ui.statsBtn')}</button>` : ''}<a class="btn-ghost xs" href="${escapeHtml(WPMATCH.matchUrl(f))}" target="_blank" rel="noopener">↗</a></span>
       </div>`;
     };
 
     host.innerHTML = `<section class="season-card wpm-card">
-      <h2>🤽 Matches &amp; results <span class="rightbar-hint">${escapeHtml(team.name)}</span></h2>
+      <h2>${T('ui.matchesAndResults')} <span class="rightbar-hint">${escapeHtml(team.name)}</span></h2>
       <div class="wpm-head">
-        <a class="btn-ghost xs" href="${escapeHtml(WPMATCH.teamUrl(team))}" target="_blank" rel="noopener">Team page ↗</a>
-        <button class="btn-ghost xs" id="wpm-refresh">${wpm.busy ? 'Refreshing…' : '⟳ Refresh'}</button>
-        <button class="btn-ghost xs" id="wpm-change">Change team</button>
-        ${fixtures.length ? `<button class="btn-primary xs" id="wpm-tocal">＋ Add ${upcoming.filter(f => !f.dateTBC).length || played.length} to calendar</button>` : ''}
+        <a class="btn-ghost xs" href="${escapeHtml(WPMATCH.teamUrl(team))}" target="_blank" rel="noopener">${T('ui.teamPage')}</a>
+        <button class="btn-ghost xs" id="wpm-refresh">${wpm.busy ? T('ui.refreshing') : T('ui.refreshBtn')}</button>
+        <button class="btn-ghost xs" id="wpm-change">${T('ui.changeTeam')}</button>
+        ${fixtures.length ? `<button class="btn-primary xs" id="wpm-tocal">${T('ui.addNToCalendar', { n: upcoming.filter(f => !f.dateTBC).length || played.length })}</button>` : ''}
         <span class="muted">${fxBox ? 'updated ' + wpmAgo(fxBox.at) + (fxBox.stale ? ' · refreshing' : '') : 'not loaded yet'}</span>
       </div>
       ${wpm.error ? `<p class="fa-note">${escapeHtml(wpm.error)}</p>` : ''}
-      ${!fixtures.length && !wpm.busy ? `<p class="fa-note">No fixtures loaded yet — press ⟳ Refresh.</p>` : ''}
+      ${!fixtures.length && !wpm.busy ? `<p class="fa-note">${T('ui.noFixturesYet')}</p>` : ''}
 
       ${fixtures.length ? `<div class="wpm-group"><div class="ef-label">Upcoming (${upcoming.length})</div>
         ${upcoming.length ? upcoming.slice(0, 8).map(row).join('') : '<div class="muted">Nothing scheduled yet — the next season\'s dates usually appear as “date TBC” first.</div>'}</div>
@@ -1922,11 +1920,11 @@
       <div id="wpm-box"></div>
 
       ${table ? `<details class="wpm-table-wrap"><summary>${escapeHtml(table.name)}</summary>
-        <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>#</th><th>Team</th>${['t', 'w', 'd', 'l', 'pts'].map(k => `<th>${escapeHtml(table.labels[k] || k.toUpperCase())}</th>`).join('')}</tr></thead>
+        <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>#</th><th>${T('ui.team')}</th>${['t', 'w', 'd', 'l', 'pts'].map(k => `<th>${escapeHtml(table.labels[k] || k.toUpperCase())}</th>`).join('')}</tr></thead>
           <tbody>${table.rows.map((r, i) => `<tr${r.teamId === team.id ? ' class="wpm-us"' : ''}><td>${i + 1}</td><td>${escapeHtml(r.name || String(r.teamId))}</td>${['t', 'w', 'd', 'l', 'pts'].map(k => `<td>${escapeHtml(String(r[k] == null ? '—' : r[k]))}</td>`).join('')}</tr>`).join('')}</tbody>
         </table></div></details>` : ''}
 
-      <p class="fa-note">Data: Swiss Aquatics Match Center · <a href="${escapeHtml(WPMATCH.matchUrl({ url: WPMATCH.SITE }))}" target="_blank" rel="noopener">wpmatch.ch</a>. Read-only, and not affiliated with this app.</p>
+      <p class="fa-note">Data: Swiss Aquatics Match Center · <a href="${escapeHtml(WPMATCH.matchUrl({ url: WPMATCH.SITE }))}" target="_blank" rel="noopener">wpmatch.ch</a>${T('ui.readOnlyAndNot')}</p>
     </section>`;
     wireWpMatch();
     if (!fxBox || fxBox.stale) wpmRefresh(true);   // first paint shows cache, then quietly catches up
@@ -1972,12 +1970,12 @@
     const cols = ['goals', 'goalon', 'goalextraplayer', 'penaltygoals', 'exclusionfoul'].filter(k => L[k]);
     host.innerHTML = `<div class="wpm-boxscore">
       <div class="wpm-box-head"><b>${escapeHtml(box.title)}</b><button class="btn-ghost xs" id="wpm-box-close">✕</button></div>
-      <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>Team</th>${box.quarterKeys.map((k, i) => `<th>${escapeHtml((box.scoreLabels && box.scoreLabels[k]) || 'Q' + (i + 1))}</th>`).join('')}<th>${escapeHtml((box.scoreLabels && box.scoreLabels.goals) || 'Goals')}</th><th>${escapeHtml((box.scoreLabels && box.scoreLabels.manup) || '% Extra')}</th></tr></thead>
+      <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>${T('ui.team')}</th>${box.quarterKeys.map((k, i) => `<th>${escapeHtml((box.scoreLabels && box.scoreLabels[k]) || 'Q' + (i + 1))}</th>`).join('')}<th>${escapeHtml((box.scoreLabels && box.scoreLabels.goals) || 'Goals')}</th><th>${escapeHtml((box.scoreLabels && box.scoreLabels.manup) || '% Extra')}</th></tr></thead>
         <tbody>${box.teamIds.map(id => { const l = box.lines[id]; return `<tr${id === team.id ? ' class="wpm-us"' : ''}><td>${escapeHtml(nameFor(id))}</td>${(l ? l.quarters : [null, null, null, null]).map(q => `<td>${q == null ? '—' : q}</td>`).join('')}<td><b>${l && l.goals != null ? l.goals : '—'}</b></td><td>${l && l.manup != null ? l.manup + '%' : '—'}</td></tr>`; }).join('')}</tbody></table></div>
       ${box.teamIds.filter(id => (box.rosters[id] || []).length).map(id => `<div class="ef-label">${escapeHtml(nameFor(id))}</div>
         <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>#</th>${cols.map(k => `<th>${escapeHtml(L[k])}</th>`).join('')}</tr></thead>
           <tbody>${box.rosters[id].map(p => `<tr><td>${escapeHtml(p.cap)}</td>${cols.map(k => { const v = p.stats[k]; const n = WPMATCH.statNumber(v), d = WPMATCH.statDetail(v); return `<td${d && d !== n ? ` title="${escapeHtml(d)}"` : ''}>${escapeHtml(n || '0')}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`).join('')}
-      <p class="fa-note">Official record · <a href="${escapeHtml(box.url)}" target="_blank" rel="noopener">open on wpmatch.ch ↗</a></p>
+      <p class="fa-note">Official record · <a href="${escapeHtml(box.url)}" target="_blank" rel="noopener">${T('ui.openOnWpmatchCh')}</a></p>
     </div>`;
     const cl = $('wpm-box-close'); if (cl) cl.onclick = () => { host.innerHTML = ''; };
     host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -2051,17 +2049,17 @@
         <span class="ses-main"><strong>${escapeHtml(s.title)}</strong><span class="muted">${s.durationMin}min · RPE ${s.rpe} · ${escapeHtml((s.drills||[]).slice(0,2).join(' · '))}</span></span></div>`).join('')}</div>
       </details>`).join('');
     // say WHY the plan leans the way it does — a plan that silently changes shape is worse than one that explains itself
-    const focusLabel = k => (FOCUS_LIST.find(f => f[0] === k) || [k, k])[1].toLowerCase();
+    const focusLabel = k => (FOCUS_LIST().find(f => f[0] === k) || [k, k])[1].toLowerCase();
     let why;
     if (p.emphasisBoost && Object.keys(p.emphasisBoost).length) {
       why = Object.keys(p.emphasisBoost).map(f => {
         const g = (p.gaps || []).find(x => x.focus === f);
         return `<div class="why-row">⬆ more <b>${escapeHtml(focusLabel(f))}</b>${g ? ` — ${escapeHtml(g.label)}: ${escapeHtml(g.deltaText)}${g.verified ? '' : ' <span class="muted">(self-reported)</span>'}` : ''}</div>`;
       }).join('') + (p.leadFocus ? `<div class="why-row muted">Your first session each week targets ${escapeHtml(focusLabel(p.leadFocus))}.</div>` : '')
-        + `<div class="why-row muted">The test catalogue measures physical qualities only — shooting and tactics stay your own choices.</div>`;
+        + `<div class="why-row muted">${T('ui.theTestCatalogueMeasures')}</div>`;
     } else {
       const noneLogged = !$('goal-usetests') || $('goal-usetests').disabled;
-      why = `<div class="why-row muted">Based on your focus choices only — ${noneLogged ? 'no test results logged yet' : 'nothing in your test log stands out right now'}. <button class="btn-ghost xs" id="plan-why-log">Log a test →</button></div>`;
+      why = `<div class="why-row muted">Based on your focus choices only — ${noneLogged ? 'no test results logged yet' : 'nothing in your test log stands out right now'}. <button class="btn-ghost xs" id="plan-why-log">${T('ui.logATest')}</button></div>`;
     }
     out.innerHTML = `<div class="plan-summary">Peak for <strong>${escapeHtml(new Date(p.goal.targetDate).toLocaleDateString())}</strong> · ${p.weeks} weeks · ${p.goal.daysPerWeek}/wk</div>
       <div class="plan-why">${why}</div>
@@ -2080,14 +2078,14 @@
   }
   function addCalendarEvent() {
     const date = $('ev-date').value, time = $('ev-time').value || '18:00';
-    if (!date) { toast('Pick a date'); return; }
+    if (!date) { toast(T('ui.pickADate')); return; }
     const start = new Date(`${date}T${time}`);
     const ev = { id: CALENDAR.uid(), type: $('ev-type').value, title: $('ev-title').value.trim() || 'Event',
       start: start.toISOString(), end: new Date(start.getTime()+90*60000).toISOString(),
       location: $('ev-loc').value.trim(), reminderMin: 120 };
     const all = CALENDAR.load(); all.push(ev); CALENDAR.save(all);
     $('ev-title').value=''; $('ev-loc').value='';
-    toast('Event added'); renderAgenda();
+    toast(T('ui.eventAdded')); renderAgenda();
   }
   function renderAgenda() {
     const wrap = $('cal-agenda'); if (!wrap) return;
@@ -2105,20 +2103,20 @@
   function downloadBlob(text, name, mime) {
     try { const blob = new Blob([text], { type: mime||'text/plain' }); const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click();
-      setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 100); } catch(e){ toast('Download not supported here'); }
+      setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 100); } catch(e){ toast(T('ui.downloadNotSupportedHere')); }
   }
   function exportICS() {
     const ev = CALENDAR.load();
-    if (!ev.length) { toast('Nothing to export yet'); return; }
+    if (!ev.length) { toast(T('ui.nothingToExportYet')); return; }
     downloadBlob(CALENDAR.toICS(ev, { name: 'Triibholz — ' + (state.user && state.user.name || 'Team') }), 'triibholz-season.ics', 'text/calendar');
-    toast('Calendar exported — open it to add to Apple/Google/Outlook');
+    toast(T('ui.calendarExportedOpenIt'));
   }
   function defaultFeedBase() { try { const h = (location && location.hostname) || 'localhost'; const proto = (location && location.protocol === 'https:') ? 'https:' : 'http:'; return `${proto}//${h}:4200`; } catch (e) { return 'http://localhost:4200'; } }
   function feedBase() { try { return localStorage.getItem('thplay.calendar.feed') || (typeof ANALYSIS!=='undefined' && ANALYSIS.getEndpoint && ANALYSIS.getEndpoint()) || defaultFeedBase(); } catch(e){ return defaultFeedBase(); } }
   function calToken() { try { let t=localStorage.getItem('thplay.calendar.token'); if(!t){ t=CALENDAR.uid().replace('ev_','cal'); localStorage.setItem('thplay.calendar.token',t); } return t; } catch(e){ return 'cal'; } }
   async function publishFeed() {
     const out = $('cal-subscribe-out');
-    const ev = CALENDAR.load(); if (!ev.length) { toast('Add events first'); return; }
+    const ev = CALENDAR.load(); if (!ev.length) { toast(T('ui.addEventsFirst')); return; }
     const base = feedBase().replace(/\/+$/,''); const token = calToken();
     out.innerHTML = '<div class="muted">Publishing…</div>';
     try {
@@ -2128,16 +2126,16 @@
       const webcal = url.replace(/^https?:/, 'webcal:');
       const lanHint = /localhost|127\.0\.0\.1/.test(base) ? '<p class="fa-note">⚠︎ This link uses <strong>localhost</strong> — only this computer can open it. For phones, open the app itself from your Mac’s network address (e.g. http://192.168.x.x:8088) and Subscribe there, or set the Feed server below to that address.</p>' : '';
       out.innerHTML = `<div class="feed-box">
-        <p class="fa-note">Subscribe once on each device — matches you publish later update automatically.</p>
+        <p class="fa-note">${T('ui.subscribeOnceOnEach')}</p>
         <div class="feed-url"><code>${escapeHtml(url)}</code><button class="btn-ghost xs" id="feed-copy">Copy</button></div>
-        <a class="btn-primary sm" href="${escapeHtml(webcal)}">＋ Subscribe on this device</a>
+        <a class="btn-primary sm" href="${escapeHtml(webcal)}">${T('ui.subscribeOnThisDevice')}</a>
         ${lanHint}
-        <div class="feed-url"><span class="muted" style="font-size:11px">Feed server</span><input type="text" id="feed-base" value="${escapeHtml(base)}" style="flex:1;font-size:11px"><button class="btn-ghost xs" id="feed-base-save">Use &amp; republish</button></div>
-        <p class="fa-note">iPhone: Calendar → Add Account → Other → Add Subscribed Calendar. Android/Google Calendar: Settings → Add by URL. Outlook: Add calendar → Subscribe from web.</p>
+        <div class="feed-url"><span class="muted" style="font-size:11px">${T('ui.feedServer')}</span><input type="text" id="feed-base" value="${escapeHtml(base)}" style="flex:1;font-size:11px"><button class="btn-ghost xs" id="feed-base-save">${T('ui.useAndRepublish')}</button></div>
+        <p class="fa-note">${T('ui.iphoneCalendarAddAccount')}</p>
       </div>`;
-      const cp = $('feed-copy'); if (cp) cp.onclick = ()=>{ try{ navigator.clipboard.writeText(url); toast('Link copied'); }catch(e){} };
+      const cp = $('feed-copy'); if (cp) cp.onclick = ()=>{ try{ navigator.clipboard.writeText(url); toast(T('ui.linkCopied')); }catch(e){} };
       const fbSave = $('feed-base-save'); if (fbSave) fbSave.onclick = ()=>{ const v=($('feed-base').value||'').trim().replace(/\/+$/,''); try{ v?localStorage.setItem('thplay.calendar.feed',v):localStorage.removeItem('thplay.calendar.feed'); }catch(e){} publishFeed(); };
-      toast('Published — subscribe on any device');
+      toast(T('ui.publishedSubscribeOnAny'));
     } catch(e) {
       out.innerHTML = `<div class="muted">Couldn’t publish to ${escapeHtml(base)} — start the backend (docker compose up -d analysis), or just use ⬇ Export .ics.</div>`;
     }
@@ -2175,7 +2173,7 @@
   function renderAnnouncePanel() {
     const m = $('announce-panel'); if (!m) return;
     const list = announce.list || [];
-    m.innerHTML = `<div class="announce-head"><b>📣 Announcements</b> <button class="help-chip" data-help="announcements" title="How announcements work">？</button>${canEdit() ? `<button class="btn-ghost xs" id="announce-new">＋ New</button>` : ''}</div>
+    m.innerHTML = `<div class="announce-head"><b>${T('ui.announcements')}</b> <button class="help-chip" data-help="announcements" title="${T('ui.howAnnouncementsWork')}">？</button>${canEdit() ? `<button class="btn-ghost xs" id="announce-new">＋ New</button>` : ''}</div>
       <div class="announce-list">${
         !announce.reachable ? `<div class="muted" style="padding:10px 4px">Announcements need the analysis backend — this device can’t reach it.</div>`
         : list.length ? list.map(a => `<button class="announce-item${a.read ? '' : ' unread'}" data-ann="${escapeHtml(a.id)}">
@@ -2209,9 +2207,9 @@
     }
   }
   function importAnnouncedPlay(packed) {
-    if (!packed || typeof SHARE === 'undefined') { toast('Could not import that play'); return; }
+    if (!packed || typeof SHARE === 'undefined') { toast(T('ui.couldNotImportThat')); return; }
     const r = SHARE.unpack(packed);
-    if (r.error || !r.plays.length) { toast('Could not import that play'); return; }
+    if (r.error || !r.plays.length) { toast(T('ui.couldNotImportThat')); return; }
     let n = 0;
     r.plays.forEach(p => {
       const sc = DATA.newScenario(p.situation || '6v6', p.phase || 'offense');
@@ -2221,7 +2219,7 @@
       if (!state.scenarios.some(x => x.id === sc.id)) { state.scenarios.push(sc); n++; }
     });
     if (n) { DATA.save(state.scenarios); renderLibrary(); toast(n + ' play' + (n > 1 ? 's' : '') + ' added to your playbook'); }
-    else toast('Already in your playbook');
+    else toast(T('ui.alreadyInYourPlaybook'));
   }
   function openAnnounceCompose() {
     const roster = DATA.loadUsers().filter(u => u.role === 'player' && u.status === 'approved').sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -2231,16 +2229,16 @@
     ov.addEventListener('click', e => e.stopPropagation());   // this modal sits outside #announce-panel — never let a click here bubble to the document-level "close the bell panel" listener
     document.body.appendChild(ov);
     ov.innerHTML = `<div class="modal modal-sm">
-      <div class="modal-head"><h3>New announcement</h3><span class="spacer"></span><button class="modal-x" id="ann-x">✕</button></div>
+      <div class="modal-head"><h3>${T('ui.newAnnouncement')}</h3><span class="spacer"></span><button class="modal-x" id="ann-x">✕</button></div>
       <div class="modal-body ann-compose">
         <div class="ann-scope-toggle">
           <label><input type="radio" name="ann-scope" value="team" checked> Whole team</label>
           <label><input type="radio" name="ann-scope" value="player"> One player</label>
         </div>
-        <select id="ann-to" hidden>${roster.map(u => `<option value="${escapeHtml(u.email)}">${escapeHtml(u.name || u.email)}${u.position ? ' · Pos ' + escapeHtml(u.position) : ''}</option>`).join('') || '<option value="">No approved players yet</option>'}</select>
-        <input type="text" id="ann-title" placeholder="Title (e.g. This week's plan)">
-        <textarea id="ann-body" rows="4" placeholder="What do they need to know?"></textarea>
-        <select id="ann-match"><option value="">Not tied to a specific match</option>${matches.map(m => `<option value="${escapeHtml(m.id)}" data-label="${escapeHtml(fmtDay(m.start) + ' · ' + m.title)}">${escapeHtml(fmtDay(m.start))} · ${escapeHtml(m.title)}</option>`).join('')}</select>
+        <select id="ann-to" hidden>${roster.map(u => `<option value="${escapeHtml(u.email)}">${escapeHtml(u.name || u.email)}${u.position ? ' · Pos ' + escapeHtml(u.position) : ''}</option>`).join('') || `<option value="">${T('ui.noApprovedPlayersYet')}</option>`}</select>
+        <input type="text" id="ann-title" placeholder="${T('ui.titleEGThis')}">
+        <textarea id="ann-body" rows="4" placeholder="${T('ui.whatDoTheyNeed')}"></textarea>
+        <select id="ann-match"><option value="">${T('ui.notTiedToA')}</option>${matches.map(m => `<option value="${escapeHtml(m.id)}" data-label="${escapeHtml(fmtDay(m.start) + ' · ' + m.title)}">${escapeHtml(fmtDay(m.start))} · ${escapeHtml(m.title)}</option>`).join('')}</select>
         ${myPlays.length ? `<div class="ann-plays-pick"><span class="ef-label">Attach plays (up to ${ANNOUNCE.MAX_PLAYS})</span>
           ${myPlays.map(s => `<label class="chip-check"><input type="checkbox" value="${escapeHtml(s.id)}"> ${escapeHtml(s.title || 'Untitled')}</label>`).join('')}</div>` : ''}
       </div>
@@ -2252,9 +2250,9 @@
     ov.querySelector('#ann-send').onclick = async () => {
       const scope = ov.querySelector('[name="ann-scope"]:checked').value;
       const title = ov.querySelector('#ann-title').value.trim(), body = ov.querySelector('#ann-body').value.trim();
-      if (!title || !body) { toast('Add a title and a message'); return; }
+      if (!title || !body) { toast(T('ui.addATitleAnd')); return; }
       const toSel = ov.querySelector('#ann-to');
-      if (scope === 'player' && !toSel.value) { toast('Pick a player'); return; }
+      if (scope === 'player' && !toSel.value) { toast(T('ui.pickAPlayer')); return; }
       const matchSel = ov.querySelector('#ann-match'), matchOpt = matchSel.selectedOptions[0];
       const plays = [...ov.querySelectorAll('.ann-plays-pick input:checked')].slice(0, ANNOUNCE.MAX_PLAYS)
         .map(cb => state.scenarios.find(s => s.id === cb.value)).filter(Boolean).map(s => SHARE.pack(s));
@@ -2269,7 +2267,7 @@
         if (!r.ok) throw new Error('send-' + r.status);
         toast(scope === 'player' ? 'Note sent' : 'Sent to the whole team');
         close(); loadAnnouncements();
-      } catch (e) { toast('Could not send (' + e.message + ')'); btn.disabled = false; btn.textContent = 'Send'; }
+      } catch (e) { toast(T('ui.couldNotSend') + e.message + ')'); btn.disabled = false; btn.textContent = 'Send'; }
     };
   }
 
@@ -2389,7 +2387,7 @@
     adjust.scn.frames = adjust.undo.pop();
     adjust.gesture = false;
     renderAdjustBoard();
-    toast('Last drag undone ↩');
+    toast(T('ui.lastDragUndone'));
   }
   function adjustStep(d) {
     if (!adjust.live) return;
@@ -2399,7 +2397,7 @@
   function adjustCancel() {
     resetAdjust();
     openScenario(state.selectedId);
-    toast('Changes discarded');
+    toast(T('ui.changesDiscarded'));
   }
   function adjustSave(asNew) {
     const sc = adjust.scn;
@@ -2553,7 +2551,7 @@
   }
   function applyTemplateAudible(id) {
     const tpl = state.scenarios.find(x => x.id === id); if (!tpl) return;
-    if (!canPausedEdit()) { toast('Open a play first to call an audible'); return; }
+    if (!canPausedEdit()) { toast(T('ui.openAPlayFirst')); return; }
     if (state.viewer) state.viewer.stop(); enterPausedEdit(); if (!adjust.scn) return;
     const r = playAsSteps(tpl, adjust.scn.frames[adjust.scn.frames.length - 1]);
     adjust.undo.push(JSON.parse(JSON.stringify(adjust.scn.frames))); if (adjust.undo.length > 25) adjust.undo.shift();
@@ -2592,7 +2590,7 @@
     if (!edit.scenario || typeof COMMANDS==='undefined') return;
     const target = $('cmd-target').value || 'team';
     const r = COMMANDS.apply(edit.scenario, id, { target });
-    if (!r) { toast('That command needs a player who isn’t in this situation'); return; }
+    if (!r) { toast(T('ui.thatCommandNeedsA')); return; }
     edit.scenario.frames.push(...r.steps);
     Object.keys(r.notes).forEach(p => {
       edit.scenario.notes[p] = edit.scenario.notes[p]
@@ -2606,13 +2604,13 @@
   function applyAudible(id) {
     const scn = state.scenarios.find(s=>s.id===state.selectedId);
     if (!scn || typeof COMMANDS==='undefined') return;
-    if (!canPausedEdit()) { toast('Open a play first to call an audible'); return; }
+    if (!canPausedEdit()) { toast(T('ui.openAPlayFirst')); return; }
     if (state.viewer) state.viewer.stop();    // freeze the animation before we edit
     enterPausedEdit();                        // ensure the paused working copy exists
     if (!adjust.scn) return;
     const target = $('as-target').value || 'team';
     const r = COMMANDS.apply(adjust.scn, id, { target });
-    if (!r) { toast('That command needs a player who isn’t in this situation'); return; }
+    if (!r) { toast(T('ui.thatCommandNeedsA')); return; }
     adjust.undo.push(JSON.parse(JSON.stringify(adjust.scn.frames)));   // one undo step
     if (adjust.undo.length > 25) adjust.undo.shift();
     adjust.scn.frames.push(...r.steps);
@@ -2708,16 +2706,16 @@
   function openPrint(scns) {
     const html = printHtml(scns);
     let w = null; try { w = window.open('', '_blank'); } catch (e) {}
-    if (!w) { downloadBlob(html, SHARE.filename((scns.length === 1 ? scns[0].title : 'plays') + ' print', 'html'), 'text/html'); toast('Pop-ups are blocked — the print page was downloaded instead; open it and print / save as PDF'); return; }
+    if (!w) { downloadBlob(html, SHARE.filename((scns.length === 1 ? scns[0].title : 'plays') + ' print', 'html'), 'text/html'); toast(T('ui.popUpsAreBlocked')); return; }
     w.document.open(); w.document.write(html); w.document.close();
   }
   async function exportPlayAs(fmt) {
     const sc = currentScenario(); if (!sc) return;
     if (fmt === 'json') return downloadPlay();
     if (!await guardConfidential([sc])) return;
-    if (fmt === 'png') { const sheet = sheetCanvas(sc); if (!sheet) { toast('Image export needs a canvas-capable browser'); return; }
-      sheet.toBlob(b => { if (!b) { toast('Could not render the image'); return; } const url = URL.createObjectURL(b); const a = document.createElement('a'); a.href = url; a.download = SHARE.filename(sc.title, 'png'); document.body.appendChild(a); a.click(); setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1500); toast('Image sheet downloaded'); }, 'image/png'); return; }
-    if (fmt === 'svg') { const svg = svgOfBoard(); if (!svg) return; downloadBlob(svg, SHARE.filename(sc.title + ' step ' + ((state.viewer ? state.viewer.currentStep() : 0) + 1), 'svg'), 'image/svg+xml'); toast('Board saved as SVG (current step)'); return; }
+    if (fmt === 'png') { const sheet = sheetCanvas(sc); if (!sheet) { toast(T('ui.imageExportNeedsA')); return; }
+      sheet.toBlob(b => { if (!b) { toast(T('ui.couldNotRenderThe')); return; } const url = URL.createObjectURL(b); const a = document.createElement('a'); a.href = url; a.download = SHARE.filename(sc.title, 'png'); document.body.appendChild(a); a.click(); setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1500); toast(T('ui.imageSheetDownloaded')); }, 'image/png'); return; }
+    if (fmt === 'svg') { const svg = svgOfBoard(); if (!svg) return; downloadBlob(svg, SHARE.filename(sc.title + ' step ' + ((state.viewer ? state.viewer.currentStep() : 0) + 1), 'svg'), 'image/svg+xml'); toast(T('ui.boardSavedAsSvg')); return; }
     if (fmt === 'pdf') { openPrint([sc]); return; }
     if (fmt === 'video') { const d = $('video-panel'); if (d) { d.open = true; if (typeof d.scrollIntoView === 'function') d.scrollIntoView({ behavior: 'smooth', block: 'start' }); const b = $('vid-generate'); if (b) b.focus(); } return; }
   }
@@ -2727,7 +2725,7 @@
     if (!await guardConfidential([sc])) return;
     downloadBlob(JSON.stringify(SHARE.pack(sc), null, 1), SHARE.filename(sc.title, 'thplay.json'), 'application/json');
     DATA.logActivity('play', `Downloaded “${sc.title}”`, state.user && state.user.name);
-    toast('Play downloaded — send the file to another coach; they add it with ⬆ Import');
+    toast(T('ui.playDownloadedSendThe'));
   }
   async function downloadSet(scns, name) {
     if (!scns.length || typeof SHARE === 'undefined') return;
@@ -2738,9 +2736,9 @@
   async function sharePlay() {
     const sc = currentScenario(); if (!sc || typeof SHARE === 'undefined') return;
     if (!await guardConfidential([sc])) return;
-    let url; try { url = SHARE.shareUrl(location.href, await SHARE.encode(SHARE.pack(sc))); } catch (e) { toast('Could not build the link'); return; }
+    let url; try { url = SHARE.shareUrl(location.href, await SHARE.encode(SHARE.pack(sc))); } catch (e) { toast(T('ui.couldNotBuildThe')); return; }
     if (navigator.share) { try { await navigator.share({ title: sc.title, text: 'Water polo play: ' + sc.title, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
-    const done = () => toast('Link copied — whoever opens it sees the play animated and can save it to their playbook');
+    const done = () => toast(T('ui.linkCopiedWhoeverOpens'));
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done).catch(() => prompt('Copy this link', url));
     else prompt('Copy this link', url);
   }
@@ -2792,7 +2790,7 @@
   function openPaste() { const m = $('paste-modal'); if (!m) return; m.hidden = false; $('paste-text').value = ''; setTimeout(() => $('paste-text').focus(), 30); }
   async function backupAll() {
     const mine = state.scenarios.filter(sc => !sc.builtIn && !sc.shared);
-    if (!mine.length) { toast('No plays of your own yet — samples are always there'); return; }
+    if (!mine.length) { toast(T('ui.noPlaysOfYour')); return; }
     downloadBlob(JSON.stringify(SHARE.packMany(mine, { name: 'Triibholz backup ' + new Date().toISOString().slice(0, 10) }), null, 1), SHARE.filename('triibholz-backup-' + new Date().toISOString().slice(0, 10), 'thplay.json'), 'application/json');
     toast(`${mine.length} play${mine.length > 1 ? 's' : ''} saved as a backup — import the file on any device`);
   }
@@ -2824,8 +2822,8 @@
       const name = SHARE.filename(setName() + ' reel', ext);
       out.innerHTML = `<video src="${res.url}" controls playsinline class="vid-preview"></video>
         <div class="sb-actions"><a class="btn-primary sm" id="sb-reel-download" href="${res.url}" download="${escapeHtml(name)}">⬇ Download reel (${res.duration.toFixed(0)}s)</a>${navigator.share ? '<button class="btn-ghost sm" id="sb-reel-share">📤 Share…</button>' : ''}</div>`;
-      const sh = $('sb-reel-share'); if (sh) sh.onclick = async () => { try { const file = new File([res.blob], name, { type: res.mime }); if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: setName() + ' reel' }); else toast('Sharing files isn’t supported here — use Download'); } catch (e) {} };
-      toast('Reel ready — play it or download to share');
+      const sh = $('sb-reel-share'); if (sh) sh.onclick = async () => { try { const file = new File([res.blob], name, { type: res.mime }); if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: setName() + ' reel' }); else toast(T('ui.sharingFilesIsnT')); } catch (e) {} };
+      toast(T('ui.reelReadyPlayIt'));
     } catch (e) { out.innerHTML = `<div class="muted">Couldn’t render the reel — ${escapeHtml(e.message || 'unknown error')}.</div>`; }
     finally { btn.disabled = !selected.size; }
   }
@@ -2833,7 +2831,7 @@
   async function openSharedPlay() {
     const code = SHARE.fromHash(location.hash); if (!code) return;
     let obj; try { obj = await SHARE.decode(code); } catch (e) { toast(e.message === 'unsupported-browser' ? 'This browser can’t open compressed share links' : 'This share link is damaged or from a newer version'); return; }
-    const r = SHARE.unpack(obj); if (!r.plays.length) { toast('The link holds no play'); return; }
+    const r = SHARE.unpack(obj); if (!r.plays.length) { toast(T('ui.theLinkHoldsNo')); return; }
     const p = r.plays[0];
     state.scenarios = state.scenarios.filter(sc => !sc.shared);
     const sc = Object.assign(DATA.newScenario(p.situation, p.phase), { id: 'shared-' + SHARE.fingerprint(p), title: p.title, description: p.description || '', frames: DATA.clone(p.frames), notes: DATA.clone(p.notes || {}), author: (p.author || 'Someone') + ' · shared link', visibility: 'team', shared: true, builtIn: false, sharedPlay: p });
@@ -2850,7 +2848,7 @@
     const kept = addImported(sc.sharedPlay, 'shared link');
     state.scenarios = state.scenarios.filter(x => !x.shared);
     DATA.save(state.scenarios); DATA.logActivity('play', `Saved shared play “${kept.title}”`, state.user && state.user.name);
-    renderLibrary(); openScenario(kept.id); toast('Saved to your playbook');
+    renderLibrary(); openScenario(kept.id); toast(T('ui.savedToYourPlaybook2'));
   }
   function dismissShared() {
     const sc = currentScenario();
@@ -2920,7 +2918,7 @@
       const name = (play.title || 'triibholz-play').replace(/[^\w]+/g, '-').toLowerCase() + '.' + ext;
       out.innerHTML = `<video src="${res.url}" controls playsinline class="vid-preview"></video>
         <a class="btn-primary sm" id="vid-download" href="${res.url}" download="${escapeHtml(name)}">⬇ Download (${res.duration.toFixed(1)}s)</a>`;
-      toast('Video ready — play it or download to share');
+      toast(T('ui.videoReadyPlayIt'));
     } catch (e) {
       out.innerHTML = `<div class="muted">Couldn’t render the video — ${escapeHtml(e.message || 'unknown error')}.</div>`;
     } finally { btn.disabled = false; }
@@ -2937,7 +2935,7 @@
         r = await pollVideoJob(ep, r.jobId);
       }
       if (r && r.url) out.innerHTML = `<video src="${escapeHtml(r.url)}" controls playsinline class="vid-preview"></video>
-        <a class="btn-primary sm" href="${escapeHtml(r.url)}" download>⬇ Download</a>`;
+        <a class="btn-primary sm" href="${escapeHtml(r.url)}" download>${T('ui.download')}</a>`;
       else out.innerHTML = `<div class="muted">Provider response: ${escapeHtml(JSON.stringify(r).slice(0, 200))}</div>`;
     } catch (e) {
       const msg = /no-provider/.test(e.message) ? 'set a provider endpoint above first (point it at your backend’s /api/videogen)' : e.message;
@@ -3079,10 +3077,10 @@
     const nf = DATA.clone(currentFrame()); delete nf.shot;   // a shot belongs to ONE step
     edit.scenario.frames.splice(edit.idx+1,0,nf);
     edit.idx++; editorRender();
-    toast('Step recorded — drag players to their next spots');
+    toast(T('ui.stepRecordedDragPlayers'));
   }
   function delFrame() {
-    if (edit.scenario.frames.length<=1){ toast('A play needs at least one step'); return; }
+    if (edit.scenario.frames.length<=1){ toast(T('ui.aPlayNeedsAt')); return; }
     edit.scenario.frames.splice(edit.idx,1); edit.idx=Math.max(0,edit.idx-1); editorRender();
   }
   function countExtras() { return (currentFrame().extra||[]).length; }
@@ -3098,14 +3096,14 @@
     toast(lane==='exc' ? 'Excluded player added to re-entry lane' : 'Substitute added to flying-sub lane');
   }
   function delWaiting() {
-    const f = currentFrame(); if (!f.extra||!f.extra.length){ toast('No waiting players'); return; }
+    const f = currentFrame(); if (!f.extra||!f.extra.length){ toast(T('ui.noWaitingPlayers')); return; }
     f.extra.pop(); editorRender();
   }
 
   function saveScenario() {
     const sc=edit.scenario;
     sc.title=$('ed-title').value.trim(); sc.description=$('ed-desc').value.trim();
-    if (!sc.title){ toast('Give the play a title'); $('ed-title').focus(); return; }
+    if (!sc.title){ toast(T('ui.giveThePlayA')); $('ed-title').focus(); return; }
     sc.builtIn=false;
     sc.author = edit.isNew ? state.user.name : (sc.author && sc.author!=='Playbook (sample)' ? sc.author : state.user.name);
     stampPrivacy(sc, true);
@@ -3115,7 +3113,7 @@
     DATA.logActivity('play', `${state.user.name} ${edit.isNew?'created':'updated'} “${sc.title}” (${sc.situation} ${sc.phase})`, state.user.name);
     state.situation=sc.situation; state.phase=sc.phase;
     closeEditor(); refreshTabs(); renderLibrary(); openScenario(sc.id);
-    toast('Saved ✓');
+    toast(T('ui.saved'));
   }
   // trainer adjusts an existing play and keeps BOTH: save the adjusted
   // version as a brand-new movement, leaving the original untouched
@@ -3135,7 +3133,7 @@
     state.scenarios=state.scenarios.filter(s=>s.id!==id); DATA.save(state.scenarios);
     DATA.logActivity('play', `${state.user.name} deleted a play`, state.user.name);
     if (state.selectedId===id) openFirstOrEmpty();
-    closeEditor(); renderLibrary(); toast('Deleted');
+    closeEditor(); renderLibrary(); toast(T('ui.deleted'));
   }
 
   /* ======================================================
@@ -3154,10 +3152,10 @@
     let qr=''; try { if (typeof QR!=='undefined') qr = QR.toSVG(link, { size:148, quiet:2 }); } catch(e){ qr=''; }
     return `<div class="invite-card">
       <div class="invite-left">
-        <span class="dc-k">Invite players</span>
+        <span class="dc-k">${T('ui.invitePlayers')}</span>
         <div class="invite-code">${escapeHtml(t.code)}</div>
-        <p class="dc-note">Players scan the code (or open the link) and tap their cap number — no typing, no accounts to set up.</p>
-        <div class="invite-actions"><button class="btn-primary sm" id="invite-copy">Copy invite link</button></div>
+        <p class="dc-note">${T('ui.playersScanTheCode')}</p>
+        <div class="invite-actions"><button class="btn-primary sm" id="invite-copy">${T('ui.copyInviteLink')}</button></div>
       </div>
       <div class="invite-qr" title="${escapeHtml(link)}">${qr||'<span class="dc-note">QR unavailable</span>'}</div>
     </div>`;
@@ -3166,7 +3164,7 @@
     const b = root.querySelector('#invite-copy'); if(!b) return;
     b.onclick = () => {
       const link = inviteLink();
-      const done = ()=> toast('Invite link copied — share it with your players');
+      const done = ()=> toast(T('ui.inviteLinkCopiedShare'));
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(done).catch(()=>toast(link));
       else toast(link);
     };
@@ -3203,7 +3201,7 @@
         <div class="tour-tip" style="left:${tipLeft}px;top:${tipTop}px">
           <p>${escapeHtml(s.text)}</p>
           <div class="tour-actions"><span class="tour-step">${i+1}/${steps.length}</span>
-            <button class="btn-ghost sm" id="tour-skip">Skip</button>
+            <button class="btn-ghost sm" id="tour-skip">${T('ui.skip')}</button>
             <button class="btn-primary sm" id="tour-next">${i===steps.length-1?'Got it':'Next'}</button></div>
         </div>`;
       const next=ov.querySelector('#tour-next'), skip=ov.querySelector('#tour-skip');
@@ -3231,7 +3229,7 @@
     });
     $('setup-continue').onclick = submitSetup;
 
-    $('pending-recheck').onclick = ()=>{ const u=DATA.findUserByEmail(state.user.email); if(u&&u.status!=='pending'){ routeUser(u); toast(u.status==='approved'?'Approved — welcome in':'Access declined'); } else toast('Still pending approval'); };
+    $('pending-recheck').onclick = ()=>{ const u=DATA.findUserByEmail(state.user.email); if(u&&u.status!=='pending'){ routeUser(u); toast(u.status==='approved'?'Approved — welcome in':'Access declined'); } else toast(T('ui.stillPendingApproval')); };
     $('pending-signout').onclick = ()=>{ clearSession(); state.user=null; show('auth-screen'); };
     $('denied-signout').onclick = ()=>{ clearSession(); state.user=null; show('auth-screen'); };
 
@@ -3241,7 +3239,7 @@
 
     $('play-btn').onclick = ()=> {
       if (adjust.live) {
-        if (adjust.dirty) { toast('Save or cancel your changes first'); return; }
+        if (adjust.dirty) { toast(T('ui.saveOrCancelYour')); return; }
         exitPausedEditToViewer(stepT(), true);   // resume from the step on screen
         return;
       }
