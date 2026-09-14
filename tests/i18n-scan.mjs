@@ -38,6 +38,9 @@ export const ALLOW = [
   /^(beta|Tier(\s|&nbsp;)[123])$/i,             // maturity badges on the Film Room panels — same word everywhere
   /^\d+(v\d+)?$/,                               // 6v6, 5v4 …
   /^(Q[1-4]|[1-6]|GK)$/,
+  /^3 has the ball\b/,                          // the Draft-from-words placeholder: js/draft.js
+                                                 // parses English only, so a translated example
+                                                 // would be an example that cannot work
 ];
 
 const isAllowed = s => ALLOW.some(re => re.test(s.trim()));
@@ -146,17 +149,22 @@ function scanHtml(relPath, src, push) {
   let m;
   const el = /<([a-z][a-z0-9]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>([^<>]{2,})</gi;
   while ((m = el.exec(body))) {
-    if (/\bdata-i18n\s*=/.test(m[2])) continue;                 // swapped at runtime
+    if (/\bdata-i18n(-html)?\s*=/.test(m[2])) continue;          // swapped at runtime
     push(m.index + m[0].length - m[3].length - 1, m[3], 'html');
   }
-  const attr = /\b(placeholder|title|aria-label)\s*=\s*"([^"]{2,})"/gi;
+  /* (?<![-\w]) matters: without it, `title="…"` also matches inside `data-i18n-title="…"`,
+     and the scanner cheerfully reports its own key names as untranslated English. */
+  const attr = /(?<![-\w])(placeholder|title|aria-label)\s*=\s*"([^"]{2,})"/gi;
   while ((m = attr.exec(body))) {
+    // the WHOLE tag, not just what precedes the attribute — the data-i18n-* marker is
+    // usually written after the attribute it localises
     const tagStart = body.lastIndexOf('<', m.index);
-    const tag = body.slice(tagStart, m.index);
-    const want = m[1].toLowerCase() === 'placeholder' ? 'data-i18n-ph' : 'data-i18n-' + m[1].toLowerCase();
+    let tagEnd = body.indexOf('>', m.index); if (tagEnd < 0) tagEnd = body.length;
+    const tag = body.slice(tagStart, tagEnd);
+    const a = m[1].toLowerCase();
+    const want = a === 'placeholder' ? 'data-i18n-ph' : a === 'aria-label' ? 'data-i18n-aria' : 'data-i18n-title';
     if (tag.includes(want)) continue;
-    if (m[1].toLowerCase() === 'aria-label' && tag.includes('data-i18n-aria')) continue;
-    push(m.index, m[2], m[1].toLowerCase());
+    push(m.index, m[2], a);
   }
 }
 
@@ -219,6 +227,13 @@ export function scanFile(relPath) {
   const textContent = /\.textContent\s*=\s*(['"])((?:[^'"\\\n]|\\.)*?)\1/g;
   while ((m = textContent.exec(src))) push(m.index, m[2], 'textContent');
 
+  /* …and the same assignment written as a template literal. The "no markup, don't scan"
+     rule above does NOT apply here: whatever is assigned to textContent is by definition
+     what the user reads, tag or no tag. `Step ${n} / ${total}` sat in five places and was
+     the last English left on the playbook screen. */
+  const tplText = /\.textContent\s*=\s*`((?:[^`\\]|\\.)*)`/g;
+  while ((m = tplText.exec(src))) push(m.index, m[1].replace(/\$\{[^}]*\}/g, ' '), 'textContent');
+
   return findings;
 }
 
@@ -234,7 +249,7 @@ export const UI_FILES = ['js/app.js', 'js/film.js', 'js/help.js', 'js/gameplan.j
    ever go DOWN. Its job is to make the next hard-coded string fail the build on the day it
    is written — which is the only thing that stops this drifting again, and is exactly how
    the app ended up with 73 translated keys and 392 untranslated ones. */
-export const BASELINE = { 'js/app.js': 0, 'js/film.js': 0, 'js/help.js': 0, 'js/gameplan.js': 0, 'js/tactics.js': 0, 'js/pool.js': 0, 'js/animate.js': 0, 'index.html': 176 };   // measured, not chosen — the app shell was unguarded until now
+export const BASELINE = { 'js/app.js': 0, 'js/film.js': 0, 'js/help.js': 0, 'js/gameplan.js': 0, 'js/tactics.js': 0, 'js/pool.js': 0, 'js/animate.js': 0, 'index.html': 0 };
 
 // compare real paths — import.meta.url is percent-encoded and this repo lives under "Mobile Documents"
 if (fileURLToPath(import.meta.url) === process.argv[1]) {

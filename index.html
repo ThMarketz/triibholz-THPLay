@@ -33,7 +33,7 @@
           </svg>
         </div>
         <h1>Triibholz</h1>
-        <p class="auth-brandcode">THPLAY · Water Polo Playbook</p>
+        <p class="auth-brandcode" data-i18n="ui.thplayWaterPoloPlaybook">THPLAY · Water Polo Playbook</p>
         <p class="auth-tag" data-i18n="app.tagline">Strategies &amp; movement patterns — for the team and for every position.</p>
       </div>
 
@@ -77,7 +77,7 @@
           <button class="seg-btn" data-role="trainer" data-i18n="role.trainer">Trainer</button>
           <button class="seg-btn" data-role="super-admin" data-i18n="role.super-admin">Super Admin</button>
         </div>
-        <p class="setup-note" id="role-note">Players &amp; staff need a Super Admin to approve access before signing in.</p>
+        <p class="setup-note" id="role-note" data-i18n="ui.playersStaffNeedA">Players &amp; staff need a Super Admin to approve access before signing in.</p>
       </div>
 
       <div class="setup-block" id="position-block">
@@ -93,7 +93,7 @@
         </div>
       </div>
 
-      <button class="btn-primary" id="setup-continue">Request access</button>
+      <button class="btn-primary" id="setup-continue" data-i18n="setup.request">Request access</button>
     </div>
   </section>
 
@@ -102,7 +102,8 @@
     <div class="auth-card status-card">
       <div class="status-icon wait">◷</div>
       <h2 data-i18n="pending.title">Waiting for approval</h2>
-      <p class="status-text">Your access request is in. A <strong>Super Admin</strong> needs to approve <span id="pending-email"></span> before you can enter.</p>
+      <p class="status-text" data-i18n-html="ui.yourAccessRequestIs">Your access request is in. A <strong>Super Admin</strong> needs to approve your account before you can enter.</p>
+      <p class="status-email" id="pending-email"></p>
       <p class="status-sub" data-i18n="pending.sub">Approvals happen in the Super Admin console. You’ll be let in as soon as you’re approved.</p>
       <div class="status-actions">
         <button class="btn-ghost" id="pending-recheck" data-i18n="pending.recheck">Check again</button>
@@ -116,7 +117,8 @@
     <div class="auth-card status-card">
       <div class="status-icon deny">✕</div>
       <h2 data-i18n="denied.title">Access not granted</h2>
-      <p class="status-text">A Super Admin has declined access for <span id="denied-email"></span>.</p>
+      <p class="status-text" data-i18n="ui.aSuperAdminHas">A Super Admin has declined access for this account.</p>
+      <p class="status-email" id="denied-email"></p>
       <div class="status-actions">
         <button class="btn-ghost" id="denied-signout" data-i18n="denied.another">Use another account</button>
       </div>
@@ -149,19 +151,19 @@
           <button class="phase-btn" data-phase="defense" data-i18n="phase.defense">Defense</button>
         </span>
         <span class="dl-wrap" id="announce-wrap">
-          <button class="icon-btn" id="announce-btn" title="Announcements">🔔<span class="nav-badge" id="announce-badge" hidden>0</span></button>
+          <button class="icon-btn" id="announce-btn" title="Announcements" data-i18n-title="ui.announcements2">🔔<span class="nav-badge" id="announce-badge" hidden>0</span></button>
           <div class="dl-menu announce-menu" id="announce-panel" hidden></div>
         </span>
-        <button class="icon-btn" id="help-btn" title="How to use this page">？</button>
-        <button class="icon-btn" id="sound-toggle" title="Sound effects">🔇</button>
+        <button class="icon-btn" id="help-btn" title="How to use this page" data-i18n-title="ui.howToUseThis">？</button>
+        <button class="icon-btn" id="sound-toggle" title="Sound effects" data-i18n-title="ui.soundEffects">🔇</button>
         <div class="lang-switch" id="lang-switch-top"></div>
-        <div class="user-pill" id="user-pill" title="Account">
+        <div class="user-pill" id="user-pill" title="Account" data-i18n-title="ui.account">
           <span class="user-avatar" id="user-avatar">C</span>
           <span class="user-meta">
-            <span id="user-name">Coach</span>
-            <span id="user-sub" class="user-sub">Coach</span>
+            <span id="user-name" data-i18n="role.coach">Coach</span>
+            <span id="user-sub" class="user-sub" data-i18n="role.coach">Coach</span>
           </span>
-          <button class="logout-btn" id="logout-btn" title="Sign out">⏻</button>
+          <button class="logout-btn" id="logout-btn" title="Sign out" data-i18n-title="common.signout">⏻</button>
         </div>
       </div>
     </header>
@@ -194,26 +196,26 @@
       <aside class="sidebar">
         <div class="sidebar-head">
           <h3 id="library-title">Scenarios</h3>
-          <button class="btn-new" id="new-scenario-btn" title="Create a new play from scratch" data-i18n="lib.new">＋ New play</button>
+          <button class="btn-new" id="new-scenario-btn" title="Create a new play from scratch" data-i18n-title="ui.createANewPlay2" data-i18n="lib.new">＋ New play</button>
         </div>
-        <div class="sidebar-sub" id="library-sub">Pick a situation above</div>
+        <div class="sidebar-sub" id="library-sub" data-i18n="lib.pick">Pick a situation above</div>
         <div class="lib-tools">
-          <button class="btn-ghost sm" id="select-btn" title="Select several plays — download them as one set or render them into one video reel">☑ <span data-i18n="share.select">Select</span></button>
-          <span class="dl-wrap"><button class="btn-ghost sm" id="import-btn" title="Bring plays in: files from earlier sessions, a pasted share link, or written steps" hidden>⬆ <span data-i18n="share.import">Import</span> ▾</button>
+          <button class="btn-ghost sm" id="select-btn" title="Select several plays — download them as one set or render them into one video reel" data-i18n-title="ui.selectSeveralPlaysDownload">☑ <span data-i18n="share.select">Select</span></button>
+          <span class="dl-wrap"><button class="btn-ghost sm" id="import-btn" title="Bring plays in: files from earlier sessions, a pasted share link, or written steps" data-i18n-title="ui.bringPlaysInFiles" hidden>⬆ <span data-i18n="share.import">Import</span> ▾</button>
             <div class="dl-menu" id="import-menu" hidden>
-              <button data-imp="file"><strong>From files…</strong><span>.thplay.json · plain .json · .txt / .md written steps · a saved backup</span></button>
-              <button data-imp="paste"><strong>Paste a link or steps…</strong><span>a 🔗 share link, JSON, or lines like “3 drives to 2 m”</span></button>
-              <button data-imp="backup"><strong>💾 Backup all my plays</strong><span>one file with every play you made — import it on another device</span></button>
+              <button data-imp="file"><strong data-i18n="ui.fromFiles">From files…</strong><span data-i18n="ui.thplayJsonPlainJson">.thplay.json · plain .json · .txt / .md written steps · a saved backup</span></button>
+              <button data-imp="paste"><strong data-i18n="ui.pasteALinkOr">Paste a link or steps…</strong><span data-i18n="ui.aShareLinkJson">a 🔗 share link, JSON, or lines like “3 drives to 2 m”</span></button>
+              <button data-imp="backup"><strong data-i18n="ui.backupAllMyPlays">💾 Backup all my plays</strong><span data-i18n="ui.oneFileWithEvery">one file with every play you made — import it on another device</span></button>
             </div></span>
           <input type="file" id="import-file" accept=".json,.thplay.json,.txt,.md,application/json,text/plain" multiple hidden />
         </div>
         <div class="select-bar" id="select-bar" hidden>
           <span class="sb-count" id="sb-count">0 selected</span>
-          <button class="btn-ghost sm" id="sb-all">All here</button>
-          <button class="btn-ghost sm" id="sb-download" title="One .thplay.json with every selected play">⬇ Set</button>
-          <button class="btn-ghost sm" id="sb-print" title="Print the selected plays — one per page — or save as PDF">🖨 PDF</button>
-          <button class="btn-primary sm" id="sb-reel" title="One video: title card + animation for each selected play">🎬 Reel</button>
-          <button class="btn-ghost sm" id="sb-close" title="Leave select mode">✕</button>
+          <button class="btn-ghost sm" id="sb-all" data-i18n="ui.allHere">All here</button>
+          <button class="btn-ghost sm" id="sb-download" title="One .thplay.json with every selected play" data-i18n-title="ui.oneThplayJsonWith" data-i18n="ui.set">⬇ Set</button>
+          <button class="btn-ghost sm" id="sb-print" title="Print the selected plays — one per page — or save as PDF" data-i18n-title="ui.printTheSelectedPlays" data-i18n="ui.pdf">🖨 PDF</button>
+          <button class="btn-primary sm" id="sb-reel" title="One video: title card + animation for each selected play" data-i18n-title="ui.oneVideoTitleCard" data-i18n="ui.reel">🎬 Reel</button>
+          <button class="btn-ghost sm" id="sb-close" title="Leave select mode" data-i18n-title="ui.leaveSelectMode">✕</button>
           <div class="sb-out" id="sb-out"></div>
         </div>
         <div class="scenario-list" id="scenario-list"><!-- scenarios injected --></div>
@@ -227,88 +229,88 @@
             <p id="scenario-desc" class="scenario-desc"></p>
           </div>
           <div class="stage-head-actions">
-            <button class="help-chip" data-help="playbook" title="How to use the playbook">？</button>
+            <button class="help-chip" data-help="playbook" title="How to use the playbook" data-i18n-title="ui.howToUseThe2">？</button>
             <span class="mode-toggle" id="mode-toggle" hidden>
               <button class="mode-btn" data-mode="problem" data-i18n="mode.problem">Problem</button>
               <button class="mode-btn active" data-mode="solution" data-i18n="mode.solution">Solution</button>
             </span>
-            <span class="dl-wrap"><button class="btn-ghost" id="dl-btn" hidden title="Download this play — several formats">⬇ <span data-i18n="share.download">Download</span> ▾</button>
+            <span class="dl-wrap"><button class="btn-ghost" id="dl-btn" hidden title="Download this play — several formats" data-i18n-title="ui.downloadThisPlaySeveral">⬇ <span data-i18n="share.download">Download</span> ▾</button>
               <div class="dl-menu" id="dl-menu" hidden>
-                <button data-fmt="json"><strong>Play file</strong><span>.thplay.json — import it in another Triibholz</span></button>
-                <button data-fmt="png"><strong>Image sheet</strong><span>.png — every step on one picture</span></button>
-                <button data-fmt="svg"><strong>Vector board</strong><span>.svg — the current step, scales to any size</span></button>
-                <button data-fmt="pdf"><strong>Print / PDF</strong><span>steps + notes on paper or as a PDF</span></button>
-                <button data-fmt="video"><strong>Video</strong><span>.webm/.mp4 — the animation as a clip</span></button>
+                <button data-fmt="json"><strong data-i18n="ui.playFile">Play file</strong><span data-i18n="ui.thplayJsonImportIt">.thplay.json — import it in another Triibholz</span></button>
+                <button data-fmt="png"><strong data-i18n="ui.imageSheet">Image sheet</strong><span data-i18n="ui.pngEveryStepOn">.png — every step on one picture</span></button>
+                <button data-fmt="svg"><strong data-i18n="ui.vectorBoard">Vector board</strong><span data-i18n="ui.svgTheCurrentStep">.svg — the current step, scales to any size</span></button>
+                <button data-fmt="pdf"><strong data-i18n="ui.printPdf">Print / PDF</strong><span data-i18n="ui.stepsNotesOnPaper">steps + notes on paper or as a PDF</span></button>
+                <button data-fmt="video"><strong data-i18n="ui.video">Video</strong><span data-i18n="ui.webmMp4TheAnimation">.webm/.mp4 — the animation as a clip</span></button>
               </div></span>
-            <button class="btn-ghost" id="share-btn" hidden title="Share a link that opens this play animated on any phone or laptop">🔗 <span data-i18n="share.share">Share</span></button>
-            <button class="btn-ghost" id="tpl-btn" hidden title="Mark this play as a template: it shows in “New play → start from a template” and as a personal audible">⭐ Template</button>
-            <button class="btn-ghost" id="edit-btn" hidden>Edit</button>
+            <button class="btn-ghost" id="share-btn" hidden title="Share a link that opens this play animated on any phone or laptop" data-i18n-title="ui.shareALinkThat">🔗 <span data-i18n="share.share">Share</span></button>
+            <button class="btn-ghost" id="tpl-btn" hidden title="Mark this play as a template: it shows in “New play → start from a template” and as a personal audible" data-i18n-title="ui.markThisPlayAs" data-i18n="ui.template">⭐ Template</button>
+            <button class="btn-ghost" id="edit-btn" hidden data-i18n="common.edit">Edit</button>
           </div>
         </div>
 
         <div class="shared-banner" id="shared-banner" hidden>
           <span id="shared-text">Shared play</span>
-          <button class="btn-primary sm" id="shared-save">＋ Save to my playbook</button>
+          <button class="btn-primary sm" id="shared-save" data-i18n="ui.saveToMyPlaybook">＋ Save to my playbook</button>
           <button class="btn-ghost sm" id="shared-dismiss">✕</button>
         </div>
         <div class="pool-wrap">
-          <svg id="pool" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet" aria-label="Water polo pool"></svg>
+          <svg id="pool" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet" aria-label="Water polo pool" data-i18n-aria="ui.waterPoloPool"></svg>
           <canvas id="scene3d" hidden></canvas>
-          <div class="scene3d-hint" id="scene3d-hint" hidden>Drag to orbit · scroll or pinch to zoom · double-click to reset · stylized camera, not real footage</div>
+          <div class="scene3d-hint" id="scene3d-hint" hidden data-i18n="ui.dragToOrbitScroll">Drag to orbit · scroll or pinch to zoom · double-click to reset · stylized camera, not real footage</div>
           <div class="pool-empty" id="pool-empty">
             <div class="pool-empty-inner">
-              <strong>No scenario open</strong>
-              <span>Choose one from the left, or press “+ New” to build a movement pattern.</span>
+              <strong data-i18n="ui.noScenarioOpen">No scenario open</strong>
+              <span data-i18n="ui.chooseOneFromThe">Choose one from the left, or press “+ New” to build a movement pattern.</span>
             </div>
           </div>
-          <div class="pool-drag-hint" id="pool-drag-hint" hidden>✋ Paused — drag players &amp; the ball to adjust</div>
+          <div class="pool-drag-hint" id="pool-drag-hint" hidden data-i18n="ui.pausedDragPlayersThe">✋ Paused — drag players &amp; the ball to adjust</div>
           <div class="fs-bar" id="fs-bar" hidden>
-            <span class="fsb-grip" id="fsb-grip" title="Drag me anywhere on the board · double-click to put me back">⠿</span>
-            <button class="fsb" id="fsb-restart" title="Restart (R)">⏮</button>
-            <button class="fsb" id="fsb-back" title="Previous step (←)">⏪</button>
-            <button class="fsb fsb-play" id="fsb-play" title="Play / pause (space)">▶</button>
-            <button class="fsb" id="fsb-fwd" title="Next step (→)">⏩</button>
-            <span class="fsb-label" id="fsb-label">Step 1 / 1</span>
+            <span class="fsb-grip" id="fsb-grip" title="Drag me anywhere on the board · double-click to put me back" data-i18n-title="ui.dragMeAnywhereOn">⠿</span>
+            <button class="fsb" id="fsb-restart" title="Restart (R)" data-i18n-title="ui.restartR">⏮</button>
+            <button class="fsb" id="fsb-back" title="Previous step (←)" data-i18n-title="ui.previousStep">⏪</button>
+            <button class="fsb fsb-play" id="fsb-play" title="Play / pause (space)" data-i18n-title="ui.playPauseSpace">▶</button>
+            <button class="fsb" id="fsb-fwd" title="Next step (→)" data-i18n-title="ui.nextStep">⏩</button>
+            <span class="fsb-label" id="fsb-label" data-i18n="ui.step11">Step 1 / 1</span>
             <span class="fsb-speed" id="fsb-speed"><button class="fsb sm" data-speed="0.25">¼×</button><button class="fsb sm" data-speed="0.5">½×</button><button class="fsb sm active" data-speed="1">1×</button><button class="fsb sm" data-speed="1.5">1½×</button></span>
-            <button class="fsb" id="fsb-exit" title="Leave full screen (Esc)">✕</button>
+            <button class="fsb" id="fsb-exit" title="Leave full screen (Esc)" data-i18n-title="ui.leaveFullScreenEsc">✕</button>
           </div>
           <div class="gk-view" id="gk-view" hidden>
-            <div class="gkv-head"><strong>🧤 Keeper’s view</strong><span class="gkv-badge" id="gkv-badge" hidden>SHOT</span></div>
-            <svg id="gkv-goal" viewBox="0 0 120 48" preserveAspectRatio="xMidYMid meet" aria-label="Goal mouth as the shooter sees it"></svg>
+            <div class="gkv-head"><strong data-i18n="ui.keeperSView">🧤 Keeper’s view</strong><span class="gkv-badge" id="gkv-badge" hidden data-i18n="ui.badgeShot">SHOT</span></div>
+            <svg id="gkv-goal" viewBox="0 0 120 48" preserveAspectRatio="xMidYMid meet" aria-label="Goal mouth as the shooter sees it" data-i18n-aria="ui.goalMouthAsThe"></svg>
             <div class="gkv-nums" id="gkv-nums"></div>
             <div class="gkv-advice" id="gkv-advice"></div>
-            <div class="ef-label" style="margin-top:6px">What the shooter should try</div>
+            <div class="ef-label" style="margin-top:6px" data-i18n="ui.whatTheShooterShould">What the shooter should try</div>
             <div class="gkv-menu" id="gkv-menu"></div>
             <div class="gkv-keeper" id="gkv-keeper"></div>
-            <div class="gkv-basis" id="gkv-basis">Coach’s guide, not a measured statistic.</div>
+            <div class="gkv-basis" id="gkv-basis" data-i18n="ui.coachSGuideNot">Coach’s guide, not a measured statistic.</div>
           </div>
-          <div class="my-cue" id="my-cue" hidden><span class="mc-who" id="mc-who">You (3) · step 1/4</span><strong id="mc-text">Drive to 2 m</strong><span class="mc-note" id="mc-note"></span></div>
-          <button class="audible-btn" id="audible-btn" hidden title="Call a tactical command">⚡ Audible</button>
+          <div class="my-cue" id="my-cue" hidden><span class="mc-who" id="mc-who" data-i18n="ui.you3Step1">You (3) · step 1/4</span><strong id="mc-text" data-i18n="ui.driveTo2M">Drive to 2 m</strong><span class="mc-note" id="mc-note"></span></div>
+          <button class="audible-btn" id="audible-btn" hidden title="Call a tactical command" data-i18n-title="ui.callATacticalCommand" data-i18n="ui.audible">⚡ Audible</button>
           <div class="audible-sheet" id="audible-sheet" hidden>
             <div class="as-head">
-              <strong>⚡ Call a command</strong>
+              <strong data-i18n="ui.callACommand">⚡ Call a command</strong>
               <select id="as-target" class="focus-select">
                 <option value="team">Whole team</option>
-                <option value="1">Player 1</option>
-                <option value="2">Player 2</option>
-                <option value="3">Player 3</option>
-                <option value="4">Player 4</option>
-                <option value="5">Player 5</option>
-                <option value="6">Player 6</option>
-                <option value="GK">Goalkeeper</option>
+                <option value="1" data-i18n="ui.player1">Player 1</option>
+                <option value="2" data-i18n="ui.player2">Player 2</option>
+                <option value="3" data-i18n="ui.player3">Player 3</option>
+                <option value="4" data-i18n="ui.player4">Player 4</option>
+                <option value="5" data-i18n="ui.player5">Player 5</option>
+                <option value="6" data-i18n="ui.player6">Player 6</option>
+                <option value="GK" data-i18n="ui.goalkeeperShort">Goalkeeper</option>
               </select>
-              <button class="as-x" id="as-close" title="Close">✕</button>
+              <button class="as-x" id="as-close" title="Close" data-i18n-title="film.close">✕</button>
             </div>
             <div class="cmd-groups" id="as-groups"></div>
             <div class="cmd-groups cmd-mine" id="as-mine"></div>
-            <div class="cmd-info" id="as-info">Hover a command to see when to call it and why it works.</div>
-            <p class="as-foot">The board pauses and runs the call — drag to tweak, then <strong>Save as new ⑂</strong>.</p>
+            <div class="cmd-info" id="as-info"></div>
+            <p class="as-foot" data-i18n-html="ui.theBoardPausesAnd">The board pauses and runs the call — drag to tweak, then <strong data-i18n="ui.saveAsNew">Save as new ⑂</strong>.</p>
           </div>
           <div class="problem-overlay" id="problem-overlay" hidden>
             <div class="problem-card">
-              <span class="problem-kicker">Problem</span>
-              <strong id="problem-prompt">Read the setup. What’s the play here?</strong>
-              <span class="problem-hint">Players & ball are in their starting spots — no movement shown yet.</span>
+              <span class="problem-kicker" data-i18n="mode.problem">Problem</span>
+              <strong id="problem-prompt" data-i18n="ui.readTheSetupWhat">Read the setup. What’s the play here?</strong>
+              <span class="problem-hint" data-i18n="ui.playersBallAreIn">Players & ball are in their starting spots — no movement shown yet.</span>
               <button class="btn-primary reveal-btn" id="reveal-btn" data-i18n="mode.reveal">Reveal solution ▶</button>
             </div>
           </div>
@@ -317,53 +319,53 @@
         <!-- appears automatically once a paused play has been changed -->
         <div class="controls adjust-bar" id="adjust-bar" hidden>
           <div class="ctl-row">
-            <button class="ctl-btn" id="adj-undo" title="Undo last drag">↩</button>
-            <span class="adj-hint">✋ You changed this play — keep it?</span>
-            <button class="help-chip" data-help="adjust" title="How adjusting works">？</button>
+            <button class="ctl-btn" id="adj-undo" title="Undo last drag" data-i18n-title="ui.undoLastDrag">↩</button>
+            <span class="adj-hint" data-i18n="ui.youChangedThisPlay">✋ You changed this play — keep it?</span>
+            <button class="help-chip" data-help="adjust" title="How adjusting works" data-i18n-title="ui.howAdjustingWorks">？</button>
             <div class="spacer"></div>
-            <button class="btn-ghost sm" id="adj-cancel">Discard</button>
-            <button class="btn-ghost sm" id="adj-save-new">Save as new ⑂</button>
-            <button class="btn-primary sm" id="adj-save">Save changes</button>
+            <button class="btn-ghost sm" id="adj-cancel" data-i18n="ui.discard">Discard</button>
+            <button class="btn-ghost sm" id="adj-save-new" data-i18n="ui.saveAsNew">Save as new ⑂</button>
+            <button class="btn-primary sm" id="adj-save" data-i18n="ui.saveChanges">Save changes</button>
           </div>
         </div>
 
         <!-- playback controls -->
         <div class="controls" id="controls" hidden>
           <div class="ctl-row">
-            <button class="ctl-btn" id="step-back" title="Previous step">⏮</button>
-            <button class="ctl-btn ctl-play" id="play-btn" title="Play / pause">▶</button>
-            <button class="ctl-btn" id="step-fwd" title="Next step">⏭</button>
+            <button class="ctl-btn" id="step-back" title="Previous step" data-i18n-title="ui.previousStep2">⏮</button>
+            <button class="ctl-btn ctl-play" id="play-btn" title="Play / pause" data-i18n-title="ui.playPause">▶</button>
+            <button class="ctl-btn" id="step-fwd" title="Next step" data-i18n-title="ui.nextStep2">⏭</button>
             <div class="scrub-wrap">
               <input type="range" id="scrub" min="0" max="1000" value="0" />
-              <div class="frame-label" id="frame-label">Step 1</div>
+              <div class="frame-label" id="frame-label" data-i18n="ui.step1">Step 1</div>
             </div>
             <div class="view-toggle">
               <button class="vt-btn active" id="view-team" data-i18n="view.team">Team</button>
               <button class="vt-btn" id="view-me" data-i18n="view.me">My position</button>
             </div>
-            <span class="speed-seg" id="speed-seg" title="Playback speed — slow it down to learn the moves">
+            <span class="speed-seg" id="speed-seg" title="Playback speed — slow it down to learn the moves" data-i18n-title="ui.playbackSpeedSlowIt">
               <button class="vt-btn" data-speed="0.25">¼×</button><button class="vt-btn" data-speed="0.5">½×</button><button class="vt-btn active" data-speed="1">1×</button><button class="vt-btn" data-speed="1.5">1½×</button>
             </span>
-            <button class="vt-btn" id="fs-btn" title="Full-screen board (Esc to leave)">⛶</button>
-            <button class="vt-btn steps-btn active" id="steps-toggle" title="Show or hide the step notes and arrows — hide them to watch the pure movement" aria-pressed="true"><span data-i18n="view.steps">Steps</span> 👁</button>
-            <button class="vt-btn" id="zones-toggle" title="Show the shot-chance territory: green ~70%, yellow ~30%, red under 10% (coach's guide)" aria-pressed="false"><span data-i18n="view.zones">Zones</span> 🟩</button>
-            <button class="vt-btn" id="gk-toggle" title="Goalkeeper's view — what the keeper covers from the shooter's spot, and the chance of a shot or a lob (a coach's guide, not a measured statistic)" aria-pressed="false"><span data-i18n="view.gk">Keeper view</span> 🧤</button>
-            <button class="vt-btn" id="scene3d-toggle" title="3D replay camera — a stylized view over the same tactics, not a recreation of real swimming" aria-pressed="false"><span data-i18n="view.3d">3D</span> 🎥</button>
-            <select id="scene3d-target" class="focus-select" title="Camera follows…" hidden>
-              <option value="">Overview</option><option value="ball">Ball</option>
-              <option value="1">Player 1</option><option value="2">Player 2</option><option value="3">Player 3</option>
-              <option value="4">Player 4</option><option value="5">Player 5</option><option value="6">Player 6</option>
-              <option value="GK">Goalkeeper</option>
+            <button class="vt-btn" id="fs-btn" title="Full-screen board (Esc to leave)" data-i18n-title="ui.fullScreenBoardEsc">⛶</button>
+            <button class="vt-btn steps-btn active" id="steps-toggle" title="Show or hide the step notes and arrows — hide them to watch the pure movement" data-i18n-title="ui.showOrHideThe" aria-pressed="true"><span data-i18n="view.steps">Steps</span> 👁</button>
+            <button class="vt-btn" id="zones-toggle" title="Show the shot-chance territory: green ~70%, yellow ~30%, red under 10% (coach's guide)" data-i18n-title="ui.showTheShotChance" aria-pressed="false"><span data-i18n="view.zones">Zones</span> 🟩</button>
+            <button class="vt-btn" id="gk-toggle" title="Goalkeeper's view — what the keeper covers from the shooter's spot, and the chance of a shot or a lob (a coach's guide, not a measured statistic)" data-i18n-title="ui.goalkeeperSViewWhat" aria-pressed="false"><span data-i18n="view.gk">Keeper view</span> 🧤</button>
+            <button class="vt-btn" id="scene3d-toggle" title="3D replay camera — a stylized view over the same tactics, not a recreation of real swimming" data-i18n-title="ui.3dReplayCameraA" aria-pressed="false"><span data-i18n="view.3d">3D</span> 🎥</button>
+            <select id="scene3d-target" class="focus-select" title="Camera follows…" data-i18n-title="ui.cameraFollows" hidden>
+              <option value="">Overview</option><option value="ball" data-i18n="ui.ball">Ball</option>
+              <option value="1" data-i18n="ui.player1">Player 1</option><option value="2" data-i18n="ui.player2">Player 2</option><option value="3" data-i18n="ui.player3">Player 3</option>
+              <option value="4" data-i18n="ui.player4">Player 4</option><option value="5" data-i18n="ui.player5">Player 5</option><option value="6" data-i18n="ui.player6">Player 6</option>
+              <option value="GK" data-i18n="ui.goalkeeperShort">Goalkeeper</option>
             </select>
-            <select id="focus-pos" class="focus-select" title="Focus a position">
+            <select id="focus-pos" class="focus-select" title="Focus a position" data-i18n-title="ui.focusAPosition">
               <option value="" data-i18n="view.focus">Focus…</option>
-              <option value="1">Player 1</option>
-              <option value="2">Player 2</option>
-              <option value="3">Player 3</option>
-              <option value="4">Player 4</option>
-              <option value="5">Player 5</option>
-              <option value="6">Player 6</option>
-              <option value="GK">Goalkeeper</option>
+              <option value="1" data-i18n="ui.player1">Player 1</option>
+              <option value="2" data-i18n="ui.player2">Player 2</option>
+              <option value="3" data-i18n="ui.player3">Player 3</option>
+              <option value="4" data-i18n="ui.player4">Player 4</option>
+              <option value="5" data-i18n="ui.player5">Player 5</option>
+              <option value="6" data-i18n="ui.player6">Player 6</option>
+              <option value="GK" data-i18n="ui.goalkeeperShort">Goalkeeper</option>
             </select>
           </div>
         </div>
@@ -384,26 +386,26 @@
   <!-- ===================== EDITOR MODAL ===================== -->
   <div class="modal-backdrop" id="tpl-modal" hidden>
     <div class="modal modal-sm">
-      <div class="modal-head"><h3>New play — start from…</h3><span class="spacer"></span><button class="modal-x" id="tpl-close">✕</button></div>
+      <div class="modal-head"><h3 data-i18n="ui.newPlayStartFrom">New play — start from…</h3><span class="spacer"></span><button class="modal-x" id="tpl-close">✕</button></div>
       <div class="modal-body">
         <p class="muted" style="margin:0 0 8px">Your ⭐ templates and the samples for this situation. The copy opens in the editor — change what you like, then save.</p>
         <div class="tpl-list" id="tpl-list"></div>
       </div>
-      <div class="modal-foot"><button class="btn-ghost" id="tpl-blank">Blank play</button></div>
+      <div class="modal-foot"><button class="btn-ghost" id="tpl-blank" data-i18n="ui.blankPlay">Blank play</button></div>
     </div>
   </div>
   <div class="modal-backdrop" id="paste-modal" hidden>
     <div class="modal modal-sm">
-      <div class="modal-head"><h3>Paste a play</h3><span class="spacer"></span><button class="modal-x" id="paste-close">✕</button></div>
-      <div class="modal-body"><p class="muted" style="margin:0 0 8px">A 🔗 share link, a play file’s JSON, or written steps — one per line, e.g. <em>3 has the ball · 2 drives to 2 m on the right · 3 passes to 2 · 2 shoots</em>. Start with <em># Title</em> to name it.</p>
-        <textarea id="paste-text" rows="8" style="width:100%" placeholder="# Drive and dump&#10;3 has the ball&#10;2 drives to 2 m on the right&#10;3 passes to 2&#10;2 shoots far corner"></textarea></div>
-      <div class="modal-foot"><button class="btn-ghost" id="paste-cancel">Cancel</button><button class="btn-primary" id="paste-import">⬆ Import</button></div>
+      <div class="modal-head"><h3 data-i18n="ui.pasteAPlay">Paste a play</h3><span class="spacer"></span><button class="modal-x" id="paste-close">✕</button></div>
+      <div class="modal-body"><p class="muted" style="margin:0 0 8px" data-i18n-html="ui.aShareLinkA">A 🔗 share link, a play file’s JSON, or written steps — one per line, e.g. <em>3 has the ball · 2 drives to 2 m on the right · 3 passes to 2 · 2 shoots</em>. Start with <em data-i18n="ui.title"># Title</em> to name it.</p>
+        <textarea id="paste-text" rows="8" style="width:100%" placeholder="# Drive and dump&#10;3 has the ball&#10;2 drives to 2 m on the right&#10;3 passes to 2&#10;2 shoots far corner" data-i18n-ph="ui.driveAndDump10"></textarea></div>
+      <div class="modal-foot"><button class="btn-ghost" id="paste-cancel" data-i18n="common.cancel">Cancel</button><button class="btn-primary" id="paste-import" data-i18n="ui.import2">⬆ Import</button></div>
     </div>
   </div>
   <div class="modal-backdrop" id="confirm-modal" hidden>
     <div class="modal modal-sm">
       <div class="modal-body"><p id="confirm-text"></p></div>
-      <div class="modal-foot"><button class="btn-ghost" id="confirm-no">Cancel</button><button class="btn-primary" id="confirm-yes">Continue</button></div>
+      <div class="modal-foot"><button class="btn-ghost" id="confirm-no" data-i18n="common.cancel">Cancel</button><button class="btn-primary" id="confirm-yes" data-i18n="ui.continue">Continue</button></div>
     </div>
   </div>
   <div class="modal-backdrop" id="editor-modal" hidden>
@@ -411,43 +413,43 @@
       <div class="modal-head">
         <h3 id="editor-title">New scenario</h3>
         <span class="spacer"></span>
-        <button class="btn-ghost sm" id="ed-from-tpl" title="Replace this new play with a copy of one of your ⭐ templates or a sample">⭐ Start from template…</button>
-        <button class="help-chip" data-help="editor" title="How to record a movement">？</button>
+        <button class="btn-ghost sm" id="ed-from-tpl" title="Replace this new play with a copy of one of your ⭐ templates or a sample" data-i18n-title="ui.replaceThisNewPlay" data-i18n="ui.startFromTemplate">⭐ Start from template…</button>
+        <button class="help-chip" data-help="editor" title="How to record a movement" data-i18n-title="ui.howToRecordA">？</button>
         <button class="modal-x" id="editor-close">✕</button>
       </div>
       <div class="modal-body">
         <div class="form-row">
-          <label>Title</label>
-          <input type="text" id="ed-title" placeholder="e.g. Quick post-up to the wing" />
+          <label data-i18n="ui.title2">Title</label>
+          <input type="text" id="ed-title" placeholder="e.g. Quick post-up to the wing" data-i18n-ph="ui.eGQuickPost" />
         </div>
         <div class="form-grid2">
           <div class="form-row">
-            <label>Situation</label>
+            <label data-i18n="ui.situation">Situation</label>
             <select id="ed-situation"></select>
           </div>
           <div class="form-row">
             <label>Phase</label>
             <select id="ed-phase">
               <option value="offense">Offense (we have the ball)</option>
-              <option value="defense">Defense</option>
+              <option value="defense" data-i18n="phase.defense">Defense</option>
             </select>
           </div>
           <div class="form-row">
-            <label>Who can see it <button class="help-chip" data-help="privacy" title="Confidentiality">？</button></label>
+            <label>Who can see it <button class="help-chip" data-help="privacy" title="Confidentiality" data-i18n-title="ui.confidentiality">？</button></label>
             <select id="ed-visibility">
               <option value="team">👥 Team — my team only</option>
-              <option value="public">🌐 Club — everyone in the club</option>
-              <option value="private">🔒 Private — only me (confidential tactic)</option>
+              <option value="public" data-i18n="ui.clubEveryoneInThe">🌐 Club — everyone in the club</option>
+              <option value="private" data-i18n="ui.privateOnlyMeConfidential">🔒 Private — only me (confidential tactic)</option>
             </select>
           </div>
         </div>
         <div class="form-row">
           <label>Description</label>
-          <input type="text" id="ed-desc" placeholder="One line: the idea of this play" />
+          <input type="text" id="ed-desc" placeholder="One line: the idea of this play" data-i18n-ph="ui.oneLineTheIdea" />
         </div>
 
         <details class="draft-accordion" id="draft-panel">
-          <summary>✍️ Draft from words — write the play, watch it appear <button class="help-chip" data-help="editor" title="How drafting works">？</button></summary>
+          <summary>✍️ Draft from words — write the play, watch it appear <button class="help-chip" data-help="editor" title="How drafting works" data-i18n-title="ui.howDraftingWorks">？</button></summary>
           <div class="draft-grid">
             <textarea id="draft-text" rows="6" spellcheck="false" placeholder="3 has the ball
 3 drives to the middle and 2 lifts to the wing
@@ -455,54 +457,54 @@
 6 posts up at 2m
 2 shoots far corner"></textarea>
             <div class="draft-feedback" id="draft-feedback">
-              <div class="draft-hint">Each line becomes one <strong>step</strong>. Use player numbers 1–6 (or “hole”, “point”, GK) with verbs like
-              <em>drives to the wing · passes to 2 · posts up · screens for 4 · shoots far corner</em>.
+              <div class="draft-hint">Each line becomes one <strong data-i18n="ui.step">step</strong>. Use player numbers 1–6 (or “hole”, “point”, GK) with verbs like
+              <em data-i18n="ui.drivesToTheWing">drives to the wing · passes to 2 · posts up · screens for 4 · shoots far corner</em>.
               What the board understood appears here — then drag anything to fine-tune.</div>
             </div>
           </div>
         </details>
 
         <details class="draft-accordion vid-accordion" id="video-panel">
-          <summary>🎬 Generate video — a shareable clip of this play <button class="help-chip" data-help="video" title="How video works">？</button></summary>
+          <summary>🎬 Generate video — a shareable clip of this play <button class="help-chip" data-help="video" title="How video works" data-i18n-title="ui.howVideoWorks">？</button></summary>
           <div class="vid-body">
             <div class="vid-actions">
-              <button class="btn-primary sm" id="vid-generate">Generate animated video</button>
-              <span class="cloud-status" id="vid-status">● animation (offline)</span>
+              <button class="btn-primary sm" id="vid-generate" data-i18n="ui.generateAnimatedVideo">Generate animated video</button>
+              <span class="cloud-status" id="vid-status" data-i18n="ui.animationOffline">● animation (offline)</span>
             </div>
             <div id="vid-out"></div>
             <details class="vid-photoreal" id="vid-photoreal-cfg">
               <summary>Photoreal (optional — needs a text-to-video provider)</summary>
               <div class="cloud-cfg">
-                <input type="text" id="vid-endpoint" placeholder="Provider endpoint URL" />
-                <input type="text" id="vid-key" placeholder="API key (optional)" />
+                <input type="text" id="vid-endpoint" placeholder="Provider endpoint URL" data-i18n-ph="ui.providerEndpointUrl" />
+                <input type="text" id="vid-key" placeholder="API key (optional)" data-i18n-ph="ui.apiKeyOptional" />
                 <button class="btn-ghost sm" id="vid-save-provider">Save</button>
               </div>
-              <button class="btn-ghost sm" id="vid-photoreal">Generate photoreal</button>
-              <p class="fa-note">Uses a paid text-to-video service you supply. Looks real but may not follow the tactics exactly — see <strong>docs/VIDEO.md</strong>.</p>
+              <button class="btn-ghost sm" id="vid-photoreal" data-i18n="ui.generatePhotoreal">Generate photoreal</button>
+              <p class="fa-note" data-i18n-html="ui.usesAPaidText">Uses a paid text-to-video service you supply. Looks real but may not follow the tactics exactly — see <strong>docs/VIDEO.md</strong>.</p>
             </details>
           </div>
         </details>
 
         <details class="draft-accordion cmd-accordion" id="cmd-panel">
-          <summary>⚡ Commands (audibles) — call a play, the board runs it <button class="help-chip" data-help="commands" title="How commands work">？</button></summary>
+          <summary>⚡ Commands (audibles) — call a play, the board runs it <button class="help-chip" data-help="commands" title="How commands work" data-i18n-title="ui.howCommandsWork">？</button></summary>
           <div class="cmd-body">
             <div class="cmd-target-row">
-              <label for="cmd-target">Apply to</label>
+              <label for="cmd-target" data-i18n="ui.applyTo">Apply to</label>
               <select id="cmd-target" class="focus-select">
                 <option value="team">Whole team</option>
-                <option value="1">Player 1</option>
-                <option value="2">Player 2</option>
-                <option value="3">Player 3</option>
-                <option value="4">Player 4</option>
-                <option value="5">Player 5</option>
-                <option value="6">Player 6</option>
-                <option value="GK">Goalkeeper</option>
+                <option value="1" data-i18n="ui.player1">Player 1</option>
+                <option value="2" data-i18n="ui.player2">Player 2</option>
+                <option value="3" data-i18n="ui.player3">Player 3</option>
+                <option value="4" data-i18n="ui.player4">Player 4</option>
+                <option value="5" data-i18n="ui.player5">Player 5</option>
+                <option value="6" data-i18n="ui.player6">Player 6</option>
+                <option value="GK" data-i18n="ui.goalkeeperShort">Goalkeeper</option>
               </select>
-              <span class="cmd-target-note">Team-wide moves affect the whole unit; single-player calls use this pick.</span>
+              <span class="cmd-target-note" data-i18n="ui.teamWideMovesAffect">Team-wide moves affect the whole unit; single-player calls use this pick.</span>
             </div>
             <div class="cmd-groups" id="cmd-groups"></div>
             <div class="cmd-groups cmd-mine" id="cmd-mine"></div>
-            <div class="cmd-info" id="cmd-info">Hover a command to see when to call it and why it works.</div>
+            <div class="cmd-info" id="cmd-info"></div>
           </div>
         </details>
 
@@ -512,28 +514,28 @@
 
         <div class="editor-frames">
           <div class="ef-left">
-            <span class="ef-label">Steps</span>
+            <span class="ef-label" data-i18n="view.steps">Steps</span>
             <div class="frame-chips" id="frame-chips"></div>
-            <button class="btn-ghost sm" id="add-frame">+ Capture step</button>
-            <button class="btn-ghost sm danger" id="del-frame">Delete step</button>
+            <button class="btn-ghost sm" id="add-frame" data-i18n="ui.captureStep">+ Capture step</button>
+            <button class="btn-ghost sm danger" id="del-frame" data-i18n="ui.deleteStep">Delete step</button>
           </div>
           <div class="ef-mid">
             <span class="ef-label">Waiting players</span>
             <div class="wait-btns">
-              <button class="btn-ghost sm" id="add-sub" title="Add a substitute waiting in the flying substitution area">+ Sub</button>
-              <button class="btn-ghost sm" id="add-exc" title="Add an excluded player in the exclusion / re-entry area">+ Excluded</button>
-              <button class="btn-ghost sm danger" id="del-wait" title="Remove last waiting player">– Remove</button>
+              <button class="btn-ghost sm" id="add-sub" title="Add a substitute waiting in the flying substitution area" data-i18n-title="ui.addASubstituteWaiting">+ Sub</button>
+              <button class="btn-ghost sm" id="add-exc" title="Add an excluded player in the exclusion / re-entry area" data-i18n-title="ui.addAnExcludedPlayer" data-i18n="ui.excluded">+ Excluded</button>
+              <button class="btn-ghost sm danger" id="del-wait" title="Remove last waiting player" data-i18n-title="ui.removeLastWaitingPlayer" data-i18n="ui.remove2">– Remove</button>
             </div>
-            <span class="ef-hint">Stack several players in the flying-sub or exclusion lane; drag them to reposition.</span>
+            <span class="ef-hint" data-i18n="ui.stackSeveralPlayersIn">Stack several players in the flying-sub or exclusion lane; drag them to reposition.</span>
           </div>
           <div class="ef-right">
             <span class="ef-label">Ball carrier</span>
             <select id="ball-carrier" class="focus-select"></select>
-            <label class="fa-check" id="ed-shot-wrap" title="Mark this step as the shot: the board draws the shot line and the target ring, and the keeper view opens on it">
-              <input type="checkbox" id="ed-shot" /> <span id="ed-shot-label">◎ This step is the shot</span>
+            <label class="fa-check" id="ed-shot-wrap" title="Mark this step as the shot: the board draws the shot line and the target ring, and the keeper view opens on it" data-i18n-title="ui.markThisStepAs">
+              <input type="checkbox" id="ed-shot" /> <span id="ed-shot-label" data-i18n="ui.thisStepIsThe">◎ This step is the shot</span>
             </label>
-            <select id="ed-shot-kind" class="focus-select" title="Shot or lob"><option value="shot">Shot</option><option value="lob">Lob</option></select>
-            <span class="ef-hint">Drag players & the ball, then “Capture step”. Build the movement step by step — it records and plays back.</span>
+            <select id="ed-shot-kind" class="focus-select" title="Shot or lob" data-i18n-title="ui.shotOrLob"><option value="shot" data-i18n="ui.shot">Shot</option><option value="lob" data-i18n="ui.lob2">Lob</option></select>
+            <span class="ef-hint" data-i18n="ui.dragPlayersTheBall">Drag players & the ball, then “Capture step”. Build the movement step by step — it records and plays back.</span>
           </div>
         </div>
 
@@ -545,9 +547,9 @@
       <div class="modal-foot">
         <button class="btn-ghost danger" id="ed-delete" hidden>Delete scenario</button>
         <div class="spacer"></div>
-        <button class="btn-ghost" id="ed-cancel">Cancel</button>
-        <button class="btn-ghost" id="ed-saveas" hidden title="Keep the original and save this adjusted version as a new movement">Save as new ⑂</button>
-        <button class="btn-primary" id="ed-save">Save scenario</button>
+        <button class="btn-ghost" id="ed-cancel" data-i18n="common.cancel">Cancel</button>
+        <button class="btn-ghost" id="ed-saveas" hidden title="Keep the original and save this adjusted version as a new movement" data-i18n-title="ui.keepTheOriginalAnd" data-i18n="ui.saveAsNew">Save as new ⑂</button>
+        <button class="btn-primary" id="ed-save" data-i18n="ui.saveScenario">Save scenario</button>
       </div>
     </div>
   </div>

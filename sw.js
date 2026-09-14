@@ -1,5 +1,5 @@
 /* Triibholz (THPLAY) service worker — offline app shell + fresh rule books. */
-const CACHE = 'triibholz-v60';
+const CACHE = 'triibholz-v61';
 const ASSETS = [
   './', './index.html',
   './css/styles.css',

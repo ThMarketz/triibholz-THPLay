@@ -1482,8 +1482,8 @@
   function onViewerFrame(t, step, segCount) {
     $('scrub').value = Math.round(t*1000);
     const total = (segCount!=null?segCount:(state.viewer?state.viewer.segCount():0)) + 1;
-    $('frame-label').textContent = `Step ${Math.min(total, step+1)} / ${total}`;
-    const fl = $('fsb-label'); if (fl) fl.textContent = `Step ${Math.min(total, step+1)} / ${total}`;
+    $('frame-label').textContent = T('ui.stepNofM', { n: Math.min(total, step+1), total });
+    const fl = $('fsb-label'); if (fl) fl.textContent = T('ui.stepNofM', { n: Math.min(total, step+1), total });
     updateMyCue(step, total);
     if (step !== lastGkStep) { lastGkStep = step; updateGkView(); }   // once per step, not per frame
     draw3dNow();   // the 3D camera redraws every tick — it's animating the same interpolated motion
@@ -1526,7 +1526,7 @@
     const st = step != null ? step : (state.viewer ? state.viewer.currentStep() : 0);
     const tot = total != null ? total : ((state.viewer ? state.viewer.segCount() : Math.max(0, scn.frames.length - 1)) + 1);
     const c = cueFor(scn, pos, st);
-    $('mc-who').textContent = `${pos === state.user.position ? 'You' : 'Player'} (${pos}) · step ${Math.min(tot, st + 1)} / ${tot}`;
+    $('mc-who').textContent = T('ui.cueWhoStep', { who: pos === state.user.position ? T('ui.cueYou') : T('role.player'), pos, n: Math.min(tot, st + 1), total: tot });
     $('mc-text').textContent = c.title; $('mc-note').textContent = c.note; $('mc-note').hidden = !c.note;
     box.hidden = false;
   }
@@ -2367,8 +2367,8 @@
     });
     // keep the normal transport in sync
     const total = adjust.scn.frames.length;
-    $('frame-label').textContent = `Step ${adjust.idx+1} / ${total}`;
-    { const fl = $('fsb-label'); if (fl) fl.textContent = `Step ${adjust.idx+1} / ${total}`; }
+    $('frame-label').textContent = T('ui.stepNofM', { n: adjust.idx+1, total });
+    { const fl = $('fsb-label'); if (fl) fl.textContent = T('ui.stepNofM', { n: adjust.idx+1, total }); }
     updateGkView(); draw3dNow();
     $('scrub').value = Math.round(stepT() * 1000);
     updateUndoBtn();
@@ -2477,7 +2477,7 @@
     });
     const sum = document.createElement('div');
     sum.className = 'draft-line sum';
-    sum.textContent = `→ ${r.steps} step${r.steps>1?'s':''} on the board — drag anything to fine-tune, then save.`;
+    sum.textContent = T(r.steps > 1 ? 'ui.draftStepsOnBoard' : 'ui.draftStepOnBoard', { n: r.steps });
     fb.appendChild(sum);
   }
   /* ---- Tactical commands (audibles): call a play, board runs it ---- */
@@ -2574,6 +2574,9 @@
         b.title = c.cue + (c.when ? `\n\n${T('ui.whenLabel')} ${c.when}` : '') + (c.why ? `\n${T('ui.whyLabel')} ${c.why}` : '');
         b.innerHTML = `<span class="cmd-ic">${c.icon||'▸'}</span><span class="cmd-name">${escapeHtml(c.name)}</span><span class="cmd-scope">${c.scope}</span>`;
         const info = $(containerId === 'as-groups' ? 'as-info' : 'cmd-info');
+        /* the resting hint: written here rather than via data-i18n, because the app fills this
+           panel with markup on hover and data-i18n would erase it on a language change */
+        if (info && !info.querySelector('strong')) info.textContent = T('ui.hoverACommandTo');
         const showInfo = () => { if (info) info.innerHTML = `<strong>${escapeHtml(c.name)}</strong> — ${escapeHtml(c.cue)}${c.when ? `<br><b>${T('ui.whenLabel')}</b> ${escapeHtml(c.when)}` : ''}${c.why ? `<br><b>${T('ui.whyLabel')}</b> ${escapeHtml(c.why)}` : ''}`; };
         b.onmouseenter = showInfo; b.onfocus = showInfo;
         b.onclick = () => { showInfo(); onPick(c.id); };
@@ -2836,7 +2839,7 @@
     state.situation = sc.situation; state.phase = sc.phase; buildSituationTabs(); refreshTabs();
     switchView('playbook'); openScenario(sc.id);
     const already = SHARE.isDuplicate(p, state.scenarios.filter(x => !x.shared));
-    $('shared-text').textContent = `🔗 Shared play “${sc.title}”${p.author ? ' from ' + p.author : ''}${already ? ' — already in your playbook' : ''}`;
+    $('shared-text').textContent = T('ui.sharedPlayNote', { title: sc.title }) + (p.author ? T('ui.sharedPlayFrom', { author: p.author }) : '') + (already ? T('ui.sharedPlayAlready') : '');
     $('shared-save').hidden = already; $('shared-banner').hidden = false;
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
   }

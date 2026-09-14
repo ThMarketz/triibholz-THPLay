@@ -1323,6 +1323,9 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
       ['film.planPanelNote', 'film.scoutVideo'],
       ['film.scoutThenShare', 'film.shareDebrief'],
       ['ui.nothingScheduledYet', 'ui.dateTbc'],
+      ['help.dashboard.t3', 'ui.template'],   // the help quoted ☆ Template while the button said ⭐ Vorlage
+      ['help.commands.s3', 'ui.saveAsNew'],   // both quoted the English label after the button was translated
+      ['ui.theBoardPausesAnd', 'ui.saveAsNew'],
     ];
     const bare = s => String(s == null ? '' : s).replace(/[^\p{L}\p{N} ]/gu, '').toLowerCase().trim();
     const quoteDrift = [];
@@ -1337,7 +1340,11 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
        translators helpfully translated the worked example, which produces a help page whose
        example silently fails to parse in the very box it is teaching. The example must stay
        English in every language. */
-    const DRAFT_EXAMPLES = ['help.editor.s2', 'help.share.s2', 'help.video.s1'];
+    /* Every place the app SHOWS an example of written steps. Two separate translation
+       rounds translated one of these into German, each time producing a worked example
+       that the box it is teaching cannot parse. */
+    const DRAFT_EXAMPLES = ['help.editor.s2', 'help.share.s2', 'help.video.s1',
+                            'ui.driveAndDump10', 'ui.aShareLinkJson', 'ui.aShareLinkA', 'ui.drivesToTheWing'];
     const notEnglish = [];
     DRAFT_EXAMPLES.forEach(k => langs.forEach(c => {
       const v = String(I.DICT[c][k] || '');
@@ -1345,6 +1352,26 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     }));
     ok('the Draft-from-words examples stay in English, the only grammar the parser knows' +
        (notEnglish.length ? ` — translated: ${notEnglish.join(', ')}` : ''), notEnglish.length === 0);
+
+    /* data-i18n assigns textContent, which ERASES every child element. Put it on the <p> that
+       contains <span id="pending-email"> and the app loses that span the moment apply() runs —
+       silently, and only on the screens a new player sees. Use data-i18n-html where the copy
+       owns its own <strong>, and never where the app writes into a child later.
+       This is checked against the live DOM, so it covers whatever index.html actually shipped. */
+    const erasesChildren = [...document.querySelectorAll('[data-i18n]')]
+      .filter(el => el.children.length > 0)
+      .map(el => `${el.getAttribute('data-i18n')} (would erase ${el.children.length})`);
+    ok('no data-i18n sits on an element that owns child elements' +
+       (erasesChildren.length ? ` — ${erasesChildren.slice(0, 4).join(', ')}` : ''), erasesChildren.length === 0);
+
+    /* Every key named in the markup must actually exist, or apply() writes the key name onto
+       the screen — which is how the pending gate briefly read "ui.yourAccessRequestIs". */
+    const named = [...document.querySelectorAll('[data-i18n],[data-i18n-html],[data-i18n-ph],[data-i18n-title]')]
+      .flatMap(el => ['data-i18n', 'data-i18n-html', 'data-i18n-ph', 'data-i18n-title']
+        .map(a => el.getAttribute(a)).filter(Boolean));
+    const unknown = [...new Set(named)].filter(k => I.DICT.en[k] === undefined);
+    ok(`all ${new Set(named).size} keys named in index.html exist in the dictionary` +
+       (unknown.length ? ` — missing: ${unknown.slice(0, 5).join(', ')}` : ''), unknown.length === 0);
 
     // the ratchet: this number may only ever go DOWN
     let regressed = [];
