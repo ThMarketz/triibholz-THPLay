@@ -71,6 +71,12 @@ const FILM = (() => {
   }
 
   /* ---------------- helpers ---------------- */
+  /* Translate. Called TX, not T: this file already uses `T` for three different locals
+     (the teams block, and the event type in two render loops), and a module-scope `const T`
+     next to a function-local one is the exact shape that threw a temporal-dead-zone error
+     and blanked a whole view the last time. app.js switchView() re-renders this view on a
+     language change, so reading the language at render time is enough. */
+  const TX = (k, vars) => (typeof I18N !== 'undefined') ? I18N.t(k, vars) : k;
   const esc = s => (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmt = t => { t = Math.max(0, Math.round(t||0)); return Math.floor(t/60) + ':' + String(t%60).padStart(2,'0'); };
   const parseT = s => { const m = String(s||'').trim().match(/^(\d+):(\d{1,2})$/); if (m) return (+m[1])*60 + (+m[2]); const n = parseFloat(s); return isNaN(n) ? 0 : n; };
@@ -165,8 +171,8 @@ const FILM = (() => {
         return;
       }
     } catch (e) {}
-    holder.innerHTML = `<div class="film-frame film-missing"><p>🎞 “${esc(session.source.name||'video')}” isn’t stored on this device.<br>Re-attach the file to keep analysing.</p>
-      ${ctx.canEdit?'<label class="btn-ghost sm film-reattach">Re-attach video<input type="file" accept="video/*" hidden></label>':''}</div>`;
+    holder.innerHTML = `<div class="film-frame film-missing"><p>${TX('film.videoNotStored', { name: esc(session.source.name||'video') })}</p>
+      ${ctx.canEdit?`<label class="btn-ghost sm film-reattach">${TX('film.reattachVideo')}<input type="file" accept="video/*" hidden></label>`:''}</div>`;
     const inp = holder.querySelector('input[type=file]');
     if (inp) inp.onchange = async () => { if (inp.files[0]) { await putVideo('film-'+session.id, inp.files[0]).catch(()=>{}); openSession(session.id); } };
   }
@@ -180,21 +186,21 @@ const FILM = (() => {
       const byZone = {};
       ga.forEach(e => { if (e.zone) byZone[e.zone] = (byZone[e.zone]||0)+1; });
       const top = Object.entries(byZone).sort((a,b)=>b[1]-a[1])[0];
-      if (top) out.push(`🥅 <strong>${top[1]} of ${ga.length}</strong> conceded goals went <strong>${top[0]}</strong> — ${ZONE_HINTS[top[0]]}`);
+      if (top) out.push(TX('film.insightConcededZone', { n: top[1], total: ga.length, zone: top[0], hint: ZONE_HINTS[top[0]] }));
       const bySit = {};
       ga.forEach(e => { if (e.situation) bySit[e.situation] = (bySit[e.situation]||0)+1; });
       const topSit = Object.entries(bySit).sort((a,b)=>b[1]-a[1])[0];
-      if (topSit && topSit[1] > 1) out.push(`📊 <strong>${topSit[1]}</strong> conceded in <strong>${topSit[0]}</strong> situations — that phase is this week’s training block.`);
+      if (topSit && topSit[1] > 1) out.push(TX('film.insightConcededSituation', { n: topSit[1], situation: topSit[0] }));
     }
     const gf = s.events.filter(e=>e.type==='goal-for');
     if (gf.length) {
       const z = {}; gf.forEach(e=>{ if(e.zone) z[e.zone]=(z[e.zone]||0)+1; });
       const top = Object.entries(z).sort((a,b)=>b[1]-a[1])[0];
-      if (top) out.push(`⚽ Our goals favour <strong>${top[0]}</strong> (${top[1]}/${gf.length}) — keep feeding that finish, but build a second option.`);
+      if (top) out.push(TX('film.insightGoalsFavour', { zone: top[0], n: top[1], total: gf.length }));
     }
     const counters = s.events.filter(e=>e.verdict==='wrong' && e.counter);
-    if (counters.length) out.push(`🎯 Correction list from the video: ` + counters.map(e=>`<em>${esc(e.counter)}</em>`).slice(0,3).join(' · '));
-    if (!out.length) out.push('Tag a few moments (goals, shots, exclusions) and the analysis appears here.');
+    if (counters.length) out.push(TX('film.correctionList') + counters.map(e=>`<em>${esc(e.counter)}</em>`).slice(0,3).join(' · '));
+    if (!out.length) out.push(TX('film.insightsEmpty'));
     return out;
   }
 
@@ -279,8 +285,8 @@ const FILM = (() => {
       `<span class="fa-bar" style="height:${Math.round(5 + t.norm * 34)}px" title="${fmt(res.times[t.i])} · ${Math.round(t.norm * 100)}%"></span>`).join('');
     const chips = res.peaks.map(p =>
       `<button class="fa-chip" data-fa-t="${res.times[p.i].toFixed(1)}">▶ ${fmt(res.times[p.i])}</button>`).join('');
-    out.innerHTML = `<div class="fa-timeline" title="Motion across the match">${bars}</div>
-      <div class="fa-peaks"><span class="ef-label">Busy moments (${res.peaks.length}) — tap to jump &amp; pre-fill the timestamp</span>
+    out.innerHTML = `<div class="fa-timeline" title="${TX('film.motionAcrossMatch')}">${bars}</div>
+      <div class="fa-peaks"><span class="ef-label">${TX('film.busyMoments', { n: res.peaks.length })}</span>
       <div class="fa-chips">${chips}</div></div>`;
     out.querySelectorAll('[data-fa-t]').forEach(b => b.onclick = () => {
       const t = parseFloat(b.dataset.faT);
@@ -291,15 +297,15 @@ const FILM = (() => {
   async function runAutoAnalyse(btn) {
     const v = root && root.querySelector('#film-video');
     const out = root && root.querySelector('#film-auto-out');
-    if (!v || !v.src) { ctx.toast('Re-attach the uploaded video first'); return; }
-    btn.disabled = true; if (out) out.innerHTML = '<div class="muted">Scanning the footage for motion… ⏳</div>';
+    if (!v || !v.src) { ctx.toast(TX('film.reattachFirst')); return; }
+    btn.disabled = true; if (out) out.innerHTML = `<div class="muted">${TX('film.scanningMotion')}</div>`;
     try {
       if (v.readyState < 1) await new Promise(r => { v.addEventListener('loadedmetadata', r, { once: true }); setTimeout(r, 4000); });
       const res = await scanVideo(v, 36);
       renderAuto(res);
-      ctx.toast(`Found ${res.peaks.length} busy moment${res.peaks.length !== 1 ? 's' : ''}`);
+      ctx.toast(TX('film.foundBusyMoments', { n: res.peaks.length }));
     } catch (e) {
-      if (out) out.innerHTML = `<div class="muted">Couldn’t analyse the pixels${/tainted/.test(e.message) ? ' — a cross-origin (YouTube) video can’t be scanned; use an uploaded file' : (/duration/.test(e.message) ? ' — the video didn’t report a duration yet, try again in a second' : '')}.</div>`;
+      if (out) out.innerHTML = `<div class="muted">${TX('film.couldntAnalysePixels', { why: /tainted/.test(e.message) ? TX('film.whyTainted') : (/duration/.test(e.message) ? TX('film.whyNoDuration') : '') })}</div>`;
     } finally { btn.disabled = false; }
   }
 
@@ -310,7 +316,7 @@ const FILM = (() => {
   let vFieldConf = 0, vFieldMode = 'none';
   function setFieldStatus() {
     const c = root && root.querySelector('#field-status'); if (!c) return;
-    c.textContent = vHomography ? (vFieldMode === 'auto' ? `● field found · ${Math.round(vFieldConf * 100)}%` : '● field: clicked corners') : '● field: not set';
+    c.textContent = vHomography ? (vFieldMode === 'auto' ? TX('film.fieldFoundPct', { pct: Math.round(vFieldConf * 100) }) : TX('film.fieldClickedCorners')) : TX('film.fieldNotSet');
     c.className = 'cloud-status ' + (vHomography ? 'cloud' : 'offline');
     const posBtn = root.querySelector('#film-scanpos'); if (posBtn) posBtn.disabled = !vHomography;
   }
@@ -323,21 +329,21 @@ const FILM = (() => {
   function autoField() {
     const v = root && root.querySelector('#film-video');
     const out = root && root.querySelector('#film-track-out');
-    if (!v || !out) { ctx.toast('Re-attach the uploaded video first'); return; }
-    if (typeof FIELD === 'undefined') { ctx.toast('Field detection module missing'); return; }
+    if (!v || !out) { ctx.toast(TX('film.reattachFirst')); return; }
+    if (typeof FIELD === 'undefined') { ctx.toast(TX('film.fieldModuleMissing')); return; }
     const Wc = 320, Hc = 180; vCalibW = Wc; vCalibH = Hc;
     const data = grabFrame(Wc, Hc);
-    if (!data) { out.innerHTML = '<div class="muted">Could not read a frame from the video (try pausing on a wide shot, then press again).</div>'; return; }
+    if (!data) { out.innerHTML = `<div class="muted">${TX('film.couldNotReadFrame')}</div>`; return; }
     const det = FIELD.detect(data, Wc, Hc, { step: 2 });
     if (!det.found) {
       vHomography = null; vFieldMode = 'none'; setFieldStatus();
-      out.innerHTML = `<div class="muted">Field not found in this frame — ${esc(det.why || 'no pool edges')} (water in view: ${Math.round(det.coverage * 100)}%). Scrub to a wide shot and try again, or click the corners yourself.</div>`;
+      out.innerHTML = `<div class="muted">${TX('film.fieldNotFound', { why: esc(det.why || 'no pool edges'), pct: Math.round(det.coverage * 100) })}</div>`;
       return;
     }
     vCorners = det.corners.map(c => ({ x: c.x, y: c.y })); vHomography = det.H; vFieldConf = det.confidence; vFieldMode = 'auto';
     setFieldStatus();
     out.innerHTML = `<div class="cal-wrap"><canvas id="cal-canvas" width="${Wc}" height="${Hc}"></canvas>
-      <div class="cal-hint" id="cal-hint">✓ Field found (${Math.round(det.confidence * 100)}% sure, ${Math.round(det.coverage * 100)}% water in view). Drag a corner to nudge it — or press <strong>Track positions</strong> / <strong>Scout this video</strong>.</div></div>`;
+      <div class="cal-hint" id="cal-hint">${TX('film.fieldFoundHint', { sure: Math.round(det.confidence * 100), water: Math.round(det.coverage * 100) })}</div></div>`;
     const cv = out.querySelector('#cal-canvas'), g = cv.getContext('2d');
     const draw = () => { try { g.drawImage(v, 0, 0, Wc, Hc); g.strokeStyle = '#1fc0d4'; g.lineWidth = 2; g.beginPath(); vCorners.forEach((c, i) => i ? g.lineTo(c.x, c.y) : g.moveTo(c.x, c.y)); g.closePath(); g.stroke(); vCorners.forEach(c => { g.fillStyle = '#1fc0d4'; g.strokeStyle = '#08131b'; g.beginPath(); g.arc(c.x, c.y, 5, 0, 7); g.fill(); g.stroke(); }); } catch (e) {} };
     draw();
@@ -345,19 +351,19 @@ const FILM = (() => {
     const toLocal = ev => { const r = cv.getBoundingClientRect(); return { x: (ev.clientX - r.left) * (Wc / r.width), y: (ev.clientY - r.top) * (Hc / r.height) }; };
     cv.onpointerdown = ev => { const p = toLocal(ev); dragI = vCorners.findIndex(c => Math.hypot(c.x - p.x, c.y - p.y) < 14); if (dragI >= 0) cv.setPointerCapture(ev.pointerId); };
     cv.onpointermove = ev => { if (dragI < 0) return; const p = toLocal(ev); vCorners[dragI] = { x: Math.max(0, Math.min(Wc, p.x)), y: Math.max(0, Math.min(Hc, p.y)) }; draw(); };
-    cv.onpointerup = () => { if (dragI < 0) return; dragI = -1; vHomography = VISION.solveHomography(vCorners, VISION.boardCorners()); vFieldMode = 'nudged'; setFieldStatus(); const h = out.querySelector('#cal-hint'); if (h) h.innerHTML = '✓ Corners adjusted — field set from your corners.'; };
+    cv.onpointerup = () => { if (dragI < 0) return; dragI = -1; vHomography = VISION.solveHomography(vCorners, VISION.boardCorners()); vFieldMode = 'nudged'; setFieldStatus(); const h = out.querySelector('#cal-hint'); if (h) h.innerHTML = TX('film.cornersAdjusted'); };
   }
   function startCalibrate() {
     const v = root && root.querySelector('#film-video');
     const out = root && root.querySelector('#film-track-out');
-    if (!v || !out) { ctx.toast('Re-attach the uploaded video first'); return; }
+    if (!v || !out) { ctx.toast(TX('film.reattachFirst')); return; }
     const Wc = 320, Hc = 180; vCalibW = Wc; vCalibH = Hc; vCorners = [];
     out.innerHTML = `<div class="cal-wrap"><canvas id="cal-canvas" width="${Wc}" height="${Hc}"></canvas>
-      <div class="cal-hint" id="cal-hint">Click corner 1 of 4: <strong>top-left</strong> of the field of play</div></div>`;
+      <div class="cal-hint" id="cal-hint">${TX('film.clickCorner', { n: 1, corner: TX('film.cornerTopLeft') })}</div></div>`;
     const cv = out.querySelector('#cal-canvas');
     const g = cv.getContext('2d');
     try { g.drawImage(v, 0, 0, Wc, Hc); } catch (e) {}
-    const labels = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
+    const labels = [TX('film.cornerTopLeft'), TX('film.cornerTopRight'), TX('film.cornerBottomRight'), TX('film.cornerBottomLeft')];
     cv.onclick = ev => {
       if (vCorners.length >= 4) return;
       const r = cv.getBoundingClientRect();
@@ -367,13 +373,13 @@ const FILM = (() => {
       try { g.fillStyle = '#1fc0d4'; g.strokeStyle = '#08131b'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 4.5, 0, 7); g.fill(); g.stroke(); } catch (e) {}
       const hint = out.querySelector('#cal-hint');
       if (vCorners.length < 4) {
-        hint.innerHTML = `Click corner ${vCorners.length + 1} of 4: <strong>${labels[vCorners.length]}</strong> of the field of play`;
+        hint.innerHTML = TX('film.clickCorner', { n: vCorners.length + 1, corner: labels[vCorners.length] });
       } else {
         vHomography = VISION.solveHomography(vCorners, VISION.boardCorners());
         const posBtn = root.querySelector('#film-scanpos');
         vFieldMode = 'manual'; setFieldStatus();
-        if (vHomography) { hint.innerHTML = '✓ Calibrated — now press <strong>“Track positions”</strong>.'; if (posBtn) posBtn.disabled = false; }
-        else hint.textContent = 'Calibration failed — pick four distinct corners and retry.';
+        if (vHomography) { hint.innerHTML = TX('film.calibratedNowPress'); if (posBtn) posBtn.disabled = false; }
+        else hint.textContent = TX('film.calibrationFailed');
       }
     };
   }
@@ -416,30 +422,30 @@ const FILM = (() => {
       const con = TRACK.consolidate(perFrame, { minHits: 2, maxAge: 4, gate: Math.max(Wc, Hc) / 8 });
       last = VISION.toBoardFrame(con, vHomography).frame;
       seen = con.white.length + con.dark.length;
-      meta = `Tier 2 · ${seen} stable player${seen === 1 ? '' : 's'} tracked over ${winSec.toFixed(1)}s from ${fmt(start)} · occlusion-bridged`;
+      meta = TX('film.tier2Meta', { n: seen, secs: winSec.toFixed(1), time: fmt(start) });
     } else {
       seen = Object.keys(last.att).length + Object.keys(last.def).length;
-      meta = `Tier 1 · ${seen} caps in the final frame`;
+      meta = TX('film.tier1Meta', { n: seen });
     }
     return { frame: last, heat, gx, gy, meta, start, players: seen };
   }
   function scanErr(e) {
-    return /tainted/.test(e.message) ? ' — a cross-origin (YouTube) video can’t be scanned; use an uploaded file'
-      : (/duration/.test(e.message) ? ' — the video didn’t report a duration yet, try again in a second' : '');
+    return /tainted/.test(e.message) ? TX('film.whyTainted')
+      : (/duration/.test(e.message) ? TX('film.whyNoDuration') : '');
   }
   async function trackPositions(btn) {
     const v = root && root.querySelector('#film-video');
     const out = root && root.querySelector('#film-track-out');
-    if (!vHomography) { ctx.toast('Calibrate the pool first'); return; }
-    if (!v || !v.src) { ctx.toast('Re-attach the uploaded video first'); return; }
+    if (!vHomography) { ctx.toast(TX('film.calibrateFirst')); return; }
+    if (!v || !v.src) { ctx.toast(TX('film.reattachFirst')); return; }
     const hardened = !!(root.querySelector('#film-hardened') && root.querySelector('#film-hardened').checked && typeof TRACK !== 'undefined');
-    btn.disabled = true; if (out) out.innerHTML = '<div class="muted">Reading positions from the footage… ⏳</div>';
+    btn.disabled = true; if (out) out.innerHTML = `<div class="muted">${TX('film.readingPositions')}</div>`;
     try {
       const r = await scanPositions(v, hardened);
       renderTrack(r.frame, r.heat, r.gx, r.gy, r.meta);
-      ctx.toast('Positions mapped onto the board');
+      ctx.toast(TX('film.positionsMapped'));
     } catch (e) {
-      if (out) out.innerHTML = `<div class="muted">Couldn’t read positions${scanErr(e)}.</div>`;
+      if (out) out.innerHTML = `<div class="muted">${TX('film.couldntReadPositions', { why: scanErr(e) })}</div>`;
     } finally { btn.disabled = false; }
   }
 
@@ -451,16 +457,16 @@ const FILM = (() => {
   function updateCloudStatus() {
     const chip = root && root.querySelector('#cloud-status'); if (!chip || typeof ANALYSIS === 'undefined') return;
     const st = ANALYSIS.status();
-    chip.textContent = st.mode === 'cloud' ? `☁️ Cloud: ${st.endpoint.replace(/^https?:\/\//, '').split('/')[0]}` : '● On-device (offline)';
+    chip.textContent = st.mode === 'cloud' ? TX('film.cloudChip', { host: st.endpoint.replace(/^https?:\/\//, '').split('/')[0] }) : TX('film.onDeviceOffline');
     chip.className = 'cloud-status ' + st.mode;
   }
   async function runCloudAnalysis(btn) {
     const v = root && root.querySelector('#film-video');
     const out = root && root.querySelector('#cloud-out');
     if (typeof ANALYSIS === 'undefined') return;
-    if (!vHomography) { ctx.toast('Calibrate the pool first (Position tracking)'); return; }
-    if (!v || !v.src) { ctx.toast('Re-attach the uploaded video first'); return; }
-    btn.disabled = true; if (out) out.innerHTML = '<div class="muted">Analysing… ⏳</div>';
+    if (!vHomography) { ctx.toast(TX('film.calibrateFirstPos')); return; }
+    if (!v || !v.src) { ctx.toast(TX('film.reattachFirst')); return; }
+    btn.disabled = true; if (out) out.innerHTML = `<div class="muted">${TX('film.analysing')}</div>`;
     try {
       const startT = v.currentTime || 0;
       const job = { videoRef: cur.id, calibration: { H: vHomography }, fps: 0, meta: { title: cur.title } };
@@ -489,9 +495,9 @@ const FILM = (() => {
       renderReview(result);
     } catch (e) {
       const msg = /cloud-http|cloud-error|Failed to fetch|NetworkError/.test(e.message)
-        ? 'the cloud endpoint didn’t respond — check the URL, or clear it to use the on-device engine'
-        : ('couldn’t analyse' + scanErr(e));
-      if (out) out.innerHTML = `<div class="muted">Analysis failed — ${msg}.</div>`;
+        ? TX('film.cloudNoResponse')
+        : TX('film.couldntAnalyseWhy', { why: scanErr(e) });
+      if (out) out.innerHTML = `<div class="muted">${TX('film.analysisFailed', { msg })}</div>`;
     } finally { btn.disabled = false; }
   }
   /* ---- Auto-scout: whole video → possessions → tactics → summary → playbook ---- */
@@ -500,38 +506,38 @@ const FILM = (() => {
   async function runAutoScout(btn) {
     const out = root && root.querySelector('#scout-out');
     const movingCam = !!((root.querySelector('#film-moving') || {}).checked);
-    if (!vHomography && !movingCam) { ctx.toast('Find the field first (🎯 Find the field, or click the corners)'); return; }
+    if (!vHomography && !movingCam) { ctx.toast(TX('film.findFieldFirst')); return; }
     const base = scoutBase(); const us = (root.querySelector('#scout-us') || {}).value || 'white';
-    btn.disabled = true; setScoutStatus('● uploading…', 'cloud');
-    if (out) out.innerHTML = '<div class="muted">Uploading the video to the analysis backend… ⏳</div>';
+    btn.disabled = true; setScoutStatus(TX('film.statusUploading'), 'cloud');
+    if (out) out.innerHTML = `<div class="muted">${TX('film.uploadingVideo')}</div>`;
     try {
       const blob = await getVideo('film-' + cur.id); if (!blob) throw new Error('video-missing');
       let health = null; try { health = await (await fetch(base + '/api/health')).json(); } catch (e) { throw new Error('backend-unreachable'); }
       if (health && health.ffmpeg === false) throw new Error('backend-no-ffmpeg');
       const mb = blob.size / 1048576;
       if (health && health.maxUploadMB && mb > health.maxUploadMB) throw new Error(`too-large:${Math.round(mb)}:${health.maxUploadMB}`);
-      const videoRef = await uploadWithProgress(base + '/api/upload', blob, pct => { setScoutStatus(`● uploading ${pct}%`, 'cloud'); if (out) out.innerHTML = `<div class="muted">Uploading ${Math.round(mb)} MB to the analysis backend… ${pct}%</div>`; });
+      const videoRef = await uploadWithProgress(base + '/api/upload', blob, pct => { setScoutStatus(TX('film.statusUploadingPct', { pct }), 'cloud'); if (out) out.innerHTML = `<div class="muted">${TX('film.uploadingMb', { mb: Math.round(mb), pct })}</div>`; });
       const job = await fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, calibration: { H: vHomography, mode: (root.querySelector('#film-moving') || {}).checked ? 'auto' : 'fixed', minConf: 0.4 }, scout: true, us, opts: { fps: 6, chunkSec: 20 } }) });
       if (!job.ok) throw new Error('job-' + job.status);
       const { id } = await job.json();
-      setScoutStatus('● scouting…', 'cloud'); if (out) out.innerHTML = `<div class="muted">Scouting the whole video… ⏳ (job ${esc(id)}). A full match can take a few minutes.</div>`;
+      setScoutStatus(TX('film.statusScouting'), 'cloud'); if (out) out.innerHTML = `<div class="muted">${TX('film.scoutingWholeVideo', { id: esc(id) })}</div>`;
       let st = 'queued', tries = 0, j;
       while (st !== 'done' && st !== 'error' && tries++ < 900) { await new Promise(r => setTimeout(r, 2000)); j = await (await fetch(base + '/api/jobs/' + id)).json(); st = j.status; }
       if (st !== 'done') throw new Error(j && j.error ? 'scout-' + j.error : 'timed-out');
       const result = await (await fetch(base + '/api/jobs/' + id + '/result')).json();
       renderScout(result.scout, result);
-      setScoutStatus('● done', 'cloud'); ctx.toast('Scouting report ready');
+      setScoutStatus(TX('film.statusDone'), 'cloud'); ctx.toast(TX('film.scoutingReportReady'));
     } catch (e) {
-      setScoutStatus('● failed', 'offline');
+      setScoutStatus(TX('film.statusFailed'), 'offline');
       const m = String(e.message || e); let why;
-      if (/^too-large:/.test(m)) { const [, got, max] = m.split(':'); why = `this video is ${got} MB and the backend accepts up to ${max} MB — trim the match (or raise MAX_UPLOAD on the backend)`; }
-      else if (m === 'upload-413') why = 'the backend refused the upload as too large (raise MAX_UPLOAD on the backend)';
-      else if (m === 'backend-unreachable' || /Failed to fetch|NetworkError/.test(m)) why = 'the analysis backend at ' + base + ' didn’t respond — start it with “docker compose up -d analysis”; on a phone/other device use your Mac’s LAN address instead of localhost';
-      else if (m === 'upload-network') why = 'the upload was cut off before it finished — check the connection to ' + base + ' and try again';
-      else if (m === 'backend-no-ffmpeg') why = 'the backend has no ffmpeg, so it cannot decode video (use the Docker image)';
-      else if (m === 'video-missing') why = 'the video file is no longer in this browser’s storage — upload it again';
+      if (/^too-large:/.test(m)) { const [, got, max] = m.split(':'); why = TX('film.whyTooLarge', { got, max }); }
+      else if (m === 'upload-413') why = TX('film.whyUpload413');
+      else if (m === 'backend-unreachable' || /Failed to fetch|NetworkError/.test(m)) why = TX('film.whyBackendUnreachable', { base });
+      else if (m === 'upload-network') why = TX('film.whyUploadCut', { base });
+      else if (m === 'backend-no-ffmpeg') why = TX('film.whyNoFfmpeg');
+      else if (m === 'video-missing') why = TX('film.whyVideoMissing');
       else why = m;
-      if (out) out.innerHTML = `<div class="muted">Auto-scout failed — ${esc(why)}.</div>`;
+      if (out) out.innerHTML = `<div class="muted">${TX('film.autoScoutFailed', { why: esc(why) })}</div>`;
     } finally { btn.disabled = false; }
   }
   function uploadWithProgress(url, blob, onPct) {
@@ -548,30 +554,30 @@ const FILM = (() => {
   function renderScout(sc, result) {
     const out = root && root.querySelector('#scout-out'); if (!out) return;
     lastScout = { sc, result, sessionId: cur && cur.id };
-    if (!sc || !sc.possessions) { const fm0 = result && result.meta && result.meta.field; out.innerHTML = `<div class="muted">No possessions could be read from this video${fm0 && fm0.mode === 'auto' ? ` — the field was readable in ${fm0.readPct}% of it` : ''} — check the cap colours${fm0 && fm0.mode === 'auto' && fm0.readPct < 50 ? ', or click the corners yourself on a wide shot' : ''}.</div>`; return; }
+    if (!sc || !sc.possessions) { const fm0 = result && result.meta && result.meta.field; out.innerHTML = `<div class="muted">${TX('film.noPossessions', { readable: fm0 && fm0.mode === 'auto' ? TX('film.fieldReadableIn', { pct: fm0.readPct }) : '', tip: fm0 && fm0.mode === 'auto' && fm0.readPct < 50 ? TX('film.orClickCorners') : '' })}</div>`; return; }
     const fm = result && result.meta && result.meta.field;
-    const meta = (result && result.meta ? ` · ${Math.round(result.meta.seconds)}s analysed` : '') + (fm && fm.mode === 'auto' ? ` · 📷 field tracked automatically: ${fm.readPct}% of the video readable${fm.unreadSeconds ? `, ${fm.unreadSeconds}s unread` : ''}` : fm && fm.mode === 'fixed' ? ' · fixed camera' : '');
-    const teamRows = Object.keys(sc.profile || {}).map(k => { const t = sc.profile[k]; return `<div class="scout-team"><strong>${k === 'att' ? 'White caps' : 'Blue caps'}</strong> — ${t.possessions} possessions · ${Math.round(t.shotRate * 100)}% shots · ${t.avgPasses} passes/poss
-      <div class="scout-tend">${(t.tendencies || []).slice(0, 4).map(x => `<span class="tag">${esc(x.name)} ${x.pct}%</span>`).join('') || '<span class="muted">no recognised tactics yet</span>'}</div></div>`; }).join('');
+    const meta = (result && result.meta ? TX('film.metaSecondsAnalysed', { n: Math.round(result.meta.seconds) }) : '') + (fm && fm.mode === 'auto' ? TX('film.metaFieldTracked', { pct: fm.readPct, unread: fm.unreadSeconds ? TX('film.metaUnreadSeconds', { n: fm.unreadSeconds }) : '' }) : fm && fm.mode === 'fixed' ? TX('film.metaFixedCamera') : '');
+    const teamRows = Object.keys(sc.profile || {}).map(k => { const t = sc.profile[k]; return `<div class="scout-team"><strong>${k === 'att' ? TX('film.whiteCaps') : TX('film.blueCaps')}</strong> — ${TX('film.teamRowStats', { poss: t.possessions, rate: Math.round(t.shotRate * 100), passes: t.avgPasses })}
+      <div class="scout-tend">${(t.tendencies || []).slice(0, 4).map(x => `<span class="tag">${esc(x.name)} ${x.pct}%</span>`).join('') || `<span class="muted">${TX('film.noRecognisedTactics')}</span>`}</div></div>`; }).join('');
     out.innerHTML = `<div class="scout-box">
       ${teamAnalysisHtml(sc, result)}
-      <details class="scout-more"><summary>Go further — scouting summary, plan vs reality, every attack, share</summary>
-      <div class="ef-label" style="margin-top:8px">Scouting summary — ${sc.possessions} possessions${meta}</div>
+      <details class="scout-more"><summary>${TX('film.goFurther')}</summary>
+      <div class="ef-label" style="margin-top:8px">${TX('film.scoutingSummary', { n: sc.possessions, meta })}</div>
       <div class="scout-summary">${(sc.summary || []).map(l => `<div class="ins-row">${esc(l)}</div>`).join('')}</div>
       ${teamRows}
-      <div class="ef-label" style="margin-top:10px">Recognised plays (${sc.playbook.length})</div>
-      <div class="scout-plays">${sc.playbook.map((p, i) => `<div class="scout-play"><span class="sp-t">${esc(p.title)}</span><span class="muted">${esc(p.situation)} · ${Math.round(p.confidence * 100)}%${p.needsReview ? ' · needs review' : ''}</span><span class="muted">${esc(p.description)}</span></div>`).join('') || '<div class="muted">No play reached the confidence bar (50%).</div>'}</div>
-      ${sc.playbook.length ? `<button class="btn-primary sm" id="scout-add">＋ Add ${sc.playbook.length} play${sc.playbook.length > 1 ? 's' : ''} to my playbook</button>` : ''}
-      <p class="fa-note">Every play stays editable; plays under 80% confidence are marked <em>needs review</em>. Accuracy depends on what the detector sees.</p>
+      <div class="ef-label" style="margin-top:10px">${TX('film.recognisedPlays', { n: sc.playbook.length })}</div>
+      <div class="scout-plays">${sc.playbook.map((p, i) => `<div class="scout-play"><span class="sp-t">${esc(p.title)}</span><span class="muted">${esc(p.situation)} · ${Math.round(p.confidence * 100)}%${p.needsReview ? TX('film.needsReviewSuffix') : ''}</span><span class="muted">${esc(p.description)}</span></div>`).join('') || `<div class="muted">${TX('film.noPlayReachedBar')}</div>`}</div>
+      ${sc.playbook.length ? `<button class="btn-primary sm" id="scout-add">${TX('film.addPlaysToPlaybook', { n: sc.playbook.length })}</button>` : ''}
+      <p class="fa-note">${TX('film.playsEditableNote')}</p>
       ${planReportHtml(sc)}
       ${attacksHtml(sc, result)}
-      ${ctx.canEdit ? `<div class="scout-share"><button class="btn-primary sm" id="scout-share">📣 Share debrief with the team</button><span class="muted" id="scout-share-status"> — plan vs reality, every attack as a clip + board play, open for comments</span></div>` : ''}
+      ${ctx.canEdit ? `<div class="scout-share"><button class="btn-primary sm" id="scout-share">${TX('film.shareDebrief')}</button><span class="muted" id="scout-share-status">${TX('film.shareDebriefHint')}</span></div>` : ''}
       </details>
     </div>`;
     wireAttacks(out, sc, result); wireTeamAnalysis(out, sc, result);
     const share = out.querySelector('#scout-share'); if (share) share.onclick = () => shareDebrief(share, sc, result);
     const add = out.querySelector('#scout-add');
-    if (add) add.onclick = () => { if (typeof ctx.addPlays === 'function') { const n = ctx.addPlays(sc.playbook, cur.title); ctx.toast(`${n} plays added to the playbook`); add.disabled = true; } };
+    if (add) add.onclick = () => { if (typeof ctx.addPlays === 'function') { const n = ctx.addPlays(sc.playbook, cur.title); ctx.toast(TX('film.playsAdded', { n })); add.disabled = true; } };
   }
 
   /* ---------- Team analysis by situation — the default view ----------
@@ -580,32 +586,32 @@ const FILM = (() => {
   function teamAnalysisHtml(sc, result) {
     const T = sc.teams; if (!T) return '';
     const us = (root.querySelector('#scout-us') || {}).value || 'white';
-    const label = k => (k === 'att' ? 'White caps' : 'Blue caps') + ((k === 'att') === (us === 'white') ? ' · us' : ' · opponent');
+    const label = k => (k === 'att' ? 'White caps' : 'Blue caps') + ((k === 'att') === (us === 'white') ? TX('film.labelUs') : TX('film.labelOpponent'));
     const hasVideo = !!(result && result.meta && result.meta.videoRef);
     const heatGrid = heat => { const H = {}; (heat || []).forEach(h => H[h.zone] = h.pct); const cell = (z, name) => `<span class="hz ${H[z] ? 'on' : ''}" style="--p:${(H[z] || 0) / 100}" title="${name}: ${H[z] || 0}%">${H[z] ? H[z] + '%' : ''}</span>`;
-      return `<div class="heat" title="Where the ball lived (share of ball zones)">${cell('LW', 'left wing')}${cell('LP', 'left post')}<span class="hz goal">🥅</span>${cell('PT', 'point')}${cell('HOLE', '2 m')}<span class="hz goal"></span>${cell('RW', 'right wing')}${cell('RP', 'right post')}<span class="hz goal"></span></div>`; };
+      return `<div class="heat" title="${TX('film.whereBallLived')}">${cell('LW', TX('film.zoneLeftWing'))}${cell('LP', TX('film.zoneLeftPost'))}<span class="hz goal">🥅</span>${cell('PT', TX('film.zonePoint'))}${cell('HOLE', '2 m')}<span class="hz goal"></span>${cell('RW', TX('film.zoneRightWing'))}${cell('RP', TX('film.zoneRightPost'))}<span class="hz goal"></span></div>`; };
     const card = (k, sit, b) => `<div class="ta-card">
-        <div class="ta-head"><strong>${esc(b.label)}</strong> <span class="muted">${b.possessions} possession${b.possessions === 1 ? '' : 's'} · ${b.shots} shot${b.shots === 1 ? '' : 's'} (${Math.round(b.shotRate * 100)}%) · ${b.goals} goal${b.goals === 1 ? '' : 's'} · ${b.avgPasses} passes · ${b.avgDuration}s${b.unread ? ` · ${b.unread} unread` : ''}</span></div>
+        <div class="ta-head"><strong>${esc(b.label)}</strong> <span class="muted">${TX('film.taCardStats', { n: b.possessions, shots: b.shots, rate: Math.round(b.shotRate * 100), goals: b.goals, passes: b.avgPasses, dur: b.avgDuration, unread: b.unread ? TX('film.unreadCount', { n: b.unread }) : '' })}</span></div>
         <div class="ta-body">
-          <div class="ta-pats">${b.patterns.length ? b.patterns.map(x => `<div class="ta-pat"><span class="tp-name">${esc(x.name)}</span><span class="muted">${x.n}× · ${x.shots} shot${x.shots === 1 ? '' : 's'}${x.goals ? ` · ${x.goals} goal${x.goals > 1 ? 's' : ''}` : ''}${x.tactic !== 'unclassified' ? ` · ${esc(x.tacticName)} ${Math.round(x.confidence * 100)}%` : ''}</span>
-            <span class="ar-actions">${hasVideo ? `<button class="btn-ghost sm" data-pclip="${x.example.index}">▶ Example</button>` : ''}<button class="btn-ghost sm" data-board="${x.example.index}">Board ⚡</button></span><div class="ar-clip" hidden></div></div>`).join('') : '<div class="muted">No ball path could be read in this situation.</div>'}</div>
-          <div class="ta-side">${heatGrid(b.ballHeat)}${b.tactics.length ? `<div class="scout-tend">${b.tactics.slice(0, 3).map(t => `<span class="tag">${esc(t.name)} ${t.pct}%</span>`).join('')}</div>` : ''}${sit === '6v5' && b.topFormation && b.topFormation !== 'set' ? `<span class="tag">${esc(b.topFormation)} set-up</span>` : ''}${b.topDefence ? `<span class="muted">vs ${esc(b.topDefence)} defence</span>` : ''}</div>
+          <div class="ta-pats">${b.patterns.length ? b.patterns.map(x => `<div class="ta-pat"><span class="tp-name">${esc(x.name)}</span><span class="muted">${TX('film.patShots', { n: x.n, shots: x.shots })}${x.goals ? TX('film.patGoals', { n: x.goals }) : ''}${x.tactic !== 'unclassified' ? ` · ${esc(x.tacticName)} ${Math.round(x.confidence * 100)}%` : ''}</span>
+            <span class="ar-actions">${hasVideo ? `<button class="btn-ghost sm" data-pclip="${x.example.index}">${TX('film.exampleClip')}</button>` : ''}<button class="btn-ghost sm" data-board="${x.example.index}">${TX('film.boardBtn')}</button></span><div class="ar-clip" hidden></div></div>`).join('') : `<div class="muted">${TX('film.noBallPath')}</div>`}</div>
+          <div class="ta-side">${heatGrid(b.ballHeat)}${b.tactics.length ? `<div class="scout-tend">${b.tactics.slice(0, 3).map(t => `<span class="tag">${esc(t.name)} ${t.pct}%</span>`).join('')}</div>` : ''}${sit === '6v5' && b.topFormation && b.topFormation !== 'set' ? `<span class="tag">${TX('film.setUpTag', { formation: esc(b.topFormation) })}</span>` : ''}${b.topDefence ? `<span class="muted">${TX('film.vsDefence', { defence: esc(b.topDefence) })}</span>` : ''}</div>
         </div></div>`;
     const teamBlock = k => { const r = T[k]; if (!r) return '';
       const sits = Object.keys(r.bySituation);
-      return `<div class="ta-team ${k}"><h4>${esc(label(k))} <span class="muted">— ${r.possessions} possession${r.possessions === 1 ? '' : 's'}, ${r.shots} shot${r.shots === 1 ? '' : 's'}, ${r.goals} goal${r.goals === 1 ? '' : 's'}${r.counters ? `, ${r.counters} counter${r.counters > 1 ? 's' : ''}` : ''}</span></h4>
-        ${sits.length ? sits.map(sit => card(k, sit, r.bySituation[sit])).join('') : '<div class="muted">No possessions could be read for this team — check the calibration and the cap colours.</div>'}</div>`; };
-    return `<div class="ef-label">What each team was trying to play — by situation</div>
+      return `<div class="ta-team ${k}"><h4>${esc(label(k))} <span class="muted">${TX('film.teamHeadStats', { poss: r.possessions, shots: r.shots, goals: r.goals, counters: r.counters ? TX('film.countersSuffix', { n: r.counters }) : '' })}</span></h4>
+        ${sits.length ? sits.map(sit => card(k, sit, r.bySituation[sit])).join('') : `<div class="muted">${TX('film.noPossessionsTeam')}</div>`}</div>`; };
+    return `<div class="ef-label">${TX('film.whatEachTeam')}</div>
       <div class="scout-summary">${(sc.narrative || []).map(l => `<div class="ins-row">${esc(l)}</div>`).join('')}</div>
       <div class="ta-grid">${teamBlock(us === 'white' ? 'att' : 'def')}${teamBlock(us === 'white' ? 'def' : 'att')}</div>
-      <p class="fa-note">Possession = who has the ball (with a few frames of patience before it changes hands); each team is judged against the goal it attacks. A <em>pattern</em> is the ball's path — wing → point → 2 m → shot — repeated in the same situation. Player tracking can be noisy; the ball path is what survives.</p>`;
+      <p class="fa-note">${TX('film.possessionNote')}</p>`;
   }
   function wireTeamAnalysis(out, sc, result) {
     out.querySelectorAll('[data-pclip]').forEach(b => b.onclick = async () => {
       const p = sc.plays[+b.dataset.pclip], holder = b.closest('.ta-pat').querySelector('.ar-clip');
-      b.disabled = true; holder.hidden = false; holder.innerHTML = '<span class="muted">Cutting the clip… ⏳</span>';
+      b.disabled = true; holder.hidden = false; holder.innerHTML = `<span class="muted">${TX('film.cuttingTheClip')}</span>`;
       try { const url = await cutClip(result.meta.videoRef, p.tStart, p.tEnd); holder.innerHTML = `<video controls playsinline preload="metadata" src="${esc(scoutBase() + url)}"></video>`; }
-      catch (e) { holder.innerHTML = `<span class="muted">Clip failed (${esc(e.message)}).</span>`; b.disabled = false; }
+      catch (e) { holder.innerHTML = `<span class="muted">${TX('film.clipFailed', { error: esc(e.message) })}</span>`; b.disabled = false; }
     });
   }
 
@@ -613,13 +619,13 @@ const FILM = (() => {
   function planPanelHtml(s) {
     if (typeof GAMEPLAN === 'undefined') return '';
     const plan = Array.isArray(s.plan) ? s.plan : [];
-    const side = sd => GAMEPLAN.INSTRUCTIONS.filter(i => i.side === sd).map(i => `<button class="plan-chip ${plan.includes(i.id) ? 'on' : ''}" data-ins="${i.id}" title="${i.when === 'any' ? 'every attack' : 'in ' + i.when}">${esc(i.label)}</button>`).join('');
+    const side = sd => GAMEPLAN.INSTRUCTIONS.filter(i => i.side === sd).map(i => `<button class="plan-chip ${plan.includes(i.id) ? 'on' : ''}" data-ins="${i.id}" title="${i.when === 'any' ? TX('film.everyAttackTip') : TX('film.inWhen', { when: i.when })}">${esc(i.label)}</button>`).join('');
     return `<div class="film-auto" id="film-plan">
-      <div class="fa-head"><strong>🎯 Game plan <span class="fa-beta">what we asked the players</span></strong>
-        <span class="cloud-status cloud" id="plan-count">${plan.length ? `${plan.length} instruction${plan.length > 1 ? 's' : ''}` : 'nothing asked yet'}</span>
-        <span class="fa-note">Tick what you asked for in this match. After <strong>Scout this video</strong>, the report shows per instruction how many attacks there were, how often the plan was followed, and whether it worked (shots / goals when followed vs. not).</span></div>
-      <div class="plan-grid"><div><span class="ef-label">Offense — our attacks</span><div class="plan-chips">${side('offense')}</div></div>
-      <div><span class="ef-label">Defense — their attacks</span><div class="plan-chips">${side('defense')}</div></div></div>
+      <div class="fa-head"><strong>${TX('film.gamePlan')} <span class="fa-beta">${TX('film.gamePlanBadge')}</span></strong>
+        <span class="cloud-status cloud" id="plan-count">${plan.length ? `${plan.length > 1 ? TX('film.nInstructions', { n: plan.length }) : TX('film.oneInstruction', { n: plan.length })}` : TX('film.nothingAskedYet')}</span>
+        <span class="fa-note">${TX('film.planPanelNote')}</span></div>
+      <div class="plan-grid"><div><span class="ef-label">${TX('film.offenseOurAttacks')}</span><div class="plan-chips">${side('offense')}</div></div>
+      <div><span class="ef-label">${TX('film.defenseTheirAttacks')}</span><div class="plan-chips">${side('defense')}</div></div></div>
     </div>`;
   }
   function planRows(sc) {
@@ -630,29 +636,29 @@ const FILM = (() => {
   function planTableHtml(rows) {
     const pct = r => r.followedPct == null ? '–' : r.followedPct + '%';
     const sg = b => `${b.shots}/${b.goals}`;
-    return `<table class="plan-table"><thead><tr><th>Asked</th><th>Attacks</th><th>Followed</th><th title="shots / goals">When followed</th><th title="shots / goals">When not</th><th>Verdict</th></tr></thead><tbody>
-      ${rows.map(r => `<tr class="${r.side}"><td>${r.side === 'defense' ? '🛡 ' : '⚔ '}${esc(r.label)}</td><td>${r.attacks}${r.unread ? `<span class="muted"> (${r.unread} unread)</span>` : ''}</td><td><strong>${pct(r)}</strong></td><td>${sg(r.whenFollowed)} <span class="muted">in ${r.whenFollowed.n}</span></td><td>${sg(r.whenNot)} <span class="muted">in ${r.whenNot.n}</span></td><td class="muted">${esc(r.verdict)}</td></tr>`).join('')}
+    return `<table class="plan-table"><thead><tr><th>${TX('film.thAsked')}</th><th>${TX('film.thAttacks')}</th><th>${TX('film.thFollowed')}</th><th title="${TX('film.shotsGoals')}">${TX('film.thWhenFollowed')}</th><th title="${TX('film.shotsGoals')}">${TX('film.thWhenNot')}</th><th>${TX('film.thVerdict')}</th></tr></thead><tbody>
+      ${rows.map(r => `<tr class="${r.side}"><td>${r.side === 'defense' ? '🛡 ' : '⚔ '}${esc(r.label)}</td><td>${r.attacks}${r.unread ? `<span class="muted"> ${TX('film.unreadParen', { n: r.unread })}</span>` : ''}</td><td><strong>${pct(r)}</strong></td><td>${sg(r.whenFollowed)} <span class="muted">${TX('film.inN', { n: r.whenFollowed.n })}</span></td><td>${sg(r.whenNot)} <span class="muted">${TX('film.inN', { n: r.whenNot.n })}</span></td><td class="muted">${esc(r.verdict)}</td></tr>`).join('')}
     </tbody></table>`;
   }
   function planReportHtml(sc) {
     const rows = planRows(sc);
-    if (!rows) return `<div class="ef-label" style="margin-top:12px">Plan vs reality</div><div class="muted">${ctx.canEdit ? 'Tick the instructions under 🎯 Game plan to see how many attacks followed the plan — and whether it worked.' : 'No game plan was set for this match.'}</div>`;
-    return `<div class="ef-label" style="margin-top:12px">Plan vs reality — what we asked, what happened</div>${planTableHtml(rows)}<p class="fa-note">"Followed" = the recognised tactic matched the instruction; "unread" = attacks the detector could not classify (counted, never hidden). Shots / goals are read from the ball reaching the goal line.</p>`;
+    if (!rows) return `<div class="ef-label" style="margin-top:12px">${TX('film.planVsReality')}</div><div class="muted">${ctx.canEdit ? TX('film.planEmptyCoach') : TX('film.planEmptyPlayer')}</div>`;
+    return `<div class="ef-label" style="margin-top:12px">${TX('film.planVsRealityFull')}</div>${planTableHtml(rows)}<p class="fa-note">${TX('film.planNote')}</p>`;
   }
   /* ---------- every attack: clip + board ---------- */
-  const resultOf = p => p.goal ? '⚽ goal' : p.endsInShot ? '🎯 shot' : '— no shot';
+  const resultOf = p => p.goal ? TX('film.resultGoal') : p.endsInShot ? TX('film.resultShot') : TX('film.resultNoShot');
   function attacksHtml(sc, result) {
     const plays = sc.plays || []; if (!plays.length) return '';
     const us = (root.querySelector('#scout-us') || {}).value || 'white';
     const usSide = typeof GAMEPLAN !== 'undefined' ? GAMEPLAN.usSide(us) : 'att';
     const hasVideo = !!(result && result.meta && result.meta.videoRef);
-    return `<div class="ef-label" style="margin-top:12px">Every attack (${plays.length})${hasVideo ? '' : ' <span class="muted">· clips need the uploaded file on the backend</span>'}</div>
+    return `<div class="ef-label" style="margin-top:12px">${TX('film.everyAttackN', { n: plays.length })}${hasVideo ? '' : ` <span class="muted">${TX('film.clipsNeedFile')}</span>`}</div>
       <div class="attack-list">${plays.map((p, i) => `<div class="attack-row" data-i="${i}">
         <span class="ar-t">${fmt(p.tStart)}–${fmt(p.tEnd)}</span>
-        <span class="ar-who ${p.offense === usSide ? 'us' : 'them'}">${p.offense === usSide ? 'us' : 'them'}</span>
-        <span class="ar-main"><strong>${esc(p.name)}</strong> <span class="muted">${esc(p.situation)}${p.counter ? ' · counter' : ''} · ${Math.round(p.confidence * 100)}% · ${p.passes} pass${p.passes === 1 ? '' : 'es'}${p.defence ? ' · vs ' + esc(p.defence) : ''}${p.pathName ? ' · ' + esc(p.pathName) : ''}</span></span>
+        <span class="ar-who ${p.offense === usSide ? 'us' : 'them'}">${p.offense === usSide ? TX('film.us') : TX('film.them')}</span>
+        <span class="ar-main"><strong>${esc(p.name)}</strong> <span class="muted">${esc(p.situation)}${p.counter ? ' · ' + TX('film.counter') : ''} · ${Math.round(p.confidence * 100)}% · ${p.passes === 1 ? TX('film.onePass', { n: p.passes }) : TX('film.nPasses', { n: p.passes })}${p.defence ? ' · vs ' + esc(p.defence) : ''}${p.pathName ? ' · ' + esc(p.pathName) : ''}</span></span>
         <span class="ar-res">${resultOf(p)}</span>
-        <span class="ar-actions">${hasVideo ? `<button class="btn-ghost sm" data-clip="${i}">▶ Clip</button>` : ''}<button class="btn-ghost sm" data-board="${i}">Board ⚡</button></span>
+        <span class="ar-actions">${hasVideo ? `<button class="btn-ghost sm" data-clip="${i}">${TX('film.clipBtn')}</button>` : ''}<button class="btn-ghost sm" data-board="${i}">${TX('film.boardBtn')}</button></span>
         <div class="ar-clip" hidden></div>
       </div>`).join('')}</div>`;
   }
@@ -666,7 +672,7 @@ const FILM = (() => {
       const p = sc.plays[+b.dataset.clip], holder = b.closest('.attack-row').querySelector('.ar-clip');
       b.disabled = true; holder.hidden = false; holder.innerHTML = '<span class="muted">Cutting the clip… ⏳</span>';
       try { const url = await cutClip(result.meta.videoRef, p.tStart, p.tEnd); holder.innerHTML = `<video controls playsinline preload="metadata" src="${esc(scoutBase() + url)}"></video>`; }
-      catch (e) { holder.innerHTML = `<span class="muted">Clip failed (${esc(e.message)}).</span>`; b.disabled = false; }
+      catch (e) { holder.innerHTML = `<span class="muted">${TX('film.clipFailed', { error: esc(e.message) })}</span>`; b.disabled = false; }
     });
     out.querySelectorAll('[data-board]').forEach(b => b.onclick = () => {
       const p = sc.plays[+b.dataset.board];
@@ -685,53 +691,53 @@ const FILM = (() => {
     const items = [];
     try {
       for (let i = 0; i < plays.length; i++) {
-        const p = plays[i]; if (st) st.textContent = ` — preparing clip ${i + 1}/${plays.length}…`;
+        const p = plays[i]; if (st) st.textContent = ` — ${TX('film.preparingClip', { i: i + 1, n: plays.length })}`;
         let clipUrl = null; if (result && result.meta && result.meta.videoRef) { try { clipUrl = await cutClip(result.meta.videoRef, p.tStart, p.tEnd); } catch (e) {} }
         const asked = rows.filter(r => r.side === (p.offense === usSide ? 'offense' : 'defense')).map(r => r.label).join(', ');
         const followed = rows.length && typeof GAMEPLAN !== 'undefined' ? (() => { const js = cur.plan.map(id => GAMEPLAN.byId(id)).filter(Boolean).map(ins => GAMEPLAN.judge(ins, p, us)).filter(j => j.applies && j.read); return js.length ? js.some(j => j.followed) : null; })() : null;
         items.push({ t0: p.tStart, t1: p.tEnd, title: `${fmt(p.tStart)} · ${p.offense === usSide ? 'us' : 'them'} · ${p.name}`, note: (p.steps || []).join(' → '), result: resultOf(p), asked, followed, clipUrl, frames: p.frames, notes: p.notes });
       }
-      if (st) st.textContent = ' — publishing…';
-      const body = { team: teamOf(ctx.user), title: `Debrief: ${cur.title}`, matchTitle: cur.title, author: ctx.user && ctx.user.name, us, summary: (sc.narrative || []).concat(sc.summary || []).slice(0, 12), plan: rows, items };
+      if (st) st.textContent = ' — ' + TX('film.publishing');
+      const body = { team: teamOf(ctx.user), title: TX('film.debriefTitle', { title: cur.title }), matchTitle: cur.title, author: ctx.user && ctx.user.name, us, summary: (sc.narrative || []).concat(sc.summary || []).slice(0, 12), plan: rows, items };
       const r = await fetch(scoutBase() + '/api/debriefs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       if (!r.ok) throw new Error('debrief-' + r.status);
-      if (st) st.textContent = ' — shared ✓ (see Team debriefs below)'; ctx.toast('Debrief shared with the team');
+      if (st) st.textContent = ' — ' + TX('film.sharedSeeBelow'); ctx.toast(TX('film.debriefShared'));
       await loadDebriefs(); const d = root.querySelector('#film-debriefs'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } catch (e) { if (st) st.textContent = ` — failed (${e.message})`; btn.disabled = false; }
+    } catch (e) { if (st) st.textContent = ` — ${TX('film.shareFailed', { error: e.message })}`; btn.disabled = false; }
   }
   async function loadDebriefs() {
     const list = root && root.querySelector('#debrief-list'); if (!list) return;
     try {
       const r = await fetch(scoutBase() + '/api/debriefs?team=' + encodeURIComponent(teamOf(ctx.user)));
       const { debriefs } = await r.json();
-      if (!debriefs.length) { list.innerHTML = '<span class="muted">No debriefs shared yet.' + (ctx.canEdit ? ' Scout a video, then “Share debrief with the team”.' : '') + '</span>'; return; }
+      if (!debriefs.length) { list.innerHTML = `<span class="muted">${TX('film.noDebriefsYet')}` + (ctx.canEdit ? TX('film.scoutThenShare') : '') + '</span>'; return; }
       list.className = 'debrief-list';
-      list.innerHTML = debriefs.map(d => `<button class="debrief-item" data-deb="${d.id}"><strong>${esc(d.title)}</strong><span class="muted">${new Date(d.createdAt).toLocaleDateString()} · ${esc(d.author || '')} · ${d.items} plays · 💬 ${d.comments}</span></button>`).join('');
+      list.innerHTML = debriefs.map(d => `<button class="debrief-item" data-deb="${d.id}"><strong>${esc(d.title)}</strong><span class="muted">${new Date(d.createdAt).toLocaleDateString()} · ${esc(d.author || '')} · ${TX('film.nPlaysComments', { plays: d.items, comments: d.comments })}</span></button>`).join('');
       list.querySelectorAll('[data-deb]').forEach(b => b.onclick = () => openDebrief(b.dataset.deb));
-    } catch (e) { list.innerHTML = `<span class="muted">Debriefs live on the analysis backend (${esc(scoutBase())}) — it didn’t respond.</span>`; }
+    } catch (e) { list.innerHTML = `<span class="muted">${TX('film.debriefsBackendDown', { url: esc(scoutBase()) })}</span>`; }
   }
   async function openDebrief(id) {
     const box = root && root.querySelector('#debrief-open'); if (!box) return;
-    box.innerHTML = '<div class="muted">Loading…</div>';
-    let d; try { d = await (await fetch(scoutBase() + '/api/debriefs/' + id)).json(); } catch (e) { box.innerHTML = '<div class="muted">Could not load this debrief.</div>'; return; }
+    box.innerHTML = `<div class="muted">${TX('film.loading')}</div>`;
+    let d; try { d = await (await fetch(scoutBase() + '/api/debriefs/' + id)).json(); } catch (e) { box.innerHTML = `<div class="muted">${TX('film.couldNotLoadDebrief')}</div>`; return; }
     const cmts = itemId => d.comments.filter(c => (c.itemId || null) === (itemId || null));
-    const cHtml = itemId => `<div class="deb-comments" data-for="${itemId || ''}">${cmts(itemId).map(c => `<div class="deb-c"><strong>${esc(c.author)}</strong> <span class="muted">${new Date(c.at).toLocaleString()}</span><div>${esc(c.text)}</div></div>`).join('') || '<span class="muted">No comments yet.</span>'}
-      <div class="deb-c-new"><input type="text" placeholder="Add a comment…" data-cin="${itemId || ''}" /><button class="btn-ghost sm" data-cpost="${itemId || ''}">Post</button></div></div>`;
+    const cHtml = itemId => `<div class="deb-comments" data-for="${itemId || ''}">${cmts(itemId).map(c => `<div class="deb-c"><strong>${esc(c.author)}</strong> <span class="muted">${new Date(c.at).toLocaleString()}</span><div>${esc(c.text)}</div></div>`).join('') || `<span class="muted">${TX('film.noCommentsYet')}</span>`}
+      <div class="deb-c-new"><input type="text" placeholder="${TX('film.addComment')}" data-cin="${itemId || ''}" /><button class="btn-ghost sm" data-cpost="${itemId || ''}">${TX('film.post')}</button></div></div>`;
     box.innerHTML = `<div class="debrief">
-      <div class="deb-head"><h4>${esc(d.title)}</h4><span class="muted">${esc(d.author || '')} · ${new Date(d.createdAt).toLocaleString()}</span><button class="btn-ghost sm" id="deb-close">Close</button></div>
+      <div class="deb-head"><h4>${esc(d.title)}</h4><span class="muted">${esc(d.author || '')} · ${new Date(d.createdAt).toLocaleString()}</span><button class="btn-ghost sm" id="deb-close">${TX('film.close')}</button></div>
       ${d.summary.length ? `<div class="scout-summary">${d.summary.map(l => `<div class="ins-row">${esc(l)}</div>`).join('')}</div>` : ''}
-      ${d.plan.length ? `<div class="ef-label">Plan vs reality</div>${planTableHtml(d.plan)}` : ''}
-      <div class="ef-label">Plays (${d.items.length})</div>
+      ${d.plan.length ? `<div class="ef-label">${TX('film.planVsReality')}</div>${planTableHtml(d.plan)}` : ''}
+      <div class="ef-label">${TX('film.playsN', { n: d.items.length })}</div>
       ${d.items.map((it, i) => `<div class="deb-item" data-item="${it.id}">
-        <div class="deb-item-head"><strong>${esc(it.title)}</strong> <span class="ar-res">${esc(it.result)}</span>${it.asked ? `<span class="muted"> · asked: ${esc(it.asked)}${it.followed == null ? '' : it.followed ? ' · ✔ followed' : ' · ✘ not followed'}</span>` : ''}</div>
+        <div class="deb-item-head"><strong>${esc(it.title)}</strong> <span class="ar-res">${esc(it.result)}</span>${it.asked ? `<span class="muted"> ${TX('film.askedFor', { asked: esc(it.asked) })}${it.followed == null ? '' : it.followed ? ` · ${TX('film.followedYes')}` : ` · ${TX('film.followedNo')}`}</span>` : ''}</div>
         ${it.note ? `<div class="muted">${esc(it.note)}</div>` : ''}
         <div class="deb-media">
-          ${it.clipUrl ? `<video controls playsinline preload="metadata" src="${esc(scoutBase() + it.clipUrl)}"></video>` : '<span class="muted">no clip</span>'}
-          ${it.frames && it.frames.length ? `<div class="deb-board"><svg viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet" data-board-i="${i}"></svg><button class="btn-ghost sm" data-replay="${i}">▶ Replay on the board</button></div>` : ''}
+          ${it.clipUrl ? `<video controls playsinline preload="metadata" src="${esc(scoutBase() + it.clipUrl)}"></video>` : `<span class="muted">${TX('film.noClip')}</span>`}
+          ${it.frames && it.frames.length ? `<div class="deb-board"><svg viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet" data-board-i="${i}"></svg><button class="btn-ghost sm" data-replay="${i}">${TX('film.replayOnBoard')}</button></div>` : ''}
         </div>
         ${cHtml(it.id)}
       </div>`).join('')}
-      <div class="ef-label">Discussion</div>${cHtml(null)}
+      <div class="ef-label">${TX('film.discussion')}</div>${cHtml(null)}
     </div>`;
     box.querySelector('#deb-close').onclick = () => { box.innerHTML = ''; };
     // board replays
@@ -752,7 +758,7 @@ const FILM = (() => {
         const r = await fetch(scoutBase() + '/api/debriefs/' + id + '/comments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ author: ctx.user && ctx.user.name, text, itemId: b.dataset.cpost || null }) });
         if (!r.ok) throw new Error('comment-' + r.status);
         await openDebrief(id); loadDebriefs();
-      } catch (e) { ctx.toast('Comment failed: ' + e.message); b.disabled = false; }
+      } catch (e) { ctx.toast(TX('film.commentFailed', { error: e.message })); b.disabled = false; }
     });
     box.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -760,35 +766,35 @@ const FILM = (() => {
   function renderReview(result) {
     const out = root && root.querySelector('#cloud-out'); if (!out) return;
     const model = ANALYSIS.buildReview(result);
-    if (!model.items.length) { out.innerHTML = '<div class="muted">No formation or events detected in this passage.</div>'; return; }
-    out.innerHTML = `<div class="ef-label">Auto-detected (${esc(model.engine)}) — confirm what’s right</div>
+    if (!model.items.length) { out.innerHTML = `<div class="muted">${TX('film.noFormationDetected')}</div>`; return; }
+    out.innerHTML = `<div class="ef-label">${TX('film.autoDetected', { engine: esc(model.engine) })}</div>
       <div class="rev-list">${model.items.map(it => `<div class="rev-item" data-id="${it.id}">
-        <span class="rev-main"><strong>${esc(it.label)}</strong><span class="muted">confidence ${Math.round(it.conf * 100)}%</span></span>
+        <span class="rev-main"><strong>${esc(it.label)}</strong><span class="muted">${TX('film.confidencePct', { pct: Math.round(it.conf * 100) })}</span></span>
         <span class="rev-actions">
-          <button class="btn-primary sm" data-confirm="${it.id}">Confirm → play</button>
-          <button class="btn-ghost sm" data-reject="${it.id}">Dismiss</button>
+          <button class="btn-primary sm" data-confirm="${it.id}">${TX('film.confirmToPlay')}</button>
+          <button class="btn-ghost sm" data-reject="${it.id}">${TX('film.dismiss')}</button>
         </span></div>`).join('')}</div>
-      <p class="fa-note">Confirming opens the play in the editor to fine-tune and save. Your confirmations are what a cloud model would learn from.</p>`;
+      <p class="fa-note">${TX('film.confirmNote')}</p>`;
     out.querySelectorAll('[data-confirm]').forEach(b => b.onclick = () => {
-      const it = model.items.find(x => x.id === b.dataset.confirm); if (!it || !it.frame) { ctx.toast('Nothing to open for this item'); return; }
+      const it = model.items.find(x => x.id === b.dataset.confirm); if (!it || !it.frame) { ctx.toast(TX('film.nothingToOpen')); return; }
       ANALYSIS.setItemState(model, it.id, 'confirmed');
-      ctx.rebuild(sitFromFrame(it.frame), 'offense', `${cur.title} — ${it.label}`, 'From video analysis (confirmed). Fine-tune and save.', it.frame);
+      ctx.rebuild(sitFromFrame(it.frame), 'offense', `${cur.title} — ${it.label}`, TX('film.fromVideoAnalysis'), it.frame);
     });
     out.querySelectorAll('[data-reject]').forEach(b => b.onclick = () => {
       ANALYSIS.setItemState(model, b.dataset.reject, 'rejected');
       const row = out.querySelector(`.rev-item[data-id="${b.dataset.reject}"]`); if (row) row.remove();
-      if (!out.querySelector('.rev-item')) out.innerHTML = '<div class="muted">All items reviewed.</div>';
+      if (!out.querySelector('.rev-item')) out.innerHTML = `<div class="muted">${TX('film.allItemsReviewed')}</div>`;
     });
   }
   function renderTrack(frame, heat, gx, gy, meta) {
     const out = root && root.querySelector('#film-track-out'); if (!out) return;
     out.innerHTML = `<div class="track-grid">
-      <div class="track-boardcol"><span class="ef-label">Detected positions on your board</span>
+      <div class="track-boardcol"><span class="ef-label">${TX('film.detectedPositions')}</span>
         <svg id="film-track-board" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet"></svg></div>
-      <div class="track-side"><span class="ef-label">Read-out</span>
-        <div class="track-readout">${Object.keys(frame.att).length} white · ${Object.keys(frame.def).length} dark · keeper ${frame.gk?'✓':'—'} · ball ${frame.ball && frame.ball.x!=null?'✓':'—'}<br><span class="muted">${esc(meta||'')}</span></div>
-        <button class="btn-primary sm" id="track-save">Open as a play</button>
-        <p class="fa-note">Estimated from cap colour — drag any disc to correct it, then save.</p></div>
+      <div class="track-side"><span class="ef-label">${TX('film.readOut')}</span>
+        <div class="track-readout">${TX('film.trackReadout', { white: Object.keys(frame.att).length, dark: Object.keys(frame.def).length, gk: frame.gk?'✓':'—', ball: frame.ball && frame.ball.x!=null?'✓':'—' })}<br><span class="muted">${esc(meta||'')}</span></div>
+        <button class="btn-primary sm" id="track-save">${TX('film.openAsPlay')}</button>
+        <p class="fa-note">${TX('film.trackNote')}</p></div>
     </div>`;
     const svg = out.querySelector('#film-track-board'); const layers = POOL.render(svg);
     // heatmap under the discs
@@ -810,7 +816,7 @@ const FILM = (() => {
     out.querySelector('#track-save').onclick = () => {
       const att = Object.keys(frame.att).length, def = Object.keys(frame.def).length, n = Math.max(att, def);
       const sit = n >= 6 ? '6v6' : n === 5 ? '6v5' : n === 4 ? '5v4' : n >= 3 ? '4v3' : n === 2 ? '3v2' : '2v1';
-      ctx.rebuild(sit, 'offense', `${cur.title} — tracked positions`, 'Positions read from the video (Tier 1). Drag to fine-tune, then save.', frame);
+      ctx.rebuild(sit, 'offense', TX('film.trackedPositionsTitle', { title: cur.title }), TX('film.trackedPositionsDesc'), frame);
     };
   }
 
@@ -823,29 +829,29 @@ const FILM = (() => {
 
     container.innerHTML = `<div class="film-wrap">
       <div class="dash-head with-mascot">${(typeof FX!=='undefined')?FX.mascot(38):''}
-        <div><h1>Film Room <button class="help-chip" data-help="film" title="How the Film Room works">？</button></h1>
-        <p class="dash-sub">Watch the match, tag the moments, see what was right and wrong — then rebuild it on the board.</p></div></div>
+        <div><h1>${TX('nav.film')} <button class="help-chip" data-help="film" title="${TX('film.helpTitle')}">？</button></h1>
+        <p class="dash-sub">${TX('film.sub')}</p></div></div>
 
       <div class="film-cols">
         <aside class="film-side">
-          <div class="film-side-head"><h3>Matches</h3></div>
+          <div class="film-side-head"><h3>${TX('film.matches')}</h3></div>
           ${canEdit ? `<div class="film-new">
-            <input type="text" id="film-new-title" placeholder="Match title (e.g. vs Red Sharks)" />
-            <input type="text" id="film-new-url" placeholder="YouTube link (or leave empty for upload)" />
+            <input type="text" id="film-new-title" placeholder="${TX('film.newTitlePlaceholder')}" />
+            <input type="text" id="film-new-url" placeholder="${TX('film.newUrlPlaceholder')}" />
             <div class="film-new-row">
-              <button class="btn-primary sm" id="film-create">Add match</button>
-              <label class="btn-ghost sm">Upload video<input type="file" id="film-upload" accept="video/*" hidden></label>
+              <button class="btn-primary sm" id="film-create">${TX('film.addMatch')}</button>
+              <label class="btn-ghost sm">${TX('film.uploadVideo')}<input type="file" id="film-upload" accept="video/*" hidden></label>
             </div>
           </div>` : ''}
           <div class="film-list">
             ${sessions.map(s=>`<button class="film-item ${cur&&cur.id===s.id?'active':''}" data-id="${s.id}">
               <span class="fi-kind">${s.source.kind==='youtube'?'▶':s.source.kind==='file'?'🎞':'🔗'}</span>
-              <span class="fi-main"><strong>${esc(s.title)}</strong><span>${s.events.length} tagged · ${esc(s.createdBy||'')}</span></span>
-            </button>`).join('') || '<div class="muted">No matches yet.</div>'}
+              <span class="fi-main"><strong>${esc(s.title)}</strong><span>${TX('film.taggedBy', { n: s.events.length, by: esc(s.createdBy||'') })}</span></span>
+            </button>`).join('') || `<div class="muted">${TX('film.noMatches')}</div>`}
           </div>
         </aside>
 
-        <div class="film-main" id="film-main">${cur ? '' : '<div class="muted">Add a match to start analysing.</div>'}</div>
+        <div class="film-main" id="film-main">${cur ? '' : `<div class="muted">${TX('film.addMatchToStart')}</div>`}</div>
       </div>
     </div>`;
 
@@ -853,10 +859,10 @@ const FILM = (() => {
     if (canEdit) {
       const create = container.querySelector('#film-create');
       if (create) create.onclick = () => {
-        const title = container.querySelector('#film-new-title').value.trim() || 'Untitled match';
+        const title = container.querySelector('#film-new-title').value.trim() || TX('film.untitledMatch');
         const src = parseSource(container.querySelector('#film-new-url').value);
-        if (!src) { ctx.toast('Paste a YouTube link, or use Upload'); return; }
-        if (src.kind === 'link') { ctx.toast('Only YouTube links can be embedded — added as external link'); }
+        if (!src) { ctx.toast(TX('film.pasteLink')); return; }
+        if (src.kind === 'link') { ctx.toast(TX('film.externalLinkAdded')); }
         const s = { id: uid(), title, createdBy: ctx.user.name, source: src, events: [] };
         sessions.unshift(s); save(sessions); cur = s; render(container, ctx);
       };
@@ -865,7 +871,7 @@ const FILM = (() => {
         const f = up.files[0]; if (!f) return;
         const title = container.querySelector('#film-new-title').value.trim() || f.name;
         const s = { id: uid(), title, createdBy: ctx.user.name, source: { kind:'file', name: f.name }, events: [] };
-        try { await putVideo('film-' + s.id, f); } catch (e) { ctx.toast('Could not store the video on this device'); }
+        try { await putVideo('film-' + s.id, f); } catch (e) { ctx.toast(TX('film.videoStoreFailed')); }
         sessions.unshift(s); save(sessions); cur = s; render(container, ctx);
       };
     }
@@ -879,106 +885,106 @@ const FILM = (() => {
     const main = root.querySelector('#film-main');
     main.innerHTML = `
       <div id="film-player"></div>
-      ${s.source.kind==='link' ? `<p class="muted">External video: <a href="${esc(s.source.url)}" target="_blank" rel="noopener">${esc(s.source.url)}</a> (open alongside and tag by time)</p>` : ''}
+      ${s.source.kind==='link' ? `<p class="muted">${TX('film.externalVideo', { url: esc(s.source.url) })}</p>` : ''}
 
       ${canEdit ? `<div class="film-tagbar">
-        <button class="btn-primary sm" id="film-mark">⏱ Mark moment</button>
+        <button class="btn-primary sm" id="film-mark">${TX('film.markMoment')}</button>
         <input type="text" id="film-t" class="film-t" placeholder="m:ss" />
         <select id="film-type" class="focus-select">${TYPES.map(t=>`<option value="${t.id}">${t.label}</option>`).join('')}</select>
         <select id="film-sit" class="focus-select">${SITUATIONS.map(x=>`<option>${x}</option>`).join('')}</select>
-        <select id="film-pos" class="focus-select"><option value="">pos?</option>${['1','2','3','4','5','6','GK'].map(p=>`<option>${p}</option>`).join('')}</select>
+        <select id="film-pos" class="focus-select"><option value="">${TX('film.posPrompt')}</option>${['1','2','3','4','5','6','GK'].map(p=>`<option>${p}</option>`).join('')}</select>
         <span class="verdict-toggle">
-          <button class="v-btn v-right" data-v="right">✔ right</button>
-          <button class="v-btn v-wrong" data-v="wrong">✘ wrong</button>
+          <button class="v-btn v-right" data-v="right">${TX('film.right')}</button>
+          <button class="v-btn v-wrong" data-v="wrong">${TX('film.wrong')}</button>
         </span>
       </div>
       <div class="film-tagbar2">
-        <div class="film-pick-block"><span class="ef-label">Where did the shot go?</span>${goalGrid(s, true)}</div>
-        <div class="film-pick-block"><span class="ef-label">Stage the situation — drag players &amp; ball to match the video</span>
+        <div class="film-pick-block"><span class="ef-label">${TX('film.whereShot')}</span>${goalGrid(s, true)}</div>
+        <div class="film-pick-block"><span class="ef-label">${TX('film.stageSituation')}</span>
           <svg id="film-board" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet"></svg>
-          <span class="ef-hint">The ball’s position = shot origin. Saved with the moment; “Board ⚡” opens it in the editor.</span></div>
+          <span class="ef-hint">${TX('film.ballOriginHint')}</span></div>
         <div class="film-pick-block grow">
-          <span class="ef-label">What would have stopped it / note</span>
-          <input type="text" id="film-counter" placeholder="Counter-measure (e.g. front the hole, earlier slide from 4…)" />
-          <input type="text" id="film-note" placeholder="Note" />
-          <button class="btn-primary sm" id="film-add">Save moment</button>
+          <span class="ef-label">${TX('film.counterLabel')}</span>
+          <input type="text" id="film-counter" placeholder="${TX('film.counterPlaceholder')}" />
+          <input type="text" id="film-note" placeholder="${TX('film.notePlaceholder')}" />
+          <button class="btn-primary sm" id="film-add">${TX('film.saveMoment')}</button>
         </div>
       </div>` : ''}
 
       ${canEdit ? planPanelHtml(s) : ''}
 
       ${canEdit && s.source.kind==='file' ? `<div class="film-auto" id="film-auto">
-        <div class="fa-head"><strong>🔎 Auto-analyse <span class="fa-beta">beta</span></strong>
-          <button class="btn-ghost sm" id="film-scan">Scan the footage</button>
-          <span class="fa-note">Reads the uploaded video and finds the busy moments by motion, so you can jump straight to them.</span></div>
+        <div class="fa-head"><strong>${TX('film.autoAnalyse')} <span class="fa-beta">beta</span></strong>
+          <button class="btn-ghost sm" id="film-scan">${TX('film.scanFootage')}</button>
+          <span class="fa-note">${TX('film.autoAnalyseNote')}</span></div>
         <div id="film-auto-out"></div>
       </div>
       <div class="film-auto" id="film-track">
-        <div class="fa-head"><strong>📍 Position tracking <span class="fa-beta">Tier 1</span></strong>
-          <button class="btn-primary sm" id="film-autofield" title="Find the pool in the current frame automatically — works with a moving camera">🎯 Find the field</button>
-          <button class="btn-ghost sm" id="film-calibrate" title="Click the four corners yourself">Click corners</button>
-          <label class="fa-check" title="Re-detect the pool about once a second while scouting — for a panning / zooming camera. Frames where the pool is not visible enough are reported as unread."><input type="checkbox" id="film-moving" checked /> 📷 moving camera</label>
-          <span class="cloud-status offline" id="field-status">● field: not set</span>
-          <button class="btn-ghost sm" id="film-scanpos" disabled>Track positions</button>
-          <label class="fa-check" title="Tier 2: connected-component detection + multi-object tracking — rejects splash, bridges occlusion, steadier positions"><input type="checkbox" id="film-hardened" checked> Hardened <span class="fa-beta">Tier&nbsp;2</span></label>
-          <span class="cloud-status" id="ondevice-detector">● colour</span>
-          <span class="fa-note">Reads the caps (white / dark / red&nbsp;keeper) and the orange ball and maps them onto your board. Calibrate once by clicking the four corners of the field of play. <strong>Hardened</strong> tracks a short passage from the current time and bridges occlusion. Offline &amp; private.</span></div>
+        <div class="fa-head"><strong>${TX('film.positionTracking')} <span class="fa-beta">Tier 1</span></strong>
+          <button class="btn-primary sm" id="film-autofield" title="${TX('film.findFieldTitle')}">${TX('film.findField')}</button>
+          <button class="btn-ghost sm" id="film-calibrate" title="${TX('film.clickCornersTitle')}">${TX('film.clickCorners')}</button>
+          <label class="fa-check" title="${TX('film.movingCameraTitle')}"><input type="checkbox" id="film-moving" checked /> ${TX('film.movingCamera')}</label>
+          <span class="cloud-status offline" id="field-status">${TX('film.fieldNotSet')}</span>
+          <button class="btn-ghost sm" id="film-scanpos" disabled>${TX('film.trackPositions')}</button>
+          <label class="fa-check" title="${TX('film.hardenedTitle')}"><input type="checkbox" id="film-hardened" checked> ${TX('film.hardened')} <span class="fa-beta">Tier&nbsp;2</span></label>
+          <span class="cloud-status" id="ondevice-detector">${TX('film.detectorColour')}</span>
+          <span class="fa-note">${TX('film.trackingNote')}</span></div>
         <div id="film-track-out"></div>
       </div>
       <div class="film-auto" id="film-scout">
-        <div class="fa-head"><strong>🧠 Auto-scout <span class="fa-beta">Tier 3</span></strong>
-          <button class="btn-primary sm" id="scout-run">Scout this video</button>
-          <select id="scout-us" class="focus-select" title="Which caps are us?"><option value="white">We are white caps</option><option value="dark">We are blue (dark) caps</option></select>
-          <span class="cloud-status offline" id="scout-status">● idle</span>
-          <span class="fa-note">The system watches the <strong>whole</strong> video, cuts it into possessions, recognises each tactic, and writes a scouting summary + a playbook — no tagging by hand. Calibrate the pool first. Long videos run in the background.</span></div>
+        <div class="fa-head"><strong>${TX('film.autoScout')} <span class="fa-beta">Tier 3</span></strong>
+          <button class="btn-primary sm" id="scout-run">${TX('film.scoutVideo')}</button>
+          <select id="scout-us" class="focus-select" title="${TX('film.whichCapsTitle')}"><option value="white">${TX('film.weAreWhite')}</option><option value="dark">${TX('film.weAreDark')}</option></select>
+          <span class="cloud-status offline" id="scout-status">${TX('film.scoutIdle')}</span>
+          <span class="fa-note">${TX('film.autoScoutNote')}</span></div>
         <div id="scout-out"></div>
       </div>
       <div class="film-auto" id="film-cloud">
-        <div class="fa-head"><strong>☁️ Cloud analysis <span class="fa-beta">Tier 3</span></strong>
-          <button class="btn-ghost sm" id="cloud-run">Run analysis</button>
-          <span class="cloud-status" id="cloud-status">● On-device (offline)</span>
-          <span class="fa-note">Auto-tag the match, then confirm what’s right — the same workflow whether it runs on-device (now) or in the cloud (when a pipeline is live). Calibrate first under Position tracking.</span></div>
-        <div class="cloud-cfg"><input type="text" id="cloud-endpoint" placeholder="Cloud endpoint URL (optional — blank = on-device)" /><button class="btn-ghost sm" id="cloud-save">Save endpoint</button></div>
+        <div class="fa-head"><strong>${TX('film.cloudAnalysis')} <span class="fa-beta">Tier 3</span></strong>
+          <button class="btn-ghost sm" id="cloud-run">${TX('film.runAnalysis')}</button>
+          <span class="cloud-status" id="cloud-status">${TX('film.cloudOnDevice')}</span>
+          <span class="fa-note">${TX('film.cloudNote')}</span></div>
+        <div class="cloud-cfg"><input type="text" id="cloud-endpoint" placeholder="${TX('film.cloudEndpointPlaceholder')}" /><button class="btn-ghost sm" id="cloud-save">${TX('film.saveEndpoint')}</button></div>
         <div id="cloud-out"></div>
       </div>` : canEdit ? `<div class="film-auto" id="film-scout">
-        <div class="fa-head"><strong>🧠 Auto-scout <span class="fa-beta">Tier 3</span></strong>
-          <button class="btn-primary sm" id="scout-run" disabled>Scout this video</button>
-          <span class="cloud-status offline" id="scout-status">● needs the video file</span>
-          <span class="fa-note">Auto-scout, position tracking and auto-analyse read the <strong>video file itself</strong>. This match is ${s.source.kind==='youtube' ? 'a YouTube link' : 'an external link'} the analyser can’t open — download the match from ${s.source.kind==='youtube' ? 'YouTube' : 'your camera platform (Veo, Pixellot, …)'} and use <strong>Upload video</strong> on the left; the tools appear on that upload.</span></div>
+        <div class="fa-head"><strong>${TX('film.autoScout')} <span class="fa-beta">Tier 3</span></strong>
+          <button class="btn-primary sm" id="scout-run" disabled>${TX('film.scoutVideo')}</button>
+          <span class="cloud-status offline" id="scout-status">${TX('film.scoutNeedsFile')}</span>
+          <span class="fa-note">${TX('film.noVideoFileNote', { src: s.source.kind==='youtube' ? TX('film.srcYoutubeLink') : TX('film.srcExternalLink'), from: s.source.kind==='youtube' ? 'YouTube' : TX('film.cameraPlatform') })}</span></div>
         <div id="scout-out"></div>
       </div>` : ''}
 
       <div class="film-grid2">
         <div class="film-panel">
-          <h3>Timeline <span class="rightbar-hint">(tap to jump)</span></h3>
+          <h3>${TX('film.timeline')} <span class="rightbar-hint">${TX('film.tapToJump')}</span></h3>
           <div class="film-events">${s.events.slice().sort((a,b)=>a.t-b.t).map(e=>{
             const T = typeOf(e.type);
             return `<div class="film-ev ${e.verdict||''}" data-id="${e.id}">
               <button class="fe-t" data-seek="${e.t}">${fmt(e.t)}</button>
               <span class="fe-main"><strong>${T.label}</strong>
-                <span>${esc(e.situation||'')}${e.pos?` · pos ${esc(e.pos)}`:''}${e.zone?` · ${e.zone}`:''}${e.verdict?` · ${e.verdict==='right'?'✔ right':'✘ wrong'}`:''}</span>
+                <span>${esc(e.situation||'')}${e.pos?` · ${TX('film.posLabel', { n: esc(e.pos) })}`:''}${e.zone?` · ${e.zone}`:''}${e.verdict?` · ${e.verdict==='right'?'✔ right':'✘ wrong'}`:''}</span>
                 ${e.counter?`<span class="fe-counter">🎯 ${esc(e.counter)}</span>`:''}
                 ${e.note?`<span class="fe-note">${esc(e.note)}</span>`:''}</span>
               <span class="fe-actions">
-                ${ctx.canEdit?`<button class="btn-ghost sm" data-rebuild="${e.id}" title="Recreate this situation on the tactics board">Board ⚡</button>`:''}
+                ${ctx.canEdit?`<button class="btn-ghost sm" data-rebuild="${e.id}" title="${TX('film.rebuildTitle')}">${TX('film.boardBtn')}</button>`:''}
                 ${ctx.canEdit?`<button class="btn-ghost sm danger" data-del="${e.id}">✕</button>`:''}
               </span>
-            </div>`;}).join('') || '<div class="muted">No moments tagged yet.</div>'}
+            </div>`;}).join('') || `<div class="muted">${TX('film.noMomentsTagged')}</div>`}
           </div>
         </div>
         <div class="film-panel">
-          <h3>Shot chart <span class="rightbar-hint">red = conceded · green = ours</span></h3>
+          <h3>${TX('film.shotChart')} <span class="rightbar-hint">${TX('film.shotChartHint')}</span></h3>
           ${goalGrid(s, false)}
-          <h3 class="fp-h">Shot origins</h3>
+          <h3 class="fp-h">${TX('film.shotOrigins')}</h3>
           <svg id="film-origin-pool" viewBox="0 0 320 262" preserveAspectRatio="xMidYMid meet"></svg>
-          <h3 class="fp-h">What the video says</h3>
+          <h3 class="fp-h">${TX('film.whatVideoSays')}</h3>
           <div class="film-insights">${insights(s).map(i=>`<div class="fi-row">${i}</div>`).join('')}</div>
         </div>
       </div>
 
       <div class="film-panel" id="film-debriefs">
-        <h3>📣 Team debriefs <span class="rightbar-hint">plan vs reality · clips · board · comments</span></h3>
-        <div id="debrief-list" class="muted">Loading debriefs…</div>
+        <h3>${TX('film.teamDebriefs')} <span class="rightbar-hint">${TX('film.debriefHint')}</span></h3>
+        <div id="debrief-list" class="muted">${TX('film.loadingDebriefs')}</div>
         <div id="debrief-open"></div>
       </div>`;
 
@@ -1007,7 +1013,7 @@ const FILM = (() => {
     if (afBtn) afBtn.onclick = () => autoField();
     setFieldStatus();
     const odChip = main.querySelector('#ondevice-detector');
-    if (odChip && typeof WEBDETECTOR !== 'undefined') { const st = WEBDETECTOR.status(); odChip.textContent = st.hasModel ? `● model: ${st.name}` : '● colour'; odChip.className = 'cloud-status ' + (st.hasModel ? 'cloud' : 'offline'); }
+    if (odChip && typeof WEBDETECTOR !== 'undefined') { const st = WEBDETECTOR.status(); odChip.textContent = st.hasModel ? TX('film.detectorModel', { name: st.name }) : '● colour'; odChip.className = 'cloud-status ' + (st.hasModel ? 'cloud' : 'offline'); }
     const posBtn = main.querySelector('#film-scanpos');
     if (posBtn) { posBtn.disabled = !vHomography; posBtn.onclick = () => trackPositions(posBtn); }
     const scoutBtn = main.querySelector('#scout-run');
@@ -1016,7 +1022,7 @@ const FILM = (() => {
       s.plan = Array.isArray(s.plan) ? s.plan : [];
       const i = s.plan.indexOf(b.dataset.ins); if (i >= 0) s.plan.splice(i, 1); else s.plan.push(b.dataset.ins);
       b.classList.toggle('on', i < 0); save(sessions);
-      const c = main.querySelector('#plan-count'); if (c) c.textContent = s.plan.length ? `${s.plan.length} instruction${s.plan.length > 1 ? 's' : ''}` : 'nothing asked yet';
+      const c = main.querySelector('#plan-count'); if (c) c.textContent = s.plan.length ? TX('film.planInstructions', { n: s.plan.length }) : 'nothing asked yet';
       if (lastScout && lastScout.sessionId === s.id) renderScout(lastScout.sc, lastScout.result);
     });
     loadDebriefs();
@@ -1024,7 +1030,7 @@ const FILM = (() => {
       const ep = main.querySelector('#cloud-endpoint'); if (ep) ep.value = ANALYSIS.getEndpoint();
       updateCloudStatus();
       const saveBtn = main.querySelector('#cloud-save');
-      if (saveBtn) saveBtn.onclick = () => { ANALYSIS.setEndpoint((ep.value || '').trim()); updateCloudStatus(); ctx.toast(ANALYSIS.getEndpoint() ? 'Cloud endpoint saved' : 'Using the on-device engine'); };
+      if (saveBtn) saveBtn.onclick = () => { ANALYSIS.setEndpoint((ep.value || '').trim()); updateCloudStatus(); ctx.toast(ANALYSIS.getEndpoint() ? TX('film.cloudEndpointSaved') : TX('film.usingOnDevice')); };
       const runBtn = main.querySelector('#cloud-run');
       if (runBtn) runBtn.onclick = () => runCloudAnalysis(runBtn);
     }
@@ -1038,7 +1044,7 @@ const FILM = (() => {
       const T = typeOf(e.type);
       const phase = T.against ? 'defense' : 'offense';
       const title = `${s.title} ${fmt(e.t)} — ${T.label.replace(/^[^\s]+\s/,'')}`;
-      const desc = [e.note, e.counter && ('Fix: ' + e.counter)].filter(Boolean).join(' · ') || 'Rebuilt from video analysis.';
+      const desc = [e.note, e.counter && TX('film.fixNote', { text: e.counter })].filter(Boolean).join(' · ') || TX('film.rebuiltFromVideo');
       ctx.rebuild(mapToBoard(e.situation), phase, title, desc, e.frame || null);
     });
   }
@@ -1079,7 +1085,7 @@ const FILM = (() => {
     verdict = null; pickZone = ''; pickOrigin = null;
     main.querySelector('#film-mark').onclick = () => {
       const t = currentTime();
-      if (t == null) { ctx.toast('Type the time as m:ss (video not seekable here)'); return; }
+      if (t == null) { ctx.toast(TX('film.typeTime')); return; }
       main.querySelector('#film-t').value = fmt(t);
     };
     main.querySelectorAll('.v-btn').forEach(b => b.onclick = () => {
@@ -1100,7 +1106,7 @@ const FILM = (() => {
     main.querySelector('#film-add').onclick = () => {
       const t = parseT(main.querySelector('#film-t').value);
       const type = main.querySelector('#film-type').value;
-      if (!main.querySelector('#film-t').value.trim()) { ctx.toast('Set the time first (⏱ Mark moment)'); return; }
+      if (!main.querySelector('#film-t').value.trim()) { ctx.toast(TX('film.setTimeFirst')); return; }
       s.events.push({
         id: uid(), t, type,
         situation: main.querySelector('#film-sit').value,
@@ -1114,7 +1120,7 @@ const FILM = (() => {
       save(sessions);
       if (typeof DATA !== 'undefined') DATA.logActivity('play', `${ctx.user.name} tagged ${typeOf(type).label} at ${fmt(t)} in “${s.title}”`, ctx.user.name);
       renderSession();
-      ctx.toast('Moment saved to the timeline');
+      ctx.toast(TX('film.momentSaved'));
     };
   }
 

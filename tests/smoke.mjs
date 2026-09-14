@@ -1294,6 +1294,45 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('no language is missing a key the others have', langs.every(c => { const k = keysOf(c); return k.length === enKeys.length && enKeys.every(x => k.includes(x)); }));
     ok('and no language has a stray key the others lack', langs.every(c => keysOf(c).every(x => enKeys.includes(x))));
 
+    /* t() only substitutes {name}. A translator who drops or renames a placeholder does not
+       break anything loudly — the user is simply shown a literal "{n}" where the number
+       should be. Word ORDER may move freely; the SET of placeholders may not. */
+    const holders = s => (String(s).match(/\{[a-zA-Z][\w]*\}/g) || []).slice().sort().join(',');
+    const drifted = [];
+    enKeys.forEach(k => langs.filter(c => c !== 'en').forEach(c => {
+      if (holders(I.DICT[c][k]) !== holders(I.DICT.en[k])) drifted.push(`${c}:${k}`);
+    }));
+    ok('every translation keeps the same {placeholders} as its English source' +
+       (drifted.length ? ` — drifted: ${drifted.slice(0, 6).join(', ')}` : ''), drifted.length === 0);
+
+    /* Same for markup: a value is injected with innerHTML, so a <strong> the translator
+       forgot to close takes the rest of the sentence with it. */
+    const tags = s => (String(s).match(/<\/?[a-z]+>/gi) || []).slice().sort().join(',');
+    const tagDrift = enKeys.filter(k => langs.filter(c => c !== 'en').some(c => tags(I.DICT[c][k]) !== tags(I.DICT.en[k])));
+    ok('and the same HTML tags' + (tagDrift.length ? ` — drifted: ${tagDrift.slice(0, 6).join(', ')}` : ''), tagDrift.length === 0);
+
+    /* Some hints NAME a button: "press Track positions". The hint and the button are usually
+       translated by different people, and when they drift the app tells the user to press a
+       control that does not exist under that name. Nothing else catches this — both strings
+       are perfectly good translations on their own. */
+    const QUOTES = [
+      ['film.fieldFoundHint', 'film.trackPositions'], ['film.fieldFoundHint', 'film.scoutVideo'],
+      ['film.calibratedNowPress', 'film.trackPositions'],
+      ['film.calibrateFirstPos', 'film.positionTracking'],
+      ['film.findFieldFirst', 'film.findField'],
+      ['film.planPanelNote', 'film.scoutVideo'],
+      ['film.scoutThenShare', 'film.shareDebrief'],
+      ['ui.nothingScheduledYet', 'ui.dateTbc'],
+    ];
+    const bare = s => String(s == null ? '' : s).replace(/[^\p{L}\p{N} ]/gu, '').toLowerCase().trim();
+    const quoteDrift = [];
+    QUOTES.forEach(([hint, label]) => langs.forEach(c => {
+      if (I.DICT[c][hint] == null || I.DICT[c][label] == null) return quoteDrift.push(`${c}:${hint}?`);
+      if (!bare(I.DICT[c][hint]).includes(bare(I.DICT[c][label]))) quoteDrift.push(`${c}:${hint}→${label}`);
+    }));
+    ok('a hint that names a button still matches that button, in every language' +
+       (quoteDrift.length ? ` — drifted: ${quoteDrift.slice(0, 6).join(', ')}` : ''), quoteDrift.length === 0);
+
     // the ratchet: this number may only ever go DOWN
     let regressed = [];
     UI_FILES.forEach(f => {

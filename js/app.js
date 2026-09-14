@@ -90,7 +90,7 @@
     document.querySelectorAll('#position-grid .pos-chip').forEach(b => b.classList.remove('active'));
     updatePositionBlock();
     show('setup-screen');
-    if (joinParam()) setTimeout(()=> toast('You’re joining ' + loadTeam().name + ' — pick your cap number'), 400);
+    if (joinParam()) setTimeout(()=> toast(T('ui.youReJoiningTeam', { team: loadTeam().name })), 400);
   }
   function updatePositionBlock() {
     const isPlayer = state.setup.role === 'player';
@@ -214,7 +214,7 @@
     const lines = PRIVACY.insightsText(rep);
     return `<h3 class="dash-h3">${T('ui.anonymousLearnings')} <button class="help-chip" data-help="privacy" title="${T('ui.howConfidentialityWorks')}">？</button></h3>
       <div class="insights-box">${lines.length ? lines.map(l=>`<div class="ins-row">${escapeHtml(l)}</div>`).join('')
-        : `<div class="muted">Patterns appear once at least ${PRIVACY.K_MIN} plays of a kind exist. Private tactics are never shown — only anonymous patterns (no names, no text).</div>`}</div>`;
+        : `<div class="muted">${T('ui.patternsAppearOnce', { n: PRIVACY.K_MIN })}</div>`}</div>`;
   }
   function renderDashboard() {
     const v = $('view-dashboard');
@@ -225,15 +225,15 @@
     const mascot = (typeof FX!=='undefined') ? FX.mascot(40) : '';
     let html = `<div class="dash-wrap"><div class="dash-head with-mascot">${mascot}
       <div><h1>${greeting()}, ${escapeHtml(u.name.split(' ')[0])}</h1>
-      <p class="dash-sub">${roleL(u.role)}${u.position?` · Position ${u.position}`:''}</p></div>
+      <p class="dash-sub">${roleL(u.role)}${u.position?(' '+T('dash.positionLine',{ n: u.position })):''}</p></div>
       <button class="help-chip" data-help="dashboard" title="${T('ui.howToUseThe')}">？</button></div>`;
 
     if (u.role === 'player') {
       const total = scn.length;
       html += `<div class="dash-grid">
-        ${card('accent', `<span class="dc-k">Your position</span><span class="dc-v big">${u.position||'—'}</span><span class="dc-note">Tap “My position” in any play to see only your movement.</span>`)}
-        ${card('', `<span class="dc-k">Plays to know</span><span class="dc-v big">${total}</span><span class="dc-note">across 6v6 → 1‑on‑GK, offense & defense</span>`)}
-        ${card('', `<span class="dc-k">Trivia best</span><span class="dc-v big">${u.triviaBest||0}<small>/${DATA.TRIVIA.length}</small></span><span class="dc-note">🏛️ History & legends: ${u.triviaBestHist||0}/${(DATA.TRIVIA_HISTORY||[]).length}</span><button class="btn-primary sm" data-go="trivia">Take the quiz</button>`)}
+        ${card('accent', `<span class="dc-k">${T('dash.yourPosition')}</span><span class="dc-v big">${u.position||'—'}</span><span class="dc-note">${T('dash.tapMyPosition')}</span>`)}
+        ${card('', `<span class="dc-k">${T('dash.playsToKnow')}</span><span class="dc-v big">${total}</span><span class="dc-note">${T('dash.acrossSituations')}</span>`)}
+        ${card('', `<span class="dc-k">${T('dash.triviaBest')}</span><span class="dc-v big">${u.triviaBest||0}<small>/${DATA.TRIVIA.length}</small></span><span class="dc-note">${T('dash.historyLegends', { score: u.triviaBestHist||0, total: (DATA.TRIVIA_HISTORY||[]).length })}</span><button class="btn-primary sm" data-go="trivia">${T('dash.takeTheQuiz')}</button>`)}
       </div>
       <div class="progress-card">
         <div class="pc-item"><span class="pc-v">${u.xp||0}</span><span class="pc-k">XP</span></div>
@@ -242,26 +242,26 @@
         <button class="btn-primary sm" data-challenge="1">${T('ui.challenge')}</button>
       </div>
       <h3 class="dash-h3">${T('ui.studyYourRole')}</h3>
-      <div class="dash-list">${scn.slice(0,5).map(s=>scnRow(s)).join('')||'<div class="muted">No plays yet.</div>'}</div>`;
+      <div class="dash-list">${scn.slice(0,5).map(s=>scnRow(s)).join('')||`<div class="muted">${T('dash.noPlaysYet')}</div>`}</div>`;
     } else if (u.role === 'super-admin') {
       const users = DATA.loadUsers();
       const pend = users.filter(x=>x.status==='pending');
       html += `<div class="dash-grid">
-        ${card(pend.length?'warn':'', `<span class="dc-k">Pending approvals</span><span class="dc-v big">${pend.length}</span>${pend.length?'<button class="btn-primary sm" data-go="admin">Review now</button>':'<span class="dc-note">All caught up</span>'}`)}
-        ${card('', `<span class="dc-k">${T('ui.people')}</span><span class="dc-v big">${users.filter(x=>x.status==='approved').length}</span><span class="dc-note">${users.length} total accounts</span>`)}
-        ${card('', `<span class="dc-k">Plays in library</span><span class="dc-v big">${scn.length}</span><span class="dc-note">recorded movement patterns</span>`)}
+        ${card(pend.length?'warn':'', `<span class="dc-k">${T('dash.pendingApprovals')}</span><span class="dc-v big">${pend.length}</span>${pend.length?`<button class="btn-primary sm" data-go="admin">${T('dash.reviewNow')}</button>`:`<span class="dc-note">${T('dash.allCaughtUp')}</span>`}`)}
+        ${card('', `<span class="dc-k">${T('ui.people')}</span><span class="dc-v big">${users.filter(x=>x.status==='approved').length}</span><span class="dc-note">${T('dash.totalAccounts', { n: users.length })}</span>`)}
+        ${card('', `<span class="dc-k">${T('dash.playsInLibrary')}</span><span class="dc-v big">${scn.length}</span><span class="dc-note">${T('dash.recordedMovementPatterns')}</span>`)}
       </div>
       <h3 class="dash-h3">${T('ui.liveActivity')}</h3>
-      <div class="dash-list">${acts.slice(0,8).map(activityRow).join('')||'<div class="muted">No activity yet.</div>'}</div>`;
+      <div class="dash-list">${acts.slice(0,8).map(activityRow).join('')||`<div class="muted">${T('dash.noActivityYet')}</div>`}</div>`;
     } else { // coach / trainer
       const users = DATA.loadUsers();
       html += `<div class="dash-grid">
-        ${card('accent', `<span class="dc-k">Squad</span><span class="dc-v big">${users.filter(x=>x.role==='player'&&x.status==='approved').length}</span><span class="dc-note">approved players</span>`)}
-        ${card('', `<span class="dc-k">Plays</span><span class="dc-v big">${scn.length}</span><button class="btn-primary sm" data-go="playbook">Open playbook</button>`)}
-        ${card('', `<span class="dc-k">You can</span><span class="dc-v">Record &amp; adjust</span><span class="dc-note">pause any play and drag players — or build one from scratch</span><button class="btn-primary sm" data-newplay>＋ New play</button>`)}
+        ${card('accent', `<span class="dc-k">${T('dash.squad')}</span><span class="dc-v big">${users.filter(x=>x.role==='player'&&x.status==='approved').length}</span><span class="dc-note">${T('dash.approvedPlayers')}</span>`)}
+        ${card('', `<span class="dc-k">${T('dash.plays')}</span><span class="dc-v big">${scn.length}</span><button class="btn-primary sm" data-go="playbook">${T('dash.openPlaybook')}</button>`)}
+        ${card('', `<span class="dc-k">${T('dash.youCan')}</span><span class="dc-v">${T('dash.recordAndAdjust')}</span><span class="dc-note">${T('dash.pauseAnyPlay')}</span><button class="btn-primary sm" data-newplay>${T('lib.new')}</button>`)}
       </div>
       <h3 class="dash-h3">${T('ui.recentChanges')}</h3>
-      <div class="dash-list">${acts.filter(a=>a.type==='play').slice(0,6).map(activityRow).join('')||'<div class="muted">No edits yet — open the Playbook and press “+ New”.</div>'}</div>`;
+      <div class="dash-list">${acts.filter(a=>a.type==='play').slice(0,6).map(activityRow).join('')||`<div class="muted">${T('dash.noEditsYet')}</div>`}</div>`;
       html += insightsPanelHtml();
     }
     html += `</div>`;
@@ -280,10 +280,10 @@
     v.querySelectorAll('[data-newplay]').forEach(b=> b.onclick=()=>{ switchView('playbook'); openEditor(DATA.newScenario(state.situation, state.phase), true); });
     v.querySelectorAll('[data-open]').forEach(b=> b.onclick=()=>{ const s=state.scenarios.find(x=>x.id===b.dataset.open); if(s){ state.situation=s.situation; state.phase=s.phase; switchView('playbook'); openScenario(s.id);} });
   }
-  function greeting(){ return 'Welcome'; }
+  function greeting(){ return T('setup.welcome'); }
   function badgesHtml(ids){
     ids = ids||[];
-    if (!ids.length) return '<span class="pc-none">No badges yet — study a play or take a challenge</span>';
+    if (!ids.length) return `<span class="pc-none">${T('dash.noBadgesYet')}</span>`;
     return ids.map(id => { const b=DATA.BADGES[id]; return b?`<span class="badge-chip" title="${escapeHtml(b.label)}">${b.icon} ${escapeHtml(b.label)}</span>`:''; }).join('');
   }
   // reward studying a play (triggered from Reveal solution)
@@ -329,10 +329,10 @@
       ov.innerHTML=`<div class="modal challenge-modal">
         <div class="modal-head"><h3>${T('ui.challenge2', { a: i+1, b: qs.length })}</h3><button class="modal-x" id="ch-x">✕</button></div>
         <div class="modal-body">
-          <p class="ch-q">In <strong>“${escapeHtml(q.title)}”</strong> (${q.situation}), which player finishes the play?</p>
-          <div class="ch-opts">${q.options.map(o=>`<button class="ch-opt" data-o="${o}">${o==='GK'?'Goalkeeper':'Player '+o}</button>`).join('')}</div>
+          <p class="ch-q">${T('ui.challengeQuestion', { title: escapeHtml(q.title), situation: q.situation })}</p>
+          <div class="ch-opts">${q.options.map(o=>`<button class="ch-opt" data-o="${o}">${o==='GK'?T('ui.goalkeeperShort'):T('ui.playerN',{ n: o })}</button>`).join('')}</div>
           <div class="ch-why" id="ch-why" hidden></div>
-          <button class="btn-primary" id="ch-next" hidden>${i===qs.length-1?'Finish':'Next'}</button>
+          <button class="btn-primary" id="ch-next" hidden>${i===qs.length-1?T('ui.finish'):T('ui.next')}</button>
         </div></div>`;
       ov.querySelector('#ch-x').onclick = close;
       let answered=false;
@@ -342,7 +342,7 @@
         if(correct){ score++; if(typeof FX!=='undefined') FX.sound('tick'); }
         ov.querySelectorAll('.ch-opt').forEach(x=> x.classList.add(x.dataset.o===q.correct?'right':(x===b?'wrong':'mute')));
         const w=ov.querySelector('#ch-why'); w.hidden=false;
-        w.innerHTML = correct? '<strong>Correct!</strong> That’s the finisher.' : `<strong>${T('ui.notQuite')}</strong> Player ${q.correct} finishes this one.`;
+        w.innerHTML = correct? T('ui.correctThatSTheFinisher') : T('ui.notQuitePlayerFinishes', { n: q.correct });
         ov.querySelector('#ch-next').hidden=false;
       });
       ov.querySelector('#ch-next').onclick=()=>{ i++; if(i>=qs.length) finish(); else step(); };
@@ -355,11 +355,11 @@
       const perfect = score===qs.length;
       ov.innerHTML=`<div class="modal challenge-modal"><div class="modal-body ch-result">
         <div class="trivia-score-ring">${score}<small>/${qs.length}</small></div>
-        <h2>${perfect?'Flawless!':score>=qs.length*0.6?'Nice work':'Keep studying'}</h2>
+        <h2>${perfect?T('ui.flawless'):score>=qs.length*0.6?T('ui.niceWork'):T('ui.keepStudying')}</h2>
         <p class="dash-sub">+${score*8} XP</p>
         <button class="btn-primary" id="ch-done">${T('ui.done')}</button></div></div>`;
       ov.querySelector('#ch-done').onclick=close;
-      if (typeof FX!=='undefined'){ if(perfect) FX.celebrate('Flawless!', score+'/'+qs.length+' correct'); else FX.confetti(40); }
+      if (typeof FX!=='undefined'){ if(perfect) FX.celebrate(T('ui.flawless'), T('ui.nOfMCorrect', { a: score, b: qs.length })); else FX.confetti(40); }
     }
     function close(){ ov.remove(); if(state.view==='dashboard') renderDashboard(); }
     step();
@@ -367,8 +367,8 @@
   function scnRow(s){
     return `<button class="dash-row" data-open="${s.id}">
       <span class="dr-tag ${s.phase}">${s.situation}</span>
-      <span class="dr-main"><span class="dr-title">${escapeHtml(s.title||'Untitled')}</span><span class="dr-sub">${escapeHtml(s.description||'')}</span></span>
-      <span class="dr-steps">${s.frames.length} steps</span></button>`;
+      <span class="dr-main"><span class="dr-title">${escapeHtml(s.title||T('ui.untitled'))}</span><span class="dr-sub">${escapeHtml(s.description||'')}</span></span>
+      <span class="dr-steps">${T('dash.nSteps', { n: s.frames.length })}</span></button>`;
   }
   function activityRow(a){
     const icon = {signin:'→',approve:'✓',deny:'✕',play:'✎',trivia:'★'}[a.type]||'•';
@@ -379,37 +379,37 @@
      BASICS — high-level water polo fundamentals
      ====================================================== */
   const BASICS = [
-    { icon:'◎', title:'Object of the game', body:[
-      'Two teams try to throw the ball into the opponent’s goal. A goal counts only when the ball <strong>fully crosses the goal line</strong>.',
-      'Play starts with both teams on their own goal lines; the referee releases the ball at mid‑pool and the teams swim for it.',
-      'You must get a shot away before your possession time runs out, or the ball turns over.' ] },
-    { icon:'7', title:'Team & positions', body:[
-      'Each team has <strong>7 in the water</strong>: 6 field players + 1 goalkeeper. Match roster: up to <strong>14</strong> (12 field + 2 goalkeepers).',
-      'In this app we number the field players <strong>1–6</strong> and mark them by team colour.',
-      'A common shape: perimeter players (wings, flats, point) around the arc, with a <strong>centre‑forward (“hole set”)</strong> posted at the 2 m line in front of goal.' ],
+    { icon:'◎', title:'basics.objectTitle', body:[
+      'basics.objectB1',
+      'basics.objectB2',
+      'basics.objectB3' ] },
+    { icon:'7', title:'basics.teamTitle', body:[
+      'basics.teamB1',
+      'basics.teamB2',
+      'basics.teamB3' ],
       legend:true },
-    { icon:'⏱', title:'Game structure', body:[
-      'Played in <strong>4 quarters</strong> of 8 minutes actual play (senior level); teams change ends at half‑time.',
-      'A <strong>28‑second possession clock</strong> limits each attack — shoot before it expires.',
-      'Each team has <strong>two 1‑minute timeouts</strong> — callable only while in possession, even straight after a goal.',
-      'Flying substitutions go through your team’s own half of the substitution area (own goal line → centre); World Aquatics events also use a <strong>VAR referee</strong>.' ] },
-    { icon:'▦', title:'The pool & its lines', body:[
-      'Field of play: <strong>25 m × 20 m</strong> goal line to goal line — men and women alike (2025 rules).',
-      '<strong>Goal line</strong> · <strong>2 m line (red)</strong> — no attacker may sit inside it ahead of the ball.',
-      '<strong>5 m line (yellow)</strong> — penalty throws are taken from anywhere on it. <strong>6 m line (green)</strong> — free throws from outside it may be shot directly; blocking with two hands is only allowed inside your own 6 m area.',
-      '<strong>Half‑distance line</strong> at the middle. Excluded players wait and re‑enter from the <strong>exclusion / re‑entry</strong> corner.' ] },
-    { icon:'⚠', title:'Fouls & penalties', body:[
-      '<strong>Ordinary (minor) fouls</strong> — pushing the ball under, two hands on the ball (field players), impeding a free player — give a <strong>free throw / change of possession</strong>.',
-      '<strong>Major (exclusion) fouls</strong> — holding/sinking an opponent, tactical fouls — send the offender to the re‑entry corner for <strong>18 seconds</strong> (a “man‑up”); they return at the earliest of 18 s served, a goal, or their team being awarded a free throw / goal throw / penalty.',
-      'A major foul inside the <strong>6 m area</strong> that stops a likely goal is a <strong>penalty shot</strong>, taken from the 5 m line — in the last minute the coach may choose possession instead (clock reset to 28 s).' ] },
-    { icon:'✛', title:'The goalkeeper', body:[
-      'Wears the <strong>red cap</strong> and defends the goal.',
-      'Inside the 6 m area the keeper may <strong>use two hands</strong> and (where depth allows) push off the bottom — things field players can’t do.',
-      'The keeper starts the counter‑attack: a fast, accurate outlet pass turns defence into offence.' ] },
-    { icon:'≈', title:'Core skills', body:[
-      '<strong>Eggbeater kick</strong> — the alternating leg motion that keeps you high and stable without using your hands.',
-      '<strong>Dry passing</strong> — catch and release with one hand, keeping the ball out of the water.',
-      '<strong>Shooting</strong> — power shots, lobs over the keeper, and quick catch‑and‑shoot off a feed.' ] },
+    { icon:'⏱', title:'basics.structureTitle', body:[
+      'basics.structureB1',
+      'basics.structureB2',
+      'basics.structureB3',
+      'basics.structureB4' ] },
+    { icon:'▦', title:'basics.poolTitle', body:[
+      'basics.poolB1',
+      'basics.poolB2',
+      'basics.poolB3',
+      'basics.poolB4' ] },
+    { icon:'⚠', title:'basics.foulsTitle', body:[
+      'basics.foulsB1',
+      'basics.foulsB2',
+      'basics.foulsB3' ] },
+    { icon:'✛', title:'basics.keeperTitle', body:[
+      'basics.keeperB1',
+      'basics.keeperB2',
+      'basics.keeperB3' ] },
+    { icon:'≈', title:'basics.skillsTitle', body:[
+      'basics.skillsB1',
+      'basics.skillsB2',
+      'basics.skillsB3' ] },
   ];
   // bundled snapshot — used until data/rules.json loads (and for file:// where fetch is blocked)
   const RULES_FALLBACK = {
@@ -430,41 +430,41 @@
     return `<div class="rules-panel">
       <div class="rules-head"><span class="rules-ic">§</span>
         <div><h3>${(typeof I18N!=='undefined')?I18N.t('basics.rulebooks'):'Official rule books — Swiss Aquatics'}</h3>
-          <span class="rules-checked">${data.checkedAt ? ('Auto‑checked '+fmtDate(data.checkedAt)) : 'Bundled snapshot'} · refreshes automatically from Swiss Aquatics</span></div></div>
+          <span class="rules-checked">${data.checkedAt ? T('basics.autoChecked', { date: fmtDate(data.checkedAt) }) : T('basics.bundledSnapshot')} ${T('ui.refreshesAutomaticallyFromSwiss')}</span></div></div>
       <div class="rules-docs">${docs.map(d=>`
         <a class="rules-doc" href="${d.url||data.source.page}" target="_blank" rel="noopener">
           <span class="rd-lang">${escapeHtml(d.lang||'')}</span>
-          <span class="rd-main"><span class="rd-title">${escapeHtml(d.title)}${d.stale?' <em>(last known)</em>':''}</span>
+          <span class="rd-main"><span class="rd-title">${escapeHtml(d.title)}${d.stale?(' '+T('basics.lastKnown')):''}</span>
             <span class="rd-sub">${escapeHtml(d.category||'')}${d.version?(' · v '+escapeHtml(d.version)):''}</span></span>
-          <span class="rd-open">open ↗</span></a>`).join('')}</div>
+          <span class="rd-open">${T('basics.open')}</span></a>`).join('')}</div>
       <div class="rules-refs">${(data.references||[]).map(r=>`<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.title)} ↗</a>`).join('')}</div>
     </div>`;
   }
 
   const RESPONSIBILITIES = [
-    { icon:'🤽', title:'Players', items:[
-      'Know your position and your job on every play — offense <em>and</em> defense.',
-      'Follow the game plan and the coach’s calls; run the set plays.',
-      'Communicate constantly — call screens, presses and switches.',
-      'Play within the rules: manage your fouls and avoid needless exclusions.',
-      'Sprint transitions — first back on defense, first up on the counter.',
-      'Support the goalkeeper and protect the front of goal.',
-      'Respect teammates, opponents and officials; give full effort when tired.' ] },
-    { icon:'🎯', title:'Coach', items:[
-      'Prepare the team: training plans, tactics and set plays.',
-      'Pick the line-up and manage substitutions and time-outs.',
-      'Teach roles and positions; develop every player.',
-      'Read the game and adjust tactics in real time (man-up, man-down, press vs drop).',
-      'Motivate, set standards and manage the bench.',
-      'Look after player welfare, safety and fair play.',
-      'Communicate clearly and respect the officials.' ] },
-    { icon:'⚖️', title:'Referee', items:[
-      'Enforce the rules and keep the game fair and safe.',
-      'Award ordinary fouls, exclusions (18 s) and penalties (from the 5 m line).',
-      'Manage exclusions and re-entry from the corner.',
-      'Signal decisions clearly; coordinate with the table, timekeepers and VAR.',
-      'Control the match and both benches; stay impartial.',
-      'Protect players from dangerous play.' ] },
+    { icon:'🤽', title:'basics.respPlayersTitle', items:[
+      'basics.respPlayers1',
+      'basics.respPlayers2',
+      'basics.respPlayers3',
+      'basics.respPlayers4',
+      'basics.respPlayers5',
+      'basics.respPlayers6',
+      'basics.respPlayers7' ] },
+    { icon:'🎯', title:'role.coach', items:[
+      'basics.respCoach1',
+      'basics.respCoach2',
+      'basics.respCoach3',
+      'basics.respCoach4',
+      'basics.respCoach5',
+      'basics.respCoach6',
+      'basics.respCoach7' ] },
+    { icon:'⚖️', title:'basics.respRefereeTitle', items:[
+      'basics.respReferee1',
+      'basics.respReferee2',
+      'basics.respReferee3',
+      'basics.respReferee4',
+      'basics.respReferee5',
+      'basics.respReferee6' ] },
   ];
 
   function renderBasics() {
@@ -482,26 +482,23 @@
       <div id="rules-mount"></div>
       <div class="basics-grid">
         ${BASICS.map(c=>`<div class="basics-card">
-          <div class="basics-h"><span class="basics-ic">${c.icon}</span><h3>${c.title}</h3></div>
-          <ul>${c.body.map(p=>`<li>${p}</li>`).join('')}</ul>
+          <div class="basics-h"><span class="basics-ic">${c.icon}</span><h3>${T(c.title)}</h3></div>
+          <ul>${c.body.map(p=>`<li>${T(p)}</li>`).join('')}</ul>
           ${c.legend?legendHtml:''}
         </div>`).join('')}
       </div>
       <h3 class="dash-h3">${T('ui.rolesAndResponsibilities')}</h3>
       <div class="basics-grid resp-grid">
         ${RESPONSIBILITIES.map(c=>`<div class="basics-card resp-card">
-          <div class="basics-h"><span class="basics-ic">${c.icon}</span><h3>${c.title}</h3></div>
-          <ul>${c.items.map(p=>`<li>${p}</li>`).join('')}</ul>
+          <div class="basics-h"><span class="basics-ic">${c.icon}</span><h3>${T(c.title)}</h3></div>
+          <ul>${c.items.map(p=>`<li>${T(p)}</li>`).join('')}</ul>
         </div>`).join('')}
       </div>
       <div class="basics-cta">
         <button class="btn-primary sm" data-go="playbook">${T('basics.seePlaybook')}</button>
         <button class="btn-ghost" data-go="trivia">${T('basics.testTrivia')}</button>
       </div>
-      <p class="basics-src">Fundamentals summarised from
-        <a href="https://vancouvervipers.ca/water-polo-basics/" target="_blank" rel="noopener">${T('ui.vancouverVipersWaterPolo')}</a>,
-        <a href="https://www.wikihow.com/Play-Water-Polo" target="_blank" rel="noopener">${T('ui.wikihowPlayWaterPolo')}</a>,
-        and World Aquatics rules. Details vary by level/governing body.</p>
+      <p class="basics-src">${T('basics.sourceNote', { a: `<a href="https://vancouvervipers.ca/water-polo-basics/" target="_blank" rel="noopener">${T('ui.vancouverVipersWaterPolo')}</a>`, b: `<a href="https://www.wikihow.com/Play-Water-Polo" target="_blank" rel="noopener">${T('ui.wikihowPlayWaterPolo')}</a>` })}</p>
     </div>`;
     v.querySelectorAll('[data-go]').forEach(b=> b.onclick=()=>switchView(b.dataset.go));
     // official rule books: show bundled snapshot now, then refresh from data/rules.json
@@ -578,10 +575,10 @@
       if (ev && ev.target != null) { state_ = ev.met ? 'met' : 'gap'; pct = ev.met ? 100 : Math.max(4, Math.min(96, 100 * (t.lower ? ev.target / ev.value : ev.value / ev.target))); }
       else if (last) { state_ = 'baseline'; pct = 50; }
       return `<div class="dev-bench-card dev-bench-${state_}">
-        <div class="dev-bench-top"><b>${escapeHtml(t.label)}</b>${t.piste ? ' <span class="tag" title="Shared with the official Swiss Aquatics PISTE test">PISTE</span>' : ''}</div>
+        <div class="dev-bench-top"><b>${escapeHtml(t.label)}</b>${t.piste ? ` <span class="tag" title="${T('dev.pisteTooltip')}">PISTE</span>` : ''}</div>
         <div class="dev-bench-bar"><span style="width:${pct}%"></span></div>
-        <div class="dev-bench-bottom"><span>${last ? escapeHtml(String(last.result)) + ' ' + escapeHtml(t.unit) : 'not tested yet'}</span><span class="muted">${ev ? escapeHtml(ev.deltaText) : (t.targets[dev.info.tier] != null ? 'target ' + escapeHtml(String(t.targets[dev.info.tier])) : '')}</span></div>
-        ${waiting ? `<div class="dev-bench-pending">⏳ ${escapeHtml(String(waiting.result))} ${escapeHtml(t.unit)} — self-reported, waiting for a coach</div>` : ''}
+        <div class="dev-bench-bottom"><span>${last ? escapeHtml(String(last.result)) + ' ' + escapeHtml(t.unit) : T('dev.notTestedYet')}</span><span class="muted">${ev ? escapeHtml(ev.deltaText) : (t.targets[dev.info.tier] != null ? T('dev.targetN', { v: escapeHtml(String(t.targets[dev.info.tier])) }) : '')}</span></div>
+        ${waiting ? `<div class="dev-bench-pending">${T('dev.benchPending', { result: escapeHtml(String(waiting.result)), unit: escapeHtml(t.unit) })}</div>` : ''}
       </div>`;
     };
 
@@ -589,11 +586,11 @@
       <div class="dev-hero">
         <div class="dev-hero-mascot">${(typeof FX !== 'undefined') ? FX.mascot(84, mascot.mood) : ''}</div>
         <div class="dev-hero-info">
-          <div class="dev-hero-id"><h1>${escapeHtml(displayName)} <button class="help-chip" data-help="development" title="${T('dev.howThisWorks')}">？</button></h1><span class="tag">${escapeHtml(tierLabel)}</span>${dev.info.position ? `<span class="tag">Pos ${escapeHtml(dev.info.position)}</span>` : ''}${dev.info.isGK ? `<span class="tag">GK</span>` : ''}
+          <div class="dev-hero-id"><h1>${escapeHtml(displayName)} <button class="help-chip" data-help="development" title="${T('dev.howThisWorks')}">？</button></h1><span class="tag">${escapeHtml(tierLabel)}</span>${dev.info.position ? `<span class="tag">${T('dev.posN', { n: escapeHtml(dev.info.position) })}</span>` : ''}${dev.info.isGK ? `<span class="tag">GK</span>` : ''}
             ${devCanCoach() ? `<button class="btn-ghost sm" id="dev-back-team">${T('dev.squad')}</button>` : ''}
             ${canEditThis ? `<button class="btn-ghost sm" id="dev-edit-profile">${T('dev.editProfile')}</button>` : ''}</div>
-          <div class="dev-hero-goal">${dev.info.goalBlock ? `🎯 ${escapeHtml(dev.info.goalBlock)}` : (canEditThis ? 'No goal set yet — tap Edit profile' : 'No goal set yet')}</div>
-          <div class="dev-hero-line">${escapeHtml(mascot.line)}${mascot.streak > 0 ? ` · 🔥 ${mascot.streak}-week streak` : ''}</div>
+          <div class="dev-hero-goal">${dev.info.goalBlock ? `🎯 ${escapeHtml(dev.info.goalBlock)}` : (canEditThis ? T('dev.noGoalSetYet') : T('dev.noGoalSetYet2'))}</div>
+          <div class="dev-hero-line">${escapeHtml(mascot.line)}${mascot.streak > 0 ? (' ' + T('dev.weekStreak', { n: mascot.streak })) : ''}</div>
         </div>
       </div>
 
@@ -604,8 +601,8 @@
         <div class="dev-stat"><b>${(dev.tests || []).length}</b><span>${T('dev.testsLoggedAllTime')}${pendingCount ? ' · ' + T('dev.nAwaiting', { n: pendingCount }) : ''}</span></div>
       </div>
 
-      ${roster.length ? `<details class="dev-coach-tools"><summary>👥 Coach tools — viewing <b>${devViewing ? escapeHtml((roster.find(u => u.email === devViewing) || {}).name || devViewing) : 'myself'}</b></summary>
-        <div class="dev-coach-row"><select id="dev-roster-select" class="focus-select"><option value="">Myself</option>${roster.map(u => `<option value="${escapeHtml(u.email)}" ${devViewing === u.email ? 'selected' : ''}>${escapeHtml(u.name || u.email)}${u.position ? ' · ' + escapeHtml(u.position) : ''}</option>`).join('')}</select>
+      ${roster.length ? `<details class="dev-coach-tools"><summary>${T('dev.coachToolsViewing')} <b>${devViewing ? escapeHtml((roster.find(u => u.email === devViewing) || {}).name || devViewing) : T('dev.myself')}</b></summary>
+        <div class="dev-coach-row"><select id="dev-roster-select" class="focus-select"><option value="">${T('dev.myselfOption')}</option>${roster.map(u => `<option value="${escapeHtml(u.email)}" ${devViewing === u.email ? 'selected' : ''}>${escapeHtml(u.name || u.email)}${u.position ? ' · ' + escapeHtml(u.position) : ''}</option>`).join('')}</select>
           <button class="btn-ghost sm" id="dev-import-btn">${T('dev.importTeamLogbookXlsx')}</button><input type="file" id="dev-import-file" accept=".xlsx,.csv" hidden multiple></div></details>` : ''}
 
       ${devCanCoach() && reviewRows.length ? `<div class="dev-card dev-review">
@@ -613,9 +610,9 @@
         ${reviewRows.map(r => `<div class="dev-review-row">
           <span class="drv-main"><b>${escapeHtml(r.test)}</b> <span class="drv-res">${escapeHtml(String(r.result))} ${escapeHtml(r.unit || '')}</span>
             <span class="muted">${escapeHtml(r.date)}${r.testedBy ? ' · ' + escapeHtml(r.testedBy) : ''}${r.remark ? ' · ' + escapeHtml(r.remark) : ''}</span></span>
-          <span class="drv-actions">${r.status === 'denied' ? '<span class="status-chip denied">rejected</span>' : ''}
+          <span class="drv-actions">${r.status === 'denied' ? `<span class="status-chip denied">${T('dev.rejected')}</span>` : ''}
             <button class="btn-primary sm" data-test-verify="${r.id}">${T('dev.confirm')}</button>
-            ${r.status === 'pending' ? `<button class="btn-ghost sm danger" data-test-deny="${r.id}">Reject</button>` : ''}</span>
+            ${r.status === 'pending' ? `<button class="btn-ghost sm danger" data-test-deny="${r.id}">${T('dev.reject')}</button>` : ''}</span>
         </div>`).join('')}
       </div>` : ''}
 
@@ -629,7 +626,7 @@
         <div class="dev-home-list">${TESTLOG.HOME_ACTIVITIES.map(a => {
           const n = home.log.filter(e => e.week === wk && e.activityId === a.id).length;
           const done = Math.min(n, a.perWeek);
-          return `<div class="dev-home-item"><div class="dev-home-h"><b>${escapeHtml(a.label)}</b><span class="muted">${done}/${a.perWeek === Math.round(a.perWeek) ? a.perWeek : a.perWeek.toFixed(1)} · ${a.minutes} min</span></div>
+          return `<div class="dev-home-item"><div class="dev-home-h"><b>${escapeHtml(a.label)}</b><span class="muted">${T('dev.homeDonePerWeekMinutes', { done: done, target: a.perWeek === Math.round(a.perWeek) ? a.perWeek : a.perWeek.toFixed(1), minutes: a.minutes })}</span></div>
             <div class="dev-home-bar"><span style="width:${Math.min(100, Math.round(100 * done / a.perWeek))}%"></span></div>
             <span class="fa-note">${escapeHtml(a.note)}</span>
             ${isSelf ? `<button class="btn-ghost sm" data-home-log="${a.id}">${T('dev.logIt')}</button>` : ''}</div>`;
@@ -644,13 +641,13 @@
       <details class="dev-history"><summary>${T('dev.testLogHistory', { n: testRows.length })}</summary>
         <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>${T('dev.date')}</th><th>${T('dev.test')}</th><th>${T('dev.result')}</th><th>${T('dev.testedBy')}</th><th>${T('dev.status')}</th><th>${T('dev.remark')}</th>${canEditThis ? '<th></th>' : ''}</tr></thead>
           <tbody>${testRows.map(r => `<tr><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.test)}</td><td>${escapeHtml(String(r.result))} ${escapeHtml(r.unit || '')}</td><td>${escapeHtml(r.testedBy || '')}</td>
-            <td><span class="status-chip ${r.status}">${r.status === 'approved' ? 'confirmed' : r.status === 'denied' ? 'rejected' : 'self-reported'}</span>${r.verifiedBy ? ` <span class="muted">${escapeHtml(r.verifiedBy)}${r.verifiedAt ? ' · ' + escapeHtml(r.verifiedAt) : ''}</span>` : ''}</td>
-            <td class="muted">${escapeHtml(r.remark || '')}</td>${canEditThis ? `<td>${(devCanCoach() || (isSelf && r.status === 'pending')) ? `<button class="btn-ghost sm danger" data-test-del="${r.id}">✕</button>` : ''}</td>` : ''}</tr>`).join('') || `<tr><td colspan="${canEditThis ? 7 : 6}" class="muted">No tests logged yet.</td></tr>`}</tbody></table></div>
+            <td><span class="status-chip ${r.status}">${r.status === 'approved' ? T('dev.confirmed') : r.status === 'denied' ? T('dev.rejected') : T('dev.selfReportedWord')}</span>${r.verifiedBy ? ` <span class="muted">${escapeHtml(r.verifiedBy)}${r.verifiedAt ? ' · ' + escapeHtml(r.verifiedAt) : ''}</span>` : ''}</td>
+            <td class="muted">${escapeHtml(r.remark || '')}</td>${canEditThis ? `<td>${(devCanCoach() || (isSelf && r.status === 'pending')) ? `<button class="btn-ghost sm danger" data-test-del="${r.id}">✕</button>` : ''}</td>` : ''}</tr>`).join('') || `<tr><td colspan="${canEditThis ? 7 : 6}" class="muted">${T('dev.noTestsLoggedYet')}</td></tr>`}</tbody></table></div>
         <button class="btn-ghost sm" id="dev-export-tests">${T('dev.downloadCsv')}</button>
       </details>
       <details class="dev-history"><summary>${T('dev.swimWeeksHistory', { n: swimRows.length })}</summary>
         <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>${T('dev.week')}</th><th>${T('dev.club')}</th><th>${T('dev.selfHome')}</th><th>${T('dev.total')}</th><th>${T('dev.attended')}</th>${canEditThis ? '<th></th>' : ''}</tr></thead>
-          <tbody>${swimRows.map(r => `<tr><td>${escapeHtml(r.week)}</td><td>${escapeHtml(String(r.metersClub || 0))}</td><td>${escapeHtml(String(r.metersSelf || 0))}</td><td><b>${escapeHtml(String(r.total || ((+r.metersClub || 0) + (+r.metersSelf || 0))))}</b></td><td class="muted">${escapeHtml(String(r.attended || 0))}/${escapeHtml(String(r.possible || 0))}</td>${canEditThis ? `<td><button class="btn-ghost sm danger" data-swim-del="${r.id}">✕</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="5" class="muted">No weeks logged yet.</td></tr>`}</tbody></table></div>
+          <tbody>${swimRows.map(r => `<tr><td>${escapeHtml(r.week)}</td><td>${escapeHtml(String(r.metersClub || 0))}</td><td>${escapeHtml(String(r.metersSelf || 0))}</td><td><b>${escapeHtml(String(r.total || ((+r.metersClub || 0) + (+r.metersSelf || 0))))}</b></td><td class="muted">${escapeHtml(String(r.attended || 0))}/${escapeHtml(String(r.possible || 0))}</td>${canEditThis ? `<td><button class="btn-ghost sm danger" data-swim-del="${r.id}">✕</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="5" class="muted">${T('dev.noWeeksLoggedYet')}</td></tr>`}</tbody></table></div>
         <button class="btn-ghost sm" id="dev-export-swim">${T('dev.downloadCsv')}</button>
       </details>
 
@@ -658,10 +655,10 @@
         <div class="modal-head"><h3>${T('dev.profileAndSelfTarget')}</h3><span class="spacer"></span><button class="modal-x" data-close-modal="dev-profile-modal">✕</button></div>
         <div class="modal-body">
           <div class="dev-form">
-            <label>Name<input type="text" id="dev-name" value="${escapeHtml(dev.info.name || (isSelf ? state.user.name : ''))}"></label>
-            <label>${T('dev.birthYear')}<input type="text" id="dev-birth" value="${escapeHtml(dev.info.birthYear)}" placeholder="e.g. 2013"></label>
+            <label>${T('dev.name')}<input type="text" id="dev-name" value="${escapeHtml(dev.info.name || (isSelf ? state.user.name : ''))}"></label>
+            <label>${T('dev.birthYear')}<input type="text" id="dev-birth" value="${escapeHtml(dev.info.birthYear)}" placeholder="${T('dev.eG2013')}"></label>
             <label>${T('dev.bandAgeGroup')}<input type="text" id="dev-band" value="${escapeHtml(dev.info.band)}" placeholder="${T('dev.eGCore2013')}"></label>
-            <label>Position<input type="text" id="dev-position" value="${escapeHtml(dev.info.position || state.user.position || '')}"></label>
+            <label>${T('dev.position')}<input type="text" id="dev-position" value="${escapeHtml(dev.info.position || state.user.position || '')}"></label>
             <label class="fa-check">${T('dev.goalkeeper')}<input type="checkbox" id="dev-isgk" ${dev.info.isGK ? 'checked' : ''}></label>
             <label>${T('dev.seasonTier')}<select id="dev-tier">${TESTLOG.TIERS.map((t, i) => `<option value="${i}" ${dev.info.tier == i ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select></label>
             <label>${T('dev.talentCard')}<input type="text" id="dev-card" value="${escapeHtml(dev.info.talentCard)}" placeholder="${T('dev.eGNational')}"></label>
@@ -682,10 +679,10 @@
           <input type="text" id="dev-test-date" placeholder="${T('dev.dateYyyyMmDd')}" value="${new Date().toISOString().slice(0, 10)}">
           <input type="text" id="dev-test-result" placeholder="${T('dev.resultEG37')}">
           ${devCanCoach()
-            ? `<input type="text" id="dev-test-by" placeholder="Tested by" value="${escapeHtml(state.user.name)}">`
+            ? `<input type="text" id="dev-test-by" placeholder="${T('dev.testedBy')}" value="${escapeHtml(state.user.name)}">`
             : `<input type="text" id="dev-test-by" readonly value="${escapeHtml(state.user.name)}">`}
           <input type="text" id="dev-test-remark" placeholder="${T('dev.remarkOptional')}">
-          ${devCanCoach() ? '' : '<p class="fa-note">Your coach confirms the number before it counts towards your targets — log it honestly, it shows up either way.</p>'}
+          ${devCanCoach() ? '' : `<p class="fa-note">${T('dev.coachConfirmsNote')}</p>`}
         </div>
         <div class="modal-foot"><button class="btn-ghost" data-close-modal="dev-test-modal">${T('dev.cancel')}</button><button class="btn-primary" id="dev-test-add">${T('dev.saveResult')}</button></div>
       </div></div>
@@ -757,7 +754,7 @@
         <div class="dev-stat"><b>${awaiting}</b><span>${T('dev.resultsAwaitingYourConfirmation')}</span></div>
       </div>
 
-      <details class="dev-coach-tools" open><summary>👥 Coach tools${selfReported ? ` — ${selfReported} self-reported result${selfReported > 1 ? 's' : ''} not yet confirmed` : ''}</summary>
+      <details class="dev-coach-tools" open><summary>${T('dev.coachTools')}${selfReported ? T('dev.nSelfReportedNotConfirmed', { n: selfReported }) : ''}</summary>
         <div class="dev-coach-row">
           <select id="dev-team-sort" class="focus-select">
             <option value="name" ${devTeamSort === 'name' ? 'selected' : ''}>${T('dev.sortName')}</option>
@@ -774,7 +771,7 @@
         <div class="dev-table-wrap"><table class="dev-table dev-team-table">
           <thead><tr><th>${T('dev.player')}</th><th>${T('dev.tier')}</th><th>${T('dev.testsAtTarget2')}</th><th>${T('dev.lastTested')}</th><th>${T('dev.homeTrainingSelfLogged')}</th><th>${T('dev.streak')}</th><th>${T('dev.metresSelfDeclared')}</th></tr></thead>
           <tbody>${sorted.map(x => `<tr class="dev-team-row" data-dev-open="${escapeHtml(x.u.email)}">
-            <td><button class="btn-ghost sm">${escapeHtml(x.u.name || x.u.email)}</button>${x.u.position ? ` <span class="tag">Pos ${escapeHtml(x.u.position)}</span>` : ''}${x.isGK ? ' <span class="tag">GK</span>' : ''}</td>
+            <td><button class="btn-ghost sm">${escapeHtml(x.u.name || x.u.email)}</button>${x.u.position ? ` <span class="tag">${T('ui.pos')} ${escapeHtml(x.u.position)}</span>` : ''}${x.isGK ? ' <span class="tag">GK</span>' : ''}</td>
             ${cell(x)}</tr>`).join('') || `<tr><td colspan="7" class="muted">${T('dev.noApprovedPlayersOn')}</td></tr>`}</tbody>
         </table></div>
       </div>`;
@@ -926,7 +923,7 @@
             <div class="trivia-set">
               <span class="ts-icon">${st.icon}</span>
               <div class="ts-main"><strong>${escapeHtml(st.label)}</strong>
-                <span class="ts-sub">${st.questions.length} questions · best ${state.user[bestField(st.id)]||0}/${st.questions.length}</span></div>
+                <span class="ts-sub">${T('ui.questionsBestScore', { n: st.questions.length, best: state.user[bestField(st.id)]||0 })}</span></div>
               <button class="btn-primary sm" id="trivia-start${st.id==='rules'?'':'-'+st.id}" data-set="${st.id}">
                 ${(typeof I18N!=='undefined')?I18N.t('trivia.start'):'Start quiz'}</button>
             </div>`).join('')}
@@ -948,11 +945,11 @@
     const order = item.a.map((_,i)=>i);
     for (let i=order.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [order[i],order[j]]=[order[j],order[i]]; }
     c.innerHTML = `<div class="trivia-q">
-      <div class="trivia-prog">${trivia.set.icon} ${escapeHtml(trivia.set.label)} · Question ${trivia.i+1} / ${qs.length} · Score ${trivia.score}</div>
+      <div class="trivia-prog">${trivia.set.icon} ${T('ui.triviaProgress', { set: escapeHtml(trivia.set.label), i: trivia.i+1, n: qs.length, score: trivia.score })}</div>
       <h2>${escapeHtml(item.q)}</h2>
       <div class="trivia-opts">${order.map(idx=>`<button class="trivia-opt" data-idx="${idx}">${escapeHtml(item.a[idx])}</button>`).join('')}</div>
       <div class="trivia-why" id="trivia-why" hidden></div>
-      <button class="btn-primary" id="trivia-next" hidden>${trivia.i===qs.length-1?'See result':'Next'}</button>
+      <button class="btn-primary" id="trivia-next" hidden>${trivia.i===qs.length-1?T('ui.seeResult'):'Next'}</button>
     </div>`;
     c.querySelectorAll('.trivia-opt').forEach(b => b.onclick = () => answer(parseInt(b.dataset.idx,10), item));
     $('trivia-next').onclick = () => { trivia.i++; if (trivia.i>=qs.length) finishTrivia(); else showQuestion(); };
@@ -967,7 +964,7 @@
       b.disabled = true;
     });
     const why = $('trivia-why'); why.hidden=false;
-    why.innerHTML = `<strong>${correct?'Correct':'Not quite'}.</strong> ${escapeHtml(item.why)}`;
+    why.innerHTML = `<strong>${correct?T('ui.correct'):T('ui.notQuite')}</strong> ${escapeHtml(item.why)}`;
     $('trivia-next').hidden = false;
   }
   function finishTrivia() {
@@ -978,7 +975,7 @@
     if (trivia.score===total) DATA.addBadge(state.user.email, trivia.set.id==='history' ? 'historian' : 'trivia-ace');
     DATA.logActivity('trivia', `${state.user.name} scored ${trivia.score}/${total} on ${trivia.set.label} trivia`, state.user.name);
     if (typeof FX!=='undefined') {
-      if (trivia.score===total) FX.celebrate('Perfect!', total+'/'+total+(trivia.set.id==='history'?' — Historian':' — Trivia Ace'));
+      if (trivia.score===total) FX.celebrate(T('ui.perfect'), total+'/'+total+(trivia.set.id==='history'?' — Historian':' — Trivia Ace'));
       else if (trivia.score/total>=0.6) { FX.confetti(50); FX.sound('pop'); }
     }
     state.user = DATA.findUserByEmail(state.user.email);
@@ -986,7 +983,7 @@
     const pct = Math.round(trivia.score/total*100);
     c.innerHTML = `<div class="trivia-result">
       <div class="trivia-score-ring">${trivia.score}<small>/${total}</small></div>
-      <h2>${pct>=80?'Sharp!':pct>=50?'Good work':'Keep studying'}</h2>
+      <h2>${pct>=80?T('ui.triviaSharp'):pct>=50?T('ui.triviaGoodWork'):T('ui.triviaKeepStudying')}</h2>
       <p class="dash-sub">${T('ui.bestScoreSavedTo')}</p>
       <div class="status-actions"><button class="btn-primary" id="trivia-again">${T('ui.tryAgain')}</button>
       <button class="btn-ghost" data-go="dashboard">${T('ui.backToDashboard')}</button></div>
@@ -1009,15 +1006,15 @@
       <div class="admin-head"><h1>${T('ui.superAdmin')} <button class="help-chip" data-help="admin" title="${T('ui.howTheConsoleWorks')}">？</button></h1><p class="dash-sub">${T('ui.approveLoginsManageRoles')}</p></div>
 
       <section class="admin-sec">
-        <h3>Approval queue ${pend.length?`<span class="pill-count">${pend.length}</span>`:''}</h3>
+        <h3>${T('ui.approvalQueue')} ${pend.length?`<span class="pill-count">${pend.length}</span>`:''}</h3>
         <div class="admin-list" id="approve-list">
           ${pend.length ? pend.map(u=>`
             <div class="admin-row" data-id="${u.id}">
               <span class="ar-av">${escapeHtml(u.name.charAt(0))}</span>
-              <span class="ar-main"><span class="ar-name">${escapeHtml(u.name)}</span><span class="ar-sub">${escapeHtml(u.email)} · wants ${DATA.roleLabel(u.role)}${u.position?` (pos ${u.position})`:''} · ${u.provider}</span></span>
+              <span class="ar-main"><span class="ar-name">${escapeHtml(u.name)}</span><span class="ar-sub">${T('ui.emailWantsRole', { email: escapeHtml(u.email), role: DATA.roleLabel(u.role) })}${u.position?` (${T('ui.posLower')} ${u.position})`:''} · ${u.provider}</span></span>
               <span class="ar-actions">
-                <button class="btn-primary sm" data-approve="${u.id}">Approve</button>
-                <button class="btn-ghost sm danger" data-deny="${u.id}">Deny</button>
+                <button class="btn-primary sm" data-approve="${u.id}">${T('ui.approve')}</button>
+                <button class="btn-ghost sm danger" data-deny="${u.id}">${T('ui.deny')}</button>
               </span>
             </div>`).join('') : `<div class="muted">${T('ui.noPendingRequests')}</div>`}
         </div>
@@ -1040,7 +1037,7 @@
 
       <section class="admin-sec">
         <h3>${T('ui.activityFeed')}</h3>
-        <div class="dash-list">${acts.slice(0,30).map(activityRow).join('')||'<div class="muted">Nothing yet.</div>'}</div>
+        <div class="dash-list">${acts.slice(0,30).map(activityRow).join('')||`<div class="muted">${T('ui.nothingYet')}</div>`}</div>
       </section>
     </div>`;
 
@@ -1095,20 +1092,20 @@
   function renderLibrary() {
     const s = DATA.sit(state.situation);
     $('library-title').textContent = s.label;
-    $('library-sub').textContent = s.note + ' · ' + (state.phase==='offense'?'Offense':'Defense');
+    $('library-sub').textContent = s.note + ' · ' + (state.phase==='offense'?T('phase.offense'):T('phase.defense'));
     const list = $('scenario-list'); list.innerHTML='';
     const items = currentList();
-    if (items.length===0) list.innerHTML = `<div class="empty-lib">No ${state.phase} plays here yet.${canEdit()?'<br><span>Press “+ New” to build one.</span>':''}</div>`;
+    if (items.length===0) list.innerHTML = `<div class="empty-lib">${T('ui.noPhasePlaysHereYet', { phase: T('phase.' + state.phase) })}${canEdit()?`<br><span>${T('ui.pressNewToBuildOne')}</span>`:''}</div>`;
     items.forEach(scn => {
       const card = document.createElement('button');
       card.className='scn-card' + (scn.id===state.selectedId?' active':'') + (selecting?' selectable':'') + (selecting && selected.has(scn.id)?' picked':'');
       card.innerHTML = `${selecting?`<span class="scn-check">${selected.has(scn.id)?'☑':'☐'}</span>`:''}
         <div class="scn-card-top">
-          <span class="scn-title">${escapeHtml(scn.title||'Untitled play')}</span>
-          ${scn.builtIn?'<span class="tag tag-sample">sample</span>':'<span class="tag tag-yours">saved</span>'}${scn.template?'<span class="tag tag-tpl">⭐ template</span>':''}${(typeof PRIVACY!=='undefined' && !scn.builtIn && PRIVACY.levelOf(scn)!=='team')?`<span class="tag vis-${PRIVACY.levelOf(scn)}">${PRIVACY.levelOf(scn)==='private'?'🔒':'🌐'}</span>`:''}
+          <span class="scn-title">${escapeHtml(scn.title||T('ui.untitledPlay'))}</span>
+          ${scn.builtIn?`<span class="tag tag-sample">${T('ui.tagSample')}</span>`:`<span class="tag tag-yours">${T('ui.tagSaved')}</span>`}${scn.template?`<span class="tag tag-tpl">${T('ui.tagTemplate')}</span>`:''}${(typeof PRIVACY!=='undefined' && !scn.builtIn && PRIVACY.levelOf(scn)!=='team')?`<span class="tag vis-${PRIVACY.levelOf(scn)}">${PRIVACY.levelOf(scn)==='private'?'🔒':'🌐'}</span>`:''}
         </div>
         <div class="scn-desc">${escapeHtml(scn.description||'')}</div>
-        <div class="scn-meta"><span>${scn.frames.length} step${scn.frames.length>1?'s':''}</span><span>${escapeHtml(scn.author||'')}</span></div>`;
+        <div class="scn-meta"><span>${scn.frames.length > 1 ? T('ui.nSteps', { n: scn.frames.length }) : T('ui.nStep', { n: scn.frames.length })}</span><span>${escapeHtml(scn.author||'')}</span></div>`;
       card.onclick = () => selecting ? togglePick(scn.id) : openScenario(scn.id);
       list.appendChild(card);
     });
@@ -1116,7 +1113,7 @@
     if (canEdit() && !selecting) {
       const plus = document.createElement('button');
       plus.className = 'scn-card scn-new';
-      plus.innerHTML = '<span class="scn-new-plus">＋</span> Create a new play';
+      plus.innerHTML = `<span class="scn-new-plus">＋</span> ${T('ui.createANewPlay')}`;
       plus.onclick = () => newPlayFlow();
       list.appendChild(plus);
     }
@@ -1402,8 +1399,8 @@
     add('line', { x1: X0, y1: Y1, x2: X1, y2: Y1, stroke: '#3fd0e0', 'stroke-width': 2 });      // water line
     const t = add('text', { x: X0 + W / 2, y: 46, 'text-anchor': 'middle', 'font-size': 5.4, fill: '#9fd7e4', 'font-family': 'Helvetica, Arial, sans-serif' });
     t.textContent = view.keeperMissing
-      ? 'no keeper in this step'
-      : 'keeper + blockers cover ~' + (Math.round(view.coverPct * 10) * 10) + '% of the width';
+      ? T('ui.gkNoKeeperInStep')
+      : T('ui.gkCoverage', { pct: Math.round(view.coverPct * 10) * 10 });
   }
   function updateGkView() {
     const panel = $('gk-view'); if (!panel) return;
@@ -1416,17 +1413,17 @@
     drawGoalMouth(c);
     const pct = v => Math.round(v * 100) + '%';
     $('gkv-badge').hidden = !marked;
-    if (marked) $('gkv-badge').textContent = marked.kind === 'lob' ? 'LOB' : 'SHOT';
+    if (marked) $('gkv-badge').textContent = marked.kind === 'lob' ? T('ui.badgeLob') : T('ui.badgeShot');
     $('gkv-nums').innerHTML =
-      `<span class="gkv-n gkv-shoot"><b>${pct(c.shootPct)}</b> shoot</span>` +
-      `<span class="gkv-n gkv-lob"><b>${pct(c.lobPct)}</b> lob</span>` +
-      `<span class="gkv-n">${c.blockerCount} in the lane</span>` +
-      (c.keeperOutM == null ? '<span class="gkv-n">no keeper</span>' : `<span class="gkv-n">keeper ${c.keeperOutM} m out</span>`) +
+      `<span class="gkv-n gkv-shoot"><b>${pct(c.shootPct)}</b> ${T('ui.shoot')}</span>` +
+      `<span class="gkv-n gkv-lob"><b>${pct(c.lobPct)}</b> ${T('ui.lob')}</span>` +
+      `<span class="gkv-n">${c.blockerCount} ${T('ui.inTheLane')}</span>` +
+      (c.keeperOutM == null ? `<span class="gkv-n">${T('ui.noKeeper')}</span>` : `<span class="gkv-n">${T('ui.keeperOutM', { m: c.keeperOutM })}</span>`) +
       `<span class="gkv-n">${c.distanceM} m · ${c.angleDeg}°</span>` +
       `<span class="gkv-n gkv-zone gkv-${c.zone}">${c.zone}</span>`;
     $('gkv-advice').textContent = c.advice;
     const menuData = SHOT.shotOptions(f, { shooter: marked ? marked.by : null, manUp: scn.situation === '6v5' || scn.situation === '5v4' });
-    const TIER = { best: '★ best', good: 'good', risky: 'risky' };
+    const TIER = { best: T('ui.tierBest'), good: T('ui.tierGood'), risky: T('ui.tierRisky') };
     const menu = $('gkv-menu');
     if (menu) menu.innerHTML = menuData.options.map(o =>
       `<div class="gkv-opt gkv-opt-${o.tier}"><span class="gkv-opt-h"><b>${escapeHtml(o.label)}</b><span class="gkv-tier gkv-tier-${o.tier}">${TIER[o.tier]}</span></span><span class="gkv-opt-cue">${escapeHtml(o.cue)}</span></div>`
@@ -1665,7 +1662,7 @@
   const sol = { openId:null, player:null };
   function renderSolutions() {
     const c = $('view-solutions');
-    if (typeof SOLVER==='undefined') { c.innerHTML = '<div class="muted">Solutions unavailable.</div>'; return; }
+    if (typeof SOLVER==='undefined') { c.innerHTML = `<div class="muted">${T('ui.solutionsUnavailable')}</div>`; return; }
     c.innerHTML = `<div class="sol-wrap">
       <div class="dash-head with-mascot">${(typeof FX!=='undefined')?FX.mascot(38):''}
         <div><h1>${T('ui.solutionsLab')} <button class="help-chip" data-help="solutions" title="${T('ui.howSolutionsWork')}">？</button></h1>
@@ -1674,7 +1671,7 @@
         <input type="text" id="sol-search" placeholder="${T('ui.eGISwim')}" />
         <button class="btn-primary sm" id="sol-go">${T('ui.solve')}</button>
       </div>
-      <div class="sol-ex">Try:
+      <div class="sol-ex">${T('ui.tryColon')}
         ${['Alone on the keeper who comes out','2-on-1 fast break','They double-team our hole','How do I draw a kick-out','Defend the counter-attack']
           .map(x=>`<button class="sol-chip" data-sol-ex="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join('')}
       </div>
@@ -1862,7 +1859,7 @@
   const WPM_BOX_TTL = 30 * 24 * 3600 * 1000;   // a played match's box score never changes
   const wpm = { busy: false, openBox: null, error: '' };
 
-  const wpmAgo = at => { const m = Math.round((Date.now() - at) / 60000); return m < 60 ? m + ' min ago' : (m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'); };
+  const wpmAgo = at => { const m = Math.round((Date.now() - at) / 60000); return m < 60 ? T('ui.minAgo', { n: m }) : (m < 1440 ? T('ui.hAgo', { n: Math.round(m / 60) }) : T('ui.dAgo', { n: Math.round(m / 1440) })); };
 
   function renderWpMatch() {
     const host = $('wpm-section'); if (!host || typeof WPMATCH === 'undefined') return;
@@ -1873,7 +1870,7 @@
         <p class="fa-note">${T('ui.pickYourClubS')}</p>
         <div class="wpm-pick"><input type="text" id="wpm-search" placeholder="${T('ui.searchYourTeamE')}" value=""><button class="btn-primary sm" id="wpm-search-go">${T('ui.search')}</button></div>
         <div id="wpm-results"></div>
-        <p class="fa-note">Data: Swiss Aquatics Match Center · <a href="${WPMATCH.SITE}" target="_blank" rel="noopener">wpmatch.ch</a></p>
+        <p class="fa-note">${T('ui.dataSwissAquaticsMatch')} <a href="${WPMATCH.SITE}" target="_blank" rel="noopener">wpmatch.ch</a></p>
       </section>`;
       wireWpMatch(); return;
     }
@@ -1888,12 +1885,12 @@
     const row = (f) => {
       const r = WPMATCH.resultFor(f, team.id);
       const side = WPMATCH.opponentOf(f, team.id);
-      const when = f.dateTBC ? 'date TBC' : (f.localTime ? fmtDay(f.startsAt) + ' · ' + f.localTime.slice(11, 16) : fmtDay(f.startsAt));
+      const when = f.dateTBC ? T('ui.dateTbc') : (f.localTime ? fmtDay(f.startsAt) + ' · ' + f.localTime.slice(11, 16) : fmtDay(f.startsAt));
       const opp = side ? side.opponent.name : (f.home.name && f.away.name ? f.home.name + ' – ' + f.away.name : f.title);
       const score = r ? `<b class="wpm-${r.outcome}">${r.ours}–${r.theirs}</b>` : '';
       return `<div class="wpm-row${f.dateTBC ? ' wpm-tbc' : ''}">
         <span class="wpm-when">${escapeHtml(when)}</span>
-        <span class="wpm-opp">${side ? (side.us === 'home' ? 'vs ' : 'at ') : ''}${escapeHtml(opp || f.title)}${f.venueName ? ` <span class="muted">${escapeHtml(f.venueName)}</span>` : ''}</span>
+        <span class="wpm-opp">${side ? (side.us === 'home' ? T('ui.vsPrefix') : T('ui.atPrefix')) : ''}${escapeHtml(opp || f.title)}${f.venueName ? ` <span class="muted">${escapeHtml(f.venueName)}</span>` : ''}</span>
         <span class="wpm-score">${score}</span>
         <span class="wpm-acts">${f.homeScore != null ? `<button class="btn-ghost xs" data-wpm-box="${escapeHtml(f.gameId)}">${T('ui.statsBtn')}</button>` : ''}<a class="btn-ghost xs" href="${escapeHtml(WPMATCH.matchUrl(f))}" target="_blank" rel="noopener">↗</a></span>
       </div>`;
@@ -1906,16 +1903,16 @@
         <button class="btn-ghost xs" id="wpm-refresh">${wpm.busy ? T('ui.refreshing') : T('ui.refreshBtn')}</button>
         <button class="btn-ghost xs" id="wpm-change">${T('ui.changeTeam')}</button>
         ${fixtures.length ? `<button class="btn-primary xs" id="wpm-tocal">${T('ui.addNToCalendar', { n: upcoming.filter(f => !f.dateTBC).length || played.length })}</button>` : ''}
-        <span class="muted">${fxBox ? 'updated ' + wpmAgo(fxBox.at) + (fxBox.stale ? ' · refreshing' : '') : 'not loaded yet'}</span>
+        <span class="muted">${fxBox ? T('ui.updatedAgo', { ago: wpmAgo(fxBox.at) }) + (fxBox.stale ? T('ui.refreshingSuffix') : '') : T('ui.notLoadedYet')}</span>
       </div>
       ${wpm.error ? `<p class="fa-note">${escapeHtml(wpm.error)}</p>` : ''}
       ${!fixtures.length && !wpm.busy ? `<p class="fa-note">${T('ui.noFixturesYet')}</p>` : ''}
 
-      ${fixtures.length ? `<div class="wpm-group"><div class="ef-label">Upcoming (${upcoming.length})</div>
-        ${upcoming.length ? upcoming.slice(0, 8).map(row).join('') : '<div class="muted">Nothing scheduled yet — the next season\'s dates usually appear as “date TBC” first.</div>'}</div>
+      ${fixtures.length ? `<div class="wpm-group"><div class="ef-label">${T('ui.upcomingN', { n: upcoming.length })}</div>
+        ${upcoming.length ? upcoming.slice(0, 8).map(row).join('') : `<div class="muted">${T('ui.nothingScheduledYet')}</div>`}</div>
 
-      <div class="wpm-group"><div class="ef-label">Recent results (${played.length})</div>
-        ${played.slice(0, 8).map(row).join('') || '<div class="muted">No played matches found.</div>'}</div>` : ''}
+      <div class="wpm-group"><div class="ef-label">${T('ui.recentResultsN', { n: played.length })}</div>
+        ${played.slice(0, 8).map(row).join('') || `<div class="muted">${T('ui.noPlayedMatchesFound')}</div>`}</div>` : ''}
 
       <div id="wpm-box"></div>
 
@@ -1924,7 +1921,7 @@
           <tbody>${table.rows.map((r, i) => `<tr${r.teamId === team.id ? ' class="wpm-us"' : ''}><td>${i + 1}</td><td>${escapeHtml(r.name || String(r.teamId))}</td>${['t', 'w', 'd', 'l', 'pts'].map(k => `<td>${escapeHtml(String(r[k] == null ? '—' : r[k]))}</td>`).join('')}</tr>`).join('')}</tbody>
         </table></div></details>` : ''}
 
-      <p class="fa-note">Data: Swiss Aquatics Match Center · <a href="${escapeHtml(WPMATCH.matchUrl({ url: WPMATCH.SITE }))}" target="_blank" rel="noopener">wpmatch.ch</a>${T('ui.readOnlyAndNot')}</p>
+      <p class="fa-note">${T('ui.dataSwissAquaticsMatch')} <a href="${escapeHtml(WPMATCH.matchUrl({ url: WPMATCH.SITE }))}" target="_blank" rel="noopener">wpmatch.ch</a>${T('ui.readOnlyAndNot')}</p>
     </section>`;
     wireWpMatch();
     if (!fxBox || fxBox.stale) wpmRefresh(true);   // first paint shows cache, then quietly catches up
@@ -1949,8 +1946,8 @@
       } catch (e) { /* a missing table must never cost us the fixtures */ }
     } catch (e) {
       wpm.error = e.code === 'unreachable'
-        ? 'Could not reach wpmatch.ch — showing what was last loaded on this device.'
-        : 'wpmatch.ch returned something unexpected — showing what was last loaded on this device.';
+        ? T('ui.couldNotReachWpmatch')
+        : T('ui.wpmatchUnexpected');
     }
     wpm.busy = false; renderWpMatch();
   }
@@ -1960,9 +1957,9 @@
     const cached = WPMATCH.cacheGet('box.' + gameId, WPM_BOX_TTL);
     let box = cached && cached.data;
     if (!box) {
-      host.innerHTML = '<div class="muted">Loading the box score…</div>';
+      host.innerHTML = `<div class="muted">${T('ui.loadingTheBoxScore')}</div>`;
       try { box = await WPMATCH.fetchBox(gameId); WPMATCH.cachePut('box.' + gameId, box); }
-      catch (e) { host.innerHTML = '<div class="muted">Could not load that box score.</div>'; return; }
+      catch (e) { host.innerHTML = `<div class="muted">${T('ui.couldNotLoadBoxScore')}</div>`; return; }
     }
     const team = WPMATCH.loadTeam() || {};
     const nameFor = id => { const f = ((WPMATCH.cacheGet('fx.' + team.id) || {}).data || []).find(x => x.gameId === gameId); if (!f) return String(id); return f.home.id === id ? f.home.name : (f.away.id === id ? f.away.name : String(id)); };
@@ -1970,12 +1967,12 @@
     const cols = ['goals', 'goalon', 'goalextraplayer', 'penaltygoals', 'exclusionfoul'].filter(k => L[k]);
     host.innerHTML = `<div class="wpm-boxscore">
       <div class="wpm-box-head"><b>${escapeHtml(box.title)}</b><button class="btn-ghost xs" id="wpm-box-close">✕</button></div>
-      <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>${T('ui.team')}</th>${box.quarterKeys.map((k, i) => `<th>${escapeHtml((box.scoreLabels && box.scoreLabels[k]) || 'Q' + (i + 1))}</th>`).join('')}<th>${escapeHtml((box.scoreLabels && box.scoreLabels.goals) || 'Goals')}</th><th>${escapeHtml((box.scoreLabels && box.scoreLabels.manup) || '% Extra')}</th></tr></thead>
+      <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>${T('ui.team')}</th>${box.quarterKeys.map((k, i) => `<th>${escapeHtml((box.scoreLabels && box.scoreLabels[k]) || 'Q' + (i + 1))}</th>`).join('')}<th>${escapeHtml((box.scoreLabels && box.scoreLabels.goals) || T('ui.goalsCol'))}</th><th>${escapeHtml((box.scoreLabels && box.scoreLabels.manup) || T('ui.extraPct'))}</th></tr></thead>
         <tbody>${box.teamIds.map(id => { const l = box.lines[id]; return `<tr${id === team.id ? ' class="wpm-us"' : ''}><td>${escapeHtml(nameFor(id))}</td>${(l ? l.quarters : [null, null, null, null]).map(q => `<td>${q == null ? '—' : q}</td>`).join('')}<td><b>${l && l.goals != null ? l.goals : '—'}</b></td><td>${l && l.manup != null ? l.manup + '%' : '—'}</td></tr>`; }).join('')}</tbody></table></div>
       ${box.teamIds.filter(id => (box.rosters[id] || []).length).map(id => `<div class="ef-label">${escapeHtml(nameFor(id))}</div>
         <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>#</th>${cols.map(k => `<th>${escapeHtml(L[k])}</th>`).join('')}</tr></thead>
           <tbody>${box.rosters[id].map(p => `<tr><td>${escapeHtml(p.cap)}</td>${cols.map(k => { const v = p.stats[k]; const n = WPMATCH.statNumber(v), d = WPMATCH.statDetail(v); return `<td${d && d !== n ? ` title="${escapeHtml(d)}"` : ''}>${escapeHtml(n || '0')}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`).join('')}
-      <p class="fa-note">Official record · <a href="${escapeHtml(box.url)}" target="_blank" rel="noopener">${T('ui.openOnWpmatchCh')}</a></p>
+      <p class="fa-note">${T('ui.officialRecord')} <a href="${escapeHtml(box.url)}" target="_blank" rel="noopener">${T('ui.openOnWpmatchCh')}</a></p>
     </div>`;
     const cl = $('wpm-box-close'); if (cl) cl.onclick = () => { host.innerHTML = ''; };
     host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1986,17 +1983,17 @@
     if (go && inp) {
       const run = async () => {
         const q = inp.value.trim(); if (!q) return;
-        const out = $('wpm-results'); out.innerHTML = '<div class="muted">Searching…</div>';
+        const out = $('wpm-results'); out.innerHTML = `<div class="muted">${T('ui.searching')}</div>`;
         try {
           const teams = await WPMATCH.searchTeams(q);
           out.innerHTML = teams.length
             ? `<div class="wpm-teamlist">${teams.map(t => `<button class="btn-ghost sm" data-wpm-team="${t.id}" data-name="${escapeHtml(t.name)}" data-slug="${escapeHtml(t.slug)}" data-url="${escapeHtml(t.url)}">${escapeHtml(t.name)}</button>`).join('')}</div>`
-            : '<div class="muted">No team of that name on wpmatch.ch.</div>';
+            : `<div class="muted">${T('ui.noTeamOfThatName')}</div>`;
           out.querySelectorAll('[data-wpm-team]').forEach(b => b.onclick = () => {
             WPMATCH.saveTeam({ id: +b.dataset.wpmTeam, name: b.dataset.name, slug: b.dataset.slug, url: b.dataset.url, searchTerm: q });
             renderWpMatch(); wpmRefresh();
           });
-        } catch (e) { out.innerHTML = '<div class="muted">Could not reach wpmatch.ch just now.</div>'; }
+        } catch (e) { out.innerHTML = `<div class="muted">${T('ui.couldNotReachWpmatchNow')}</div>`; }
       };
       go.onclick = run; inp.onkeydown = e => { if (e.key === 'Enter') run(); };
     }
@@ -2010,7 +2007,7 @@
       let added = 0, updated = 0;
       evs.forEach(e => { if (byId.has(e.id)) { Object.assign(byId.get(e.id), e); updated++; } else { cur.push(e); added++; } });
       CALENDAR.save(cur);
-      toast(`${added} match${added === 1 ? '' : 'es'} added${updated ? `, ${updated} updated` : ''}`);
+      toast(`${T('ui.nMatchesAdded', { n: added })}${updated ? T('ui.andNUpdated', { n: updated }) : ''}`);
       renderAgenda();
     };
     document.querySelectorAll('[data-wpm-box]').forEach(b => b.onclick = () => wpmOpenBox(b.dataset.wpmBox));
@@ -2018,7 +2015,7 @@
 
   function goalFromForm() {
     return {
-      title: $('goal-title').value.trim() || 'Season goal',
+      title: $('goal-title').value.trim() || T('ui.seasonGoal'),
       startDate: $('goal-start').value, targetDate: $('goal-target').value,
       daysPerWeek: +$('goal-days').value,
       focus: [...document.querySelectorAll('.goal-focus input[type="checkbox"]:checked')].filter(i=>i.id!=='goal-usetests').map(i=>i.value),
@@ -2035,18 +2032,18 @@
   function generatePlanFromForm() {
     season.plan = PLANNER.generatePlan(goalFromForm(), { gaps: devGapsForPlan() });
     renderPlan();
-    toast(season.plan.leadFocus ? 'Plan generated — leaning on your test log' : 'Plan generated');
+    toast(season.plan.leadFocus ? T('ui.planGeneratedLeaning') : T('ui.planGenerated'));
   }
   function renderPlan() {
     const p = season.plan; if (!p) return;
     const out = $('plan-out');
-    const phases = p.mesocycles.map(m=>`<span class="phase-pill ${m.name.replace(/\W/g,'').toLowerCase()}">${escapeHtml(m.name)} · ${m.weeks}w</span>`).join('');
+    const phases = p.mesocycles.map(m=>`<span class="phase-pill ${m.name.replace(/\W/g,'').toLowerCase()}">${T('ui.planPhasePill', { name: escapeHtml(m.name), weeks: m.weeks })}</span>`).join('');
     const weeks = p.microcycles.map(mc=>`<details class="plan-week"><summary>
-        <span class="pw-n">Week ${mc.week}</span><span class="pw-phase">${escapeHtml(mc.phase)}${mc.deload?' · deload':''}</span>
+        <span class="pw-n">${T('ui.weekN', { n: mc.week })}</span><span class="pw-phase">${escapeHtml(mc.phase)}${mc.deload?T('ui.deloadSuffix'):''}</span>
         <span class="pw-load"><i class="lv vol" style="width:${mc.load.volume}%"></i></span>
-        <span class="pw-rpe">vol ${mc.load.volume} · int ${mc.load.intensity}</span></summary>
-      <div class="pw-sessions">${mc.sessions.map(s=>`<div class="ses${s.fromGap?' ses-fromgap':''}"${s.fromGap?' title="Picked from your test log — your biggest measured gap, on your freshest day"':''}><span class="ses-focus ${s.focus}">${escapeHtml(s.focus)}</span>
-        <span class="ses-main"><strong>${escapeHtml(s.title)}</strong><span class="muted">${s.durationMin}min · RPE ${s.rpe} · ${escapeHtml((s.drills||[]).slice(0,2).join(' · '))}</span></span></div>`).join('')}</div>
+        <span class="pw-rpe">${T('ui.volIntLoad', { vol: mc.load.volume, int: mc.load.intensity })}</span></summary>
+      <div class="pw-sessions">${mc.sessions.map(s=>`<div class="ses${s.fromGap?' ses-fromgap':''}"${s.fromGap?` title="${T('ui.pickedFromYourTestLog')}"`:''}><span class="ses-focus ${s.focus}">${escapeHtml(s.focus)}</span>
+        <span class="ses-main"><strong>${escapeHtml(s.title)}</strong><span class="muted">${T('ui.sessionMeta', { min: s.durationMin, rpe: s.rpe, drills: escapeHtml((s.drills||[]).slice(0,2).join(' · ')) })}</span></span></div>`).join('')}</div>
       </details>`).join('');
     // say WHY the plan leans the way it does — a plan that silently changes shape is worse than one that explains itself
     const focusLabel = k => (FOCUS_LIST().find(f => f[0] === k) || [k, k])[1].toLowerCase();
@@ -2054,24 +2051,24 @@
     if (p.emphasisBoost && Object.keys(p.emphasisBoost).length) {
       why = Object.keys(p.emphasisBoost).map(f => {
         const g = (p.gaps || []).find(x => x.focus === f);
-        return `<div class="why-row">⬆ more <b>${escapeHtml(focusLabel(f))}</b>${g ? ` — ${escapeHtml(g.label)}: ${escapeHtml(g.deltaText)}${g.verified ? '' : ' <span class="muted">(self-reported)</span>'}` : ''}</div>`;
-      }).join('') + (p.leadFocus ? `<div class="why-row muted">Your first session each week targets ${escapeHtml(focusLabel(p.leadFocus))}.</div>` : '')
+        return `<div class="why-row">${T('ui.planMoreFocus', { focus: escapeHtml(focusLabel(f)) })}${g ? `${T('ui.planGapDetail', { test: escapeHtml(g.label), delta: escapeHtml(g.deltaText) })}${g.verified ? '' : ` <span class="muted">${T('ui.selfReportedParen')}</span>`}` : ''}</div>`;
+      }).join('') + (p.leadFocus ? `<div class="why-row muted">${T('ui.firstSessionTargets', { focus: escapeHtml(focusLabel(p.leadFocus)) })}</div>` : '')
         + `<div class="why-row muted">${T('ui.theTestCatalogueMeasures')}</div>`;
     } else {
       const noneLogged = !$('goal-usetests') || $('goal-usetests').disabled;
-      why = `<div class="why-row muted">Based on your focus choices only — ${noneLogged ? 'no test results logged yet' : 'nothing in your test log stands out right now'}. <button class="btn-ghost xs" id="plan-why-log">${T('ui.logATest')}</button></div>`;
+      why = `<div class="why-row muted">${T('ui.planBasedOnFocusOnly', { reason: noneLogged ? T('ui.planNoTestResultsYet') : T('ui.planNothingStandsOut') })} <button class="btn-ghost xs" id="plan-why-log">${T('ui.logATest')}</button></div>`;
     }
-    out.innerHTML = `<div class="plan-summary">Peak for <strong>${escapeHtml(new Date(p.goal.targetDate).toLocaleDateString())}</strong> · ${p.weeks} weeks · ${p.goal.daysPerWeek}/wk</div>
+    out.innerHTML = `<div class="plan-summary">${T('ui.peakForSummary', { date: escapeHtml(new Date(p.goal.targetDate).toLocaleDateString()), weeks: p.weeks, perWeek: p.goal.daysPerWeek })}</div>
       <div class="plan-why">${why}</div>
       <div class="phase-band">${phases}</div>
       <div class="plan-weeks">${weeks}</div>
-      <button class="btn-primary sm" id="plan-tocal">＋ Add all ${PLANNER.planToEvents(p).length} sessions to the calendar</button>`;
+      <button class="btn-primary sm" id="plan-tocal">${T('ui.addAllNSessions', { n: PLANNER.planToEvents(p).length })}</button>`;
     $('plan-tocal').onclick = () => {
       const evs = PLANNER.planToEvents(p);
       const cur = CALENDAR.load(); const ids = new Set(cur.map(e=>e.id));
       const add = evs.filter(e=>!ids.has(e.id));
       CALENDAR.save(cur.concat(add));
-      toast(`${add.length} sessions added to the calendar`);
+      toast(T('ui.nSessionsAdded', { n: add.length }));
       renderAgenda();
     };
     const whyLog = $('plan-why-log'); if (whyLog) whyLog.onclick = () => switchView('development');
@@ -2080,7 +2077,7 @@
     const date = $('ev-date').value, time = $('ev-time').value || '18:00';
     if (!date) { toast(T('ui.pickADate')); return; }
     const start = new Date(`${date}T${time}`);
-    const ev = { id: CALENDAR.uid(), type: $('ev-type').value, title: $('ev-title').value.trim() || 'Event',
+    const ev = { id: CALENDAR.uid(), type: $('ev-type').value, title: $('ev-title').value.trim() || T('ui.eventDefaultTitle'),
       start: start.toISOString(), end: new Date(start.getTime()+90*60000).toISOString(),
       location: $('ev-loc').value.trim(), reminderMin: 120 };
     const all = CALENDAR.load(); all.push(ev); CALENDAR.save(all);
@@ -2090,13 +2087,13 @@
   function renderAgenda() {
     const wrap = $('cal-agenda'); if (!wrap) return;
     const items = CALENDAR.agenda(CALENDAR.load(), new Date(), 90);
-    if (!items.length) { wrap.innerHTML = '<div class="muted" style="padding:12px">No upcoming events. Add a match or generate a plan.</div>'; return; }
-    wrap.innerHTML = `<div class="ef-label" style="margin-top:12px">Next 90 days (${items.length})</div>` + items.map(e=>`
+    if (!items.length) { wrap.innerHTML = `<div class="muted" style="padding:12px">${T('ui.noUpcomingEvents')}</div>`; return; }
+    wrap.innerHTML = `<div class="ef-label" style="margin-top:12px">${T('ui.next90Days', { n: items.length })}</div>` + items.map(e=>`
       <div class="agenda-row" data-ev="${escapeHtml(e.id)}">
         <span class="ag-date"><b>${fmtDay(e.start)}</b>${e.allDay?'':'<span class="muted">'+fmtTime(e.start)+'</span>'}</span>
         <span class="ag-main"><span class="ag-title">${(CALENDAR.TYPES[e.type]||'').split(' ')[0]} ${escapeHtml(e.title)}</span>
           ${e.location?`<span class="muted">${escapeHtml(e.location)}</span>`:''}</span>
-        <button class="btn-ghost xs" data-del-ev="${escapeHtml(e.id)}" title="Remove">✕</button>
+        <button class="btn-ghost xs" data-del-ev="${escapeHtml(e.id)}" title="${T('ui.remove')}">✕</button>
       </div>`).join('');
     wrap.querySelectorAll('[data-del-ev]').forEach(b=> b.onclick=()=>{ CALENDAR.save(CALENDAR.load().filter(e=>e.id!==b.dataset.delEv)); renderAgenda(); });
   }
@@ -2108,7 +2105,7 @@
   function exportICS() {
     const ev = CALENDAR.load();
     if (!ev.length) { toast(T('ui.nothingToExportYet')); return; }
-    downloadBlob(CALENDAR.toICS(ev, { name: 'Triibholz — ' + (state.user && state.user.name || 'Team') }), 'triibholz-season.ics', 'text/calendar');
+    downloadBlob(CALENDAR.toICS(ev, { name: 'Triibholz — ' + (state.user && state.user.name || T('view.team')) }), 'triibholz-season.ics', 'text/calendar');
     toast(T('ui.calendarExportedOpenIt'));
   }
   function defaultFeedBase() { try { const h = (location && location.hostname) || 'localhost'; const proto = (location && location.protocol === 'https:') ? 'https:' : 'http:'; return `${proto}//${h}:4200`; } catch (e) { return 'http://localhost:4200'; } }
@@ -2118,16 +2115,16 @@
     const out = $('cal-subscribe-out');
     const ev = CALENDAR.load(); if (!ev.length) { toast(T('ui.addEventsFirst')); return; }
     const base = feedBase().replace(/\/+$/,''); const token = calToken();
-    out.innerHTML = '<div class="muted">Publishing…</div>';
+    out.innerHTML = `<div class="muted">${T('ui.publishing')}</div>`;
     try {
       const r = await fetch(`${base}/api/calendar/${token}`, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ name:'Triibholz — '+(state.user&&state.user.name||'Team'), events: ev }) });
       if (!r.ok) throw new Error('publish-'+r.status);
       const url = `${base}/api/calendar/${token}.ics`;
       const webcal = url.replace(/^https?:/, 'webcal:');
-      const lanHint = /localhost|127\.0\.0\.1/.test(base) ? '<p class="fa-note">⚠︎ This link uses <strong>localhost</strong> — only this computer can open it. For phones, open the app itself from your Mac’s network address (e.g. http://192.168.x.x:8088) and Subscribe there, or set the Feed server below to that address.</p>' : '';
+      const lanHint = /localhost|127\.0\.0\.1/.test(base) ? `<p class="fa-note">${T('ui.localhostFeedWarning')}</p>` : '';
       out.innerHTML = `<div class="feed-box">
         <p class="fa-note">${T('ui.subscribeOnceOnEach')}</p>
-        <div class="feed-url"><code>${escapeHtml(url)}</code><button class="btn-ghost xs" id="feed-copy">Copy</button></div>
+        <div class="feed-url"><code>${escapeHtml(url)}</code><button class="btn-ghost xs" id="feed-copy">${T('ui.copy')}</button></div>
         <a class="btn-primary sm" href="${escapeHtml(webcal)}">${T('ui.subscribeOnThisDevice')}</a>
         ${lanHint}
         <div class="feed-url"><span class="muted" style="font-size:11px">${T('ui.feedServer')}</span><input type="text" id="feed-base" value="${escapeHtml(base)}" style="flex:1;font-size:11px"><button class="btn-ghost xs" id="feed-base-save">${T('ui.useAndRepublish')}</button></div>
@@ -2137,7 +2134,7 @@
       const fbSave = $('feed-base-save'); if (fbSave) fbSave.onclick = ()=>{ const v=($('feed-base').value||'').trim().replace(/\/+$/,''); try{ v?localStorage.setItem('thplay.calendar.feed',v):localStorage.removeItem('thplay.calendar.feed'); }catch(e){} publishFeed(); };
       toast(T('ui.publishedSubscribeOnAny'));
     } catch(e) {
-      out.innerHTML = `<div class="muted">Couldn’t publish to ${escapeHtml(base)} — start the backend (docker compose up -d analysis), or just use ⬇ Export .ics.</div>`;
+      out.innerHTML = `<div class="muted">${T('ui.couldNotPublishToBase', { server: escapeHtml(base) })}</div>`;
     }
   }
 
@@ -2173,14 +2170,14 @@
   function renderAnnouncePanel() {
     const m = $('announce-panel'); if (!m) return;
     const list = announce.list || [];
-    m.innerHTML = `<div class="announce-head"><b>${T('ui.announcements')}</b> <button class="help-chip" data-help="announcements" title="${T('ui.howAnnouncementsWork')}">？</button>${canEdit() ? `<button class="btn-ghost xs" id="announce-new">＋ New</button>` : ''}</div>
+    m.innerHTML = `<div class="announce-head"><b>${T('ui.announcements')}</b> <button class="help-chip" data-help="announcements" title="${T('ui.howAnnouncementsWork')}">？</button>${canEdit() ? `<button class="btn-ghost xs" id="announce-new">${T('ui.newShort')}</button>` : ''}</div>
       <div class="announce-list">${
-        !announce.reachable ? `<div class="muted" style="padding:10px 4px">Announcements need the analysis backend — this device can’t reach it.</div>`
+        !announce.reachable ? `<div class="muted" style="padding:10px 4px">${T('ui.announcementsNeedBackend')}</div>`
         : list.length ? list.map(a => `<button class="announce-item${a.read ? '' : ' unread'}" data-ann="${escapeHtml(a.id)}">
             <span class="ann-title">${a.scope === 'player' ? '👤' : '📣'} ${escapeHtml(a.title)}</span>
-            <span class="muted">${escapeHtml(a.from || '')} · ${new Date(a.createdAt).toLocaleDateString()}${a.matchLabel ? ' · ' + escapeHtml(a.matchLabel) : ''}${a.playCount ? ' · ' + a.playCount + ' play' + (a.playCount > 1 ? 's' : '') : ''}</span>
+            <span class="muted">${escapeHtml(a.from || '')} · ${new Date(a.createdAt).toLocaleDateString()}${a.matchLabel ? ' · ' + escapeHtml(a.matchLabel) : ''}${a.playCount ? ' · ' + T('ui.nPlaysAttached', { n: a.playCount }) : ''}</span>
           </button>`).join('')
-        : `<div class="muted" style="padding:10px 4px">Nothing here yet.</div>`
+        : `<div class="muted" style="padding:10px 4px">${T('ui.nothingHereYet')}</div>`
       }</div>
       <div id="announce-detail"></div>`;
     const nb = $('announce-new'); if (nb) nb.onclick = e => { e.stopPropagation(); openAnnounceCompose(); };
@@ -2188,14 +2185,14 @@
   }
   async function openAnnounceDetail(id) {
     const box = $('announce-detail'); if (!box) return;
-    box.innerHTML = '<div class="muted" style="padding:8px 4px">Loading…</div>';
+    box.innerHTML = `<div class="muted" style="padding:8px 4px">${T('ui.loadingEllipsis')}</div>`;
     const base = feedBase().replace(/\/+$/, '');
-    let a; try { a = await (await fetch(`${base}/api/announcements/${id}`)).json(); } catch (e) { box.innerHTML = '<div class="muted">Could not load this.</div>'; return; }
+    let a; try { a = await (await fetch(`${base}/api/announcements/${id}`)).json(); } catch (e) { box.innerHTML = `<div class="muted">${T('ui.couldNotLoadThis')}</div>`; return; }
     box.innerHTML = `<div class="announce-open">
       <div class="ann-open-head"><b>${escapeHtml(a.title)}</b><span class="muted">${escapeHtml((a.from && a.from.name) || '')} · ${new Date(a.createdAt).toLocaleString()}</span></div>
       ${a.matchLabel ? `<div class="ann-match">🤽 ${escapeHtml(a.matchLabel)}</div>` : ''}
       <p>${escapeHtml(a.body)}</p>
-      ${(a.plays || []).length ? `<div class="ann-plays">${a.plays.map((p, i) => `<button class="btn-ghost sm" data-import-play="${i}">▶ ${escapeHtml((p.play && p.play.title) || 'Play ' + (i + 1))} — import</button>`).join('')}</div>` : ''}
+      ${(a.plays || []).length ? `<div class="ann-plays">${a.plays.map((p, i) => `<button class="btn-ghost sm" data-import-play="${i}">${T('ui.playImportButton', { title: escapeHtml((p.play && p.play.title) || T('ui.playN', { n: i + 1 })) })}</button>`).join('')}</div>` : ''}
     </div>`;
     box.querySelectorAll('[data-import-play]').forEach(b => b.onclick = e => { e.stopPropagation(); importAnnouncedPlay(a.plays[+b.dataset.importPlay]); });
     if (!(a.readBy || []).includes(state.user.email)) {
@@ -2218,7 +2215,7 @@
       sc.builtIn = false; sc.owner = state.user && state.user.email;
       if (!state.scenarios.some(x => x.id === sc.id)) { state.scenarios.push(sc); n++; }
     });
-    if (n) { DATA.save(state.scenarios); renderLibrary(); toast(n + ' play' + (n > 1 ? 's' : '') + ' added to your playbook'); }
+    if (n) { DATA.save(state.scenarios); renderLibrary(); toast(T('ui.nPlaysAddedToPlaybook', { n: n })); }
     else toast(T('ui.alreadyInYourPlaybook'));
   }
   function openAnnounceCompose() {
@@ -2232,17 +2229,17 @@
       <div class="modal-head"><h3>${T('ui.newAnnouncement')}</h3><span class="spacer"></span><button class="modal-x" id="ann-x">✕</button></div>
       <div class="modal-body ann-compose">
         <div class="ann-scope-toggle">
-          <label><input type="radio" name="ann-scope" value="team" checked> Whole team</label>
-          <label><input type="radio" name="ann-scope" value="player"> One player</label>
+          <label><input type="radio" name="ann-scope" value="team" checked> ${T('ui.wholeTeam')}</label>
+          <label><input type="radio" name="ann-scope" value="player"> ${T('ui.onePlayer')}</label>
         </div>
         <select id="ann-to" hidden>${roster.map(u => `<option value="${escapeHtml(u.email)}">${escapeHtml(u.name || u.email)}${u.position ? ' · Pos ' + escapeHtml(u.position) : ''}</option>`).join('') || `<option value="">${T('ui.noApprovedPlayersYet')}</option>`}</select>
         <input type="text" id="ann-title" placeholder="${T('ui.titleEGThis')}">
         <textarea id="ann-body" rows="4" placeholder="${T('ui.whatDoTheyNeed')}"></textarea>
         <select id="ann-match"><option value="">${T('ui.notTiedToA')}</option>${matches.map(m => `<option value="${escapeHtml(m.id)}" data-label="${escapeHtml(fmtDay(m.start) + ' · ' + m.title)}">${escapeHtml(fmtDay(m.start))} · ${escapeHtml(m.title)}</option>`).join('')}</select>
-        ${myPlays.length ? `<div class="ann-plays-pick"><span class="ef-label">Attach plays (up to ${ANNOUNCE.MAX_PLAYS})</span>
+        ${myPlays.length ? `<div class="ann-plays-pick"><span class="ef-label">${T('ui.attachPlaysUpTo', { n: ANNOUNCE.MAX_PLAYS })}</span>
           ${myPlays.map(s => `<label class="chip-check"><input type="checkbox" value="${escapeHtml(s.id)}"> ${escapeHtml(s.title || 'Untitled')}</label>`).join('')}</div>` : ''}
       </div>
-      <div class="modal-foot"><button class="btn-ghost" id="ann-cancel">Cancel</button><button class="btn-primary" id="ann-send">Send</button></div>
+      <div class="modal-foot"><button class="btn-ghost" id="ann-cancel">${T('ui.cancel')}</button><button class="btn-primary" id="ann-send">${T('ui.send')}</button></div>
     </div>`;
     const close = () => ov.remove();
     ov.querySelector('#ann-x').onclick = close; ov.querySelector('#ann-cancel').onclick = close;
@@ -2260,12 +2257,12 @@
         fromName: state.user.name, fromEmail: state.user.email, title, body,
         matchLabel: matchOpt && matchOpt.value ? matchOpt.dataset.label : null,
         matchEventId: matchOpt && matchOpt.value ? matchOpt.value : null, plays };
-      const btn = ov.querySelector('#ann-send'); btn.disabled = true; btn.textContent = 'Sending…';
+      const btn = ov.querySelector('#ann-send'); btn.disabled = true; btn.textContent = T('ui.sending');
       try {
         const base = feedBase().replace(/\/+$/, '');
         const r = await fetch(`${base}/api/announcements`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
         if (!r.ok) throw new Error('send-' + r.status);
-        toast(scope === 'player' ? 'Note sent' : 'Sent to the whole team');
+        toast(scope === 'player' ? T('ui.noteSent') : T('ui.sentToWholeTeam'));
         close(); loadAnnouncements();
       } catch (e) { toast(T('ui.couldNotSend') + e.message + ')'); btn.disabled = false; btn.textContent = 'Send'; }
     };
@@ -2503,7 +2500,7 @@
   }
   function cloneAsNew(src) {
     const sc = DATA.newScenario(src.situation, src.phase);
-    sc.title = (src.title || 'Play') + ' — copy'; sc.description = src.description || '';
+    sc.title = (src.title || 'Play') + T('ui.copySuffix'); sc.description = src.description || '';
     sc.frames = DATA.clone(src.frames); sc.notes = DATA.clone(src.notes || {});
     sc.fromTemplate = src.id;
     return sc;
@@ -2515,10 +2512,10 @@
     if (!mine.length && !samples.length) { openEditor(DATA.newScenario(state.situation, state.phase), true); return; }
     const list = $('tpl-list'); list.innerHTML = '';
     const row = (sc, kind) => { const b = document.createElement('button'); b.className = 'tpl-item'; b.dataset.tpl = sc.id;
-      b.innerHTML = `<span class="tpl-kind">${kind}</span><strong>${escapeHtml(sc.title || 'Untitled')}</strong><span class="muted">${sc.frames.length} step${sc.frames.length > 1 ? 's' : ''}${sc.description ? ' · ' + escapeHtml(sc.description.slice(0, 80)) : ''}</span>`;
+      b.innerHTML = `<span class="tpl-kind">${kind}</span><strong>${escapeHtml(sc.title || 'Untitled')}</strong><span class="muted">${sc.frames.length > 1 ? T('ui.nSteps', { n: sc.frames.length }) : T('ui.nStep', { n: sc.frames.length })}${sc.description ? ' · ' + escapeHtml(sc.description.slice(0, 80)) : ''}</span>`;
       b.onclick = () => { $('tpl-modal').hidden = true; openEditor(cloneAsNew(sc), true); };
       list.appendChild(b); };
-    mine.forEach(sc => row(sc, '⭐ mine')); samples.forEach(sc => row(sc, 'sample'));
+    mine.forEach(sc => row(sc, T('ui.tplKindMine'))); samples.forEach(sc => row(sc, 'sample'));
     $('tpl-modal').hidden = false;
   }
   /* a template play as an audible: its movement is appended to the current board */
@@ -2534,10 +2531,10 @@
     wrap.innerHTML = '';
     if (!mine.length) return;
     const grp = document.createElement('div'); grp.className = 'cmd-group cmd-mineg';
-    grp.innerHTML = '<div class="cmd-group-h">⭐ My plays (templates)</div>';
+    grp.innerHTML = `<div class="cmd-group-h">${T('ui.myPlaysTemplates')}</div>`;
     const rowEl = document.createElement('div'); rowEl.className = 'cmd-btns';
     mine.forEach(sc => { const b = document.createElement('button'); b.className = 'cmd-btn'; b.type = 'button'; b.dataset.tpl = sc.id; b.title = sc.description || sc.title;
-      b.innerHTML = `<span class="cmd-ic">⭐</span><span class="cmd-name">${escapeHtml(sc.title || 'Untitled')}</span><span class="cmd-scope">${sc.frames.length} steps</span>`;
+      b.innerHTML = `<span class="cmd-ic">⭐</span><span class="cmd-name">${escapeHtml(sc.title || 'Untitled')}</span><span class="cmd-scope">${T('ui.nSteps', { n: sc.frames.length })}</span>`;
       b.onclick = () => onPickTpl(sc.id); rowEl.appendChild(b); });
     grp.appendChild(rowEl); wrap.appendChild(grp);
   }
@@ -2547,7 +2544,7 @@
     edit.scenario.frames.push(...r.steps);
     Object.keys(r.notes).forEach(p => { if (!r.notes[p]) return; edit.scenario.notes[p] = edit.scenario.notes[p] ? edit.scenario.notes[p] + ' ' + r.notes[p] : r.notes[p]; });
     edit.idx = edit.scenario.frames.length - 1; buildNotesGrid(); editorRender();
-    toast(`⭐ ${r.name} added — ${r.steps.length} step${r.steps.length > 1 ? 's' : ''}`);
+    toast(T('ui.templateAddedSteps', { name: r.name, n: r.steps.length }));
   }
   function applyTemplateAudible(id) {
     const tpl = state.scenarios.find(x => x.id === id); if (!tpl) return;
@@ -2560,7 +2557,7 @@
     adjust.dirty = true; if (typeof renderAdjustBoard === 'function') renderAdjustBoard();
     const bar = $('adjust-bar'); if (bar) bar.hidden = false;
     const sheet = $('audible-sheet'); if (sheet) sheet.hidden = true;
-    toast(`⭐ ${r.name} called — ${r.steps.length} step${r.steps.length > 1 ? 's' : ''}; drag to tweak, then save`);
+    toast(T('ui.templateCalledSteps', { name: r.name, n: r.steps.length }));
   }
   function buildCommandGroups(containerId, onPick) {
     const wrap = $(containerId); if (!wrap || typeof COMMANDS==='undefined') return;
@@ -2574,10 +2571,10 @@
         const b = document.createElement('button');
         b.className = 'cmd-btn'; b.type='button';
         b.dataset.cmd = c.id;
-        b.title = c.cue + (c.when ? `\n\nWhen: ${c.when}` : '') + (c.why ? `\nWhy: ${c.why}` : '');
+        b.title = c.cue + (c.when ? `\n\n${T('ui.whenLabel')} ${c.when}` : '') + (c.why ? `\n${T('ui.whyLabel')} ${c.why}` : '');
         b.innerHTML = `<span class="cmd-ic">${c.icon||'▸'}</span><span class="cmd-name">${escapeHtml(c.name)}</span><span class="cmd-scope">${c.scope}</span>`;
         const info = $(containerId === 'as-groups' ? 'as-info' : 'cmd-info');
-        const showInfo = () => { if (info) info.innerHTML = `<strong>${escapeHtml(c.name)}</strong> — ${escapeHtml(c.cue)}${c.when ? `<br><b>When:</b> ${escapeHtml(c.when)}` : ''}${c.why ? `<br><b>Why:</b> ${escapeHtml(c.why)}` : ''}`; };
+        const showInfo = () => { if (info) info.innerHTML = `<strong>${escapeHtml(c.name)}</strong> — ${escapeHtml(c.cue)}${c.when ? `<br><b>${T('ui.whenLabel')}</b> ${escapeHtml(c.when)}` : ''}${c.why ? `<br><b>${T('ui.whyLabel')}</b> ${escapeHtml(c.why)}` : ''}`; };
         b.onmouseenter = showInfo; b.onfocus = showInfo;
         b.onclick = () => { showInfo(); onPick(c.id); };
         row.appendChild(b);
@@ -2679,7 +2676,7 @@
     const g = sheet.getContext('2d'); if (!g) return null;
     g.fillStyle = '#0b1b25'; g.fillRect(0, 0, sheet.width, sheet.height);
     g.fillStyle = '#e8f6f8'; g.font = '700 26px system-ui, -apple-system, Segoe UI, sans-serif'; g.fillText(String(sc.title || 'Play').slice(0, 60), pad, 34);
-    g.fillStyle = '#7fd4de'; g.font = '500 15px system-ui, sans-serif'; g.fillText(`${DATA.sit(sc.situation).label} · ${sc.phase} · ${n} step${n > 1 ? 's' : ''} · Triibholz THPLAY`, pad, 56);
+    g.fillStyle = '#7fd4de'; g.font = '500 15px system-ui, sans-serif'; g.fillText(T('ui.sheetCaption', { situation: DATA.sit(sc.situation).label, phase: T('phase.' + sc.phase), n: n }), pad, 56);
     for (let i = 0; i < n; i++) { const c = stepCanvas(play, i, W, H); if (!c) return null; g.drawImage(c, pad + (i % cols) * (W + pad), head + pad + Math.floor(i / cols) * (H + pad)); }
     return sheet;
   }
@@ -2698,8 +2695,8 @@
     const esc = escapeHtml;
     const page = sc => { const sheet = sheetCanvas(sc, { w: 520 }); const img = sheet ? `<img src="${sheet.toDataURL('image/png')}" alt="">` : '';
       const notes = Object.keys(sc.notes || {}).filter(k => (sc.notes[k] || '').trim()).map(k => `<li><b>${esc(k)}</b> ${esc(sc.notes[k])}</li>`).join('');
-      return `<section class="play"><h1>${esc(sc.title || 'Play')}</h1><p class="sub">${esc(DATA.sit(sc.situation).label)} · ${esc(sc.phase)} · ${sc.frames.length} steps${sc.author ? ' · ' + esc(sc.author) : ''}</p>${sc.description ? `<p>${esc(sc.description)}</p>` : ''}${img}${notes ? `<h2>What each position does</h2><ul>${notes}</ul>` : ''}</section>`; };
-    return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(scns.length === 1 ? (scns[0].title || 'Play') : scns.length + ' plays')} — Triibholz</title>
+      return `<section class="play"><h1>${esc(sc.title || 'Play')}</h1><p class="sub">${T('ui.printPlaySub', { situation: esc(DATA.sit(sc.situation).label), phase: T('phase.' + sc.phase), n: sc.frames.length })}${sc.author ? ' · ' + esc(sc.author) : ''}</p>${sc.description ? `<p>${esc(sc.description)}</p>` : ''}${img}${notes ? `<h2>${T('assign.hint')}</h2><ul>${notes}</ul>` : ''}</section>`; };
+    return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(scns.length === 1 ? (scns[0].title || 'Play') : T('ui.nPlaysTitle', { n: scns.length }))} — Triibholz</title>
       <style>body{font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;color:#111;margin:0;padding:18mm 16mm}.play{page-break-after:always}.play:last-child{page-break-after:auto}h1{margin:0 0 2px;font-size:22px}h2{font-size:14px;margin:14px 0 4px}.sub{color:#555;margin:0 0 8px}img{width:100%;max-width:720px;display:block;border-radius:6px;margin:8px 0}ul{padding-left:18px}li{margin:2px 0}@media print{body{padding:0}}</style></head>
       <body>${scns.map(page).join('')}<script>setTimeout(function(){window.print();},350);<\/script></body></html>`;
   }
@@ -2804,7 +2801,7 @@
   function togglePick(id) { if (selected.has(id)) selected.delete(id); else selected.add(id); renderLibrary(); }
   function updateSelectBar() {
     const c = $('sb-count'); if (!c) return;
-    c.textContent = `${selected.size} selected`;
+    c.textContent = T('ui.nSelected', { n: selected.size });
     $('sb-download').disabled = !selected.size; $('sb-reel').disabled = !selected.size; if ($('sb-print')) $('sb-print').disabled = !selected.size;
   }
   const pickedScenarios = () => Array.from(selected).map(id => state.scenarios.find(sc => sc.id === id)).filter(Boolean);
@@ -2815,26 +2812,26 @@
     const out = $('sb-out'); const btn = $('sb-reel'); btn.disabled = true;
     const plays = scns.map(sc => ({ situation: sc.situation, phase: sc.phase, title: sc.title || 'Play', description: sc.description || '', frames: sc.frames, notes: sc.notes || {} }));
     const total = VIDEOGEN.reelDuration(plays, { title: setName() });
-    out.innerHTML = `<div class="muted">Rendering the reel… ⏳ ${scns.length} plays, about ${Math.round(total)}s — <span id="sb-pct">0%</span></div>`;
+    out.innerHTML = `<div class="muted">${T('ui.renderingTheReel', { n: scns.length, s: Math.round(total) })}<span id="sb-pct">0%</span></div>`;
     try {
-      const res = await VIDEOGEN.recordReel(plays, { title: setName(), subtitle: `${scns.length} play${scns.length > 1 ? 's' : ''} · ${state.phase}`, onProgress: p => { const e = $('sb-pct'); if (e) e.textContent = Math.round(p * 100) + '%'; } });
+      const res = await VIDEOGEN.recordReel(plays, { title: setName(), subtitle: T('ui.reelSubtitle', { n: scns.length, phase: T('phase.' + state.phase) }), onProgress: p => { const e = $('sb-pct'); if (e) e.textContent = Math.round(p * 100) + '%'; } });
       const ext = /mp4/.test(res.mime) ? 'mp4' : 'webm';
       const name = SHARE.filename(setName() + ' reel', ext);
       out.innerHTML = `<video src="${res.url}" controls playsinline class="vid-preview"></video>
-        <div class="sb-actions"><a class="btn-primary sm" id="sb-reel-download" href="${res.url}" download="${escapeHtml(name)}">⬇ Download reel (${res.duration.toFixed(0)}s)</a>${navigator.share ? '<button class="btn-ghost sm" id="sb-reel-share">📤 Share…</button>' : ''}</div>`;
+        <div class="sb-actions"><a class="btn-primary sm" id="sb-reel-download" href="${res.url}" download="${escapeHtml(name)}">${T('ui.downloadReelSeconds', { s: res.duration.toFixed(0) })}</a>${navigator.share ? `<button class="btn-ghost sm" id="sb-reel-share">${T('ui.shareEllipsis')}</button>` : ''}</div>`;
       const sh = $('sb-reel-share'); if (sh) sh.onclick = async () => { try { const file = new File([res.blob], name, { type: res.mime }); if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: setName() + ' reel' }); else toast(T('ui.sharingFilesIsnT')); } catch (e) {} };
       toast(T('ui.reelReadyPlayIt'));
-    } catch (e) { out.innerHTML = `<div class="muted">Couldn’t render the reel — ${escapeHtml(e.message || 'unknown error')}.</div>`; }
+    } catch (e) { out.innerHTML = `<div class="muted">${T('ui.couldNotRenderReel', { error: escapeHtml(e.message || 'unknown error') })}</div>`; }
     finally { btn.disabled = !selected.size; }
   }
   // ---- a share link opens the play (no server, no login for the play itself)
   async function openSharedPlay() {
     const code = SHARE.fromHash(location.hash); if (!code) return;
-    let obj; try { obj = await SHARE.decode(code); } catch (e) { toast(e.message === 'unsupported-browser' ? 'This browser can’t open compressed share links' : 'This share link is damaged or from a newer version'); return; }
+    let obj; try { obj = await SHARE.decode(code); } catch (e) { toast(e.message === 'unsupported-browser' ? T('ui.shareLinkUnsupported') : T('ui.shareLinkDamaged')); return; }
     const r = SHARE.unpack(obj); if (!r.plays.length) { toast(T('ui.theLinkHoldsNo')); return; }
     const p = r.plays[0];
     state.scenarios = state.scenarios.filter(sc => !sc.shared);
-    const sc = Object.assign(DATA.newScenario(p.situation, p.phase), { id: 'shared-' + SHARE.fingerprint(p), title: p.title, description: p.description || '', frames: DATA.clone(p.frames), notes: DATA.clone(p.notes || {}), author: (p.author || 'Someone') + ' · shared link', visibility: 'team', shared: true, builtIn: false, sharedPlay: p });
+    const sc = Object.assign(DATA.newScenario(p.situation, p.phase), { id: 'shared-' + SHARE.fingerprint(p), title: p.title, description: p.description || '', frames: DATA.clone(p.frames), notes: DATA.clone(p.notes || {}), author: (p.author || 'Someone') + T('ui.sharedLinkSuffix'), visibility: 'team', shared: true, builtIn: false, sharedPlay: p });
     state.scenarios.push(sc);
     state.situation = sc.situation; state.phase = sc.phase; buildSituationTabs(); refreshTabs();
     switchView('playbook'); openScenario(sc.id);
@@ -2904,42 +2901,42 @@
     updateVidStatus();
     $('vid-generate').onclick = () => generateVideo($('vid-generate'));
     const sv = $('vid-save-provider');
-    if (sv) sv.onclick = () => { VIDEOGEN.setProvider({ endpoint: (ep.value || '').trim(), key: (key.value || '').trim(), name: 'provider' }); updateVidStatus(); toast(VIDEOGEN.getProvider() ? 'Video provider saved' : 'Using offline animation'); };
+    if (sv) sv.onclick = () => { VIDEOGEN.setProvider({ endpoint: (ep.value || '').trim(), key: (key.value || '').trim(), name: 'provider' }); updateVidStatus(); toast(VIDEOGEN.getProvider() ? T('ui.videoProviderSaved') : T('ui.usingOfflineAnimation')); };
     const pr = $('vid-photoreal'); if (pr) pr.onclick = () => generatePhotoreal(pr);
   }
   async function generateVideo(btn) {
     if (typeof VIDEOGEN === 'undefined' || !edit.scenario) return;
     const out = $('vid-out'); btn.disabled = true;
-    out.innerHTML = '<div class="muted">Rendering the clip… ⏳ (about ' + Math.round(VIDEOGEN.duration(editPlay())) + 's)</div>';
+    out.innerHTML = `<div class="muted">${T('ui.renderingTheClip', { s: Math.round(VIDEOGEN.duration(editPlay())) })}</div>`;
     try {
       const play = editPlay();
       const res = await VIDEOGEN.record(play, { caption: play.description });
       const ext = /mp4/.test(res.mime) ? 'mp4' : 'webm';
       const name = (play.title || 'triibholz-play').replace(/[^\w]+/g, '-').toLowerCase() + '.' + ext;
       out.innerHTML = `<video src="${res.url}" controls playsinline class="vid-preview"></video>
-        <a class="btn-primary sm" id="vid-download" href="${res.url}" download="${escapeHtml(name)}">⬇ Download (${res.duration.toFixed(1)}s)</a>`;
+        <a class="btn-primary sm" id="vid-download" href="${res.url}" download="${escapeHtml(name)}">${T('ui.downloadSeconds', { s: res.duration.toFixed(1) })}</a>`;
       toast(T('ui.videoReadyPlayIt'));
     } catch (e) {
-      out.innerHTML = `<div class="muted">Couldn’t render the video — ${escapeHtml(e.message || 'unknown error')}.</div>`;
+      out.innerHTML = `<div class="muted">${T('ui.couldNotRenderVideo', { error: escapeHtml(e.message || 'unknown error') })}</div>`;
     } finally { btn.disabled = false; }
   }
   async function generatePhotoreal(btn) {
     if (typeof VIDEOGEN === 'undefined' || !edit.scenario) return;
     const out = $('vid-out'); btn.disabled = true;
-    out.innerHTML = '<div class="muted">Requesting a photoreal clip from your provider… ⏳</div>';
+    out.innerHTML = `<div class="muted">${T('ui.requestingPhotoreal')}</div>`;
     try {
       let r = await VIDEOGEN.photoreal(editPlay(), {});
       if (!r.url && r.jobId) {   // async job — poll the adapter until it's ready
         const ep = ((VIDEOGEN.getProvider() || {}).endpoint || '').replace(/\/+$/, '');
-        out.innerHTML = `<div class="muted">Your provider is generating the clip… ⏳ (job ${escapeHtml(r.jobId)}) — this can take a minute or two.</div>`;
+        out.innerHTML = `<div class="muted">${T('ui.providerGeneratingClip', { job: escapeHtml(r.jobId) })}</div>`;
         r = await pollVideoJob(ep, r.jobId);
       }
       if (r && r.url) out.innerHTML = `<video src="${escapeHtml(r.url)}" controls playsinline class="vid-preview"></video>
         <a class="btn-primary sm" href="${escapeHtml(r.url)}" download>${T('ui.download')}</a>`;
-      else out.innerHTML = `<div class="muted">Provider response: ${escapeHtml(JSON.stringify(r).slice(0, 200))}</div>`;
+      else out.innerHTML = `<div class="muted">${T('ui.providerResponse', { response: escapeHtml(JSON.stringify(r).slice(0, 200)) })}</div>`;
     } catch (e) {
-      const msg = /no-provider/.test(e.message) ? 'set a provider endpoint above first (point it at your backend’s /api/videogen)' : e.message;
-      out.innerHTML = `<div class="muted">Photoreal failed — ${escapeHtml(msg)}.</div>`;
+      const msg = /no-provider/.test(e.message) ? T('ui.setProviderEndpointFirst') : e.message;
+      out.innerHTML = `<div class="muted">${T('ui.photorealFailed', { error: escapeHtml(msg) })}</div>`;
     } finally { btn.disabled = false; }
   }
   async function pollVideoJob(endpoint, jobId) {
@@ -3359,7 +3356,7 @@
       draftTimer = setTimeout(applyDraft, 350);
     });
     $('add-sub').onclick = ()=>addWaiting('sub'); $('add-exc').onclick = ()=>addWaiting('exc'); $('del-wait').onclick = delWaiting;
-    $('ed-situation').onchange = (e)=>{ edit.scenario.situation=e.target.value; edit.scenario.frames=[DATA.defaultFrame(e.target.value)]; edit.idx=0; editorRender(); toast('Formation reset for '+DATA.sit(e.target.value).label); };
+    $('ed-situation').onchange = (e)=>{ edit.scenario.situation=e.target.value; edit.scenario.frames=[DATA.defaultFrame(e.target.value)]; edit.idx=0; editorRender(); toast(T('ui.formationResetForSituation', { situation: DATA.sit(e.target.value).label })); };
     $('ed-phase').onchange = (e)=>{ edit.scenario.phase=e.target.value; };
     if ($('ed-visibility')) $('ed-visibility').onchange = (e)=>{ edit.scenario.visibility=e.target.value; };
 
