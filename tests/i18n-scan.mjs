@@ -193,13 +193,13 @@ export function scanAll(files) {
 
 /* The rendering surface. js/*.js content modules (commands/help/data/testlog/shot) are
    deliberately excluded: those hold coaching content, which is English-first by policy. */
-export const UI_FILES = ['js/app.js', 'js/film.js'];
+export const UI_FILES = ['js/app.js', 'js/film.js', 'js/help.js', 'js/gameplan.js', 'js/tactics.js'];
 
 /* A RATCHET, not a target. The backlog is burned down view by view; this number may only
    ever go DOWN. Its job is to make the next hard-coded string fail the build on the day it
    is written — which is the only thing that stops this drifting again, and is exactly how
    the app ended up with 73 translated keys and 392 untranslated ones. */
-export const BASELINE = { 'js/app.js': 0, 'js/film.js': 0 };
+export const BASELINE = { 'js/app.js': 0, 'js/film.js': 0, 'js/help.js': 0, 'js/gameplan.js': 0, 'js/tactics.js': 0 };
 
 // compare real paths — import.meta.url is percent-encoded and this repo lives under "Mobile Documents"
 if (fileURLToPath(import.meta.url) === process.argv[1]) {

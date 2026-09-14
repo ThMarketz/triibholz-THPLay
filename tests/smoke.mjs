@@ -1333,6 +1333,19 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('a hint that names a button still matches that button, in every language' +
        (quoteDrift.length ? ` — drifted: ${quoteDrift.slice(0, 6).join(', ')}` : ''), quoteDrift.length === 0);
 
+    /* "Draft from words" parses ENGLISH ONLY — drives / passes / shoots (js/draft.js). Two
+       translators helpfully translated the worked example, which produces a help page whose
+       example silently fails to parse in the very box it is teaching. The example must stay
+       English in every language. */
+    const DRAFT_EXAMPLES = ['help.editor.s2', 'help.share.s2', 'help.video.s1'];
+    const notEnglish = [];
+    DRAFT_EXAMPLES.forEach(k => langs.forEach(c => {
+      const v = String(I.DICT[c][k] || '');
+      if (!/\b(drives|passes to|shoots|lifts to)\b/.test(v)) notEnglish.push(`${c}:${k}`);
+    }));
+    ok('the Draft-from-words examples stay in English, the only grammar the parser knows' +
+       (notEnglish.length ? ` — translated: ${notEnglish.join(', ')}` : ''), notEnglish.length === 0);
+
     // the ratchet: this number may only ever go DOWN
     let regressed = [];
     UI_FILES.forEach(f => {

@@ -1008,6 +1008,31 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .dev-table{width:100%;border-collapse:collapse;font-size:.8rem}
 .dev-table th,.dev-table td{text-align:left;padding:5px 7px;border-bottom:1px solid var(--line)}
 .dev-table th{color:var(--ink-faint);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.03em}
+/* A header's qualifier — "(self-logged)" — gets its own smaller line instead of doubling the
+   column width. German and Italian pay for that parenthesis far more than English does:
+   "Home training (self-logged)" is 74px, "Allenamento a casa (autoregistrato)" was 136px. */
+.dev-table th small{display:block;font-size:.88em;font-weight:400;opacity:.72;letter-spacing:0;text-transform:none}
+/* On a phone the squad table is seven columns in ~340px, so it scrolls sideways however
+   short the words are. Tighten the headers there so there is simply less to scroll past.
+
+   Header wording is NOT the main lever here, which is worth knowing before anyone spends
+   another hour shortening words: the body cells are white-space:nowrap, so once a squad has
+   real data each column is floored by its own content — the date, the U18-A tag, the
+   progress bar — and no shorter header can undercut that floor. The widest column is Home
+   training, and what makes it wide is the bar plus the little mascot, not the label. So on a
+   phone the mascot steps out and the bar gets a fixed narrow width. */
+@media (max-width:560px){
+  .dev-table{font-size:.75rem}
+  .dev-table th{font-size:.66rem;letter-spacing:0}
+  .dev-table th,.dev-table td{padding:5px 5px}
+  .dev-table th small{font-size:.78em}
+  .dev-team-row .mascot{display:none}
+  .dev-team-row .dev-bench-bar{width:42px;margin-bottom:3px}
+}
+/* Deliberately NOT done: overflow-wrap:anywhere on th. It does make all seven columns fit
+   341px in every language — and it renders the headers as letter-towers (LI/VEL/LO,
+   S/E/R/I/E). A table that fits but cannot be read is not a fix. Seven columns of squad data
+   scroll sideways on a phone; that is what the scroll container is for. */
 .dev-modal .modal-body{display:flex;flex-direction:column;gap:10px}
 
 /* ---- coach verification + squad table + plan reasoning (v1.36) ---- */
@@ -1022,6 +1047,11 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .dev-team-row{cursor:pointer}
 .dev-team-row:hover{background:rgba(255,255,255,.03)}
 .dev-team-table td{white-space:nowrap;vertical-align:middle}
+/* nowrap is right for a date, a number or a tag — but a spanning cell holds a SENTENCE, and
+   keeping that on one line dragged the whole table 68px wider than its own data needed.
+   Worst in the languages with the longest sentence, which is how it read as a translation
+   problem when it was really a CSS one. */
+.dev-team-table td[colspan]{white-space:normal}
 .dev-team-table .dev-bench-bar{width:64px;margin:0;display:inline-block;vertical-align:middle}
 .dev-team-table .mascot{vertical-align:middle}
 .dev-team-ok{color:#5fd99e}

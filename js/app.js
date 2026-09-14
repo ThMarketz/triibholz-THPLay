@@ -769,7 +769,7 @@
       <div class="dev-card">
         <h3>${T('dev.everyPlayer')} <span class="rightbar-hint">${T('dev.thisWeek')}</span></h3>
         <div class="dev-table-wrap"><table class="dev-table dev-team-table">
-          <thead><tr><th>${T('dev.player')}</th><th>${T('dev.tier')}</th><th>${T('dev.testsAtTarget2')}</th><th>${T('dev.lastTested')}</th><th>${T('dev.homeTrainingSelfLogged')}</th><th>${T('dev.streak')}</th><th>${T('dev.metresSelfDeclared')}</th></tr></thead>
+          <thead><tr><th>${T('dev.player')}</th><th>${T('dev.tier')}</th><th>${T('dev.testsAtTarget2')}</th><th>${T('dev.lastTested')}</th><th>${T('dev.thHomeTraining')}<small>${T('dev.thSelfLogged')}</small></th><th>${T('dev.streak')}</th><th>${T('dev.thMetres')}<small>${T('dev.thSelfDeclared')}</small></th></tr></thead>
           <tbody>${sorted.map(x => `<tr class="dev-team-row" data-dev-open="${escapeHtml(x.u.email)}">
             <td><button class="btn-ghost sm">${escapeHtml(x.u.name || x.u.email)}</button>${x.u.position ? ` <span class="tag">${T('ui.pos')} ${escapeHtml(x.u.position)}</span>` : ''}${x.isGK ? ' <span class="tag">GK</span>' : ''}</td>
             ${cell(x)}</tr>`).join('') || `<tr><td colspan="7" class="muted">${T('dev.noApprovedPlayersOn')}</td></tr>`}</tbody>

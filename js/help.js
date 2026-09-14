@@ -6,207 +6,212 @@
    numbered steps, then tips.
    ============================================================ */
 const HELP = (() => {
+  /* TOPICS below holds KEY NAMES, not prose. The object is built once when this file
+     loads, so any text baked into it would freeze whatever language the app booted in.
+     The English lives in js/i18n.js with the other 3 languages, and show() resolves a
+     key at render time. */
+  const TH = k => (typeof I18N !== 'undefined') ? I18N.t(k) : k;
 
   const TOPICS = {
-    dashboard: { icon:'🏠', title:'Dashboard — your home base', steps:[
-      'Coaches see the squad, the play count and the <strong>invite card</strong>: share the QR code or copy the link so players join by tapping their cap number.',
-      'Players see their position, XP, 🔥 streak, badges and both trivia best scores.',
-      'Super Admins see pending approvals and the live activity feed.',
-      'Tap any listed play or button to jump straight there.',
-    ], tips:[ 'The 🔊 button in the top bar turns match sounds on (off by default).', '<strong>¼× ½× 1× 1½×</strong> sets the playback speed — slow it down to learn a move; remembered on this device. <strong>⛶</strong> makes the board full-screen for the pool deck or the big screen: move the mouse or tap and a floating bar appears with ⏮ restart, ⏪ ⏩ steps, ▶ play/pause, speed and ✕. <strong>Grab it anywhere (or by the ⠿ grip) and drop it where you want</strong> — the spot is remembered; double-click the grip to put it back. It fades away as soon as you stop touching it; keys work too — space play/pause, ← → steps, R restart, + / − speed, Esc leaves.', '<strong>☆ Template</strong> on one of your saved plays makes it a template: <em>＋ New play</em> then offers “start from a template” (your ⭐ plays and the samples for that situation) and the copy opens in the editor; the same plays appear in the ⚡ audible sheet and the editor palette under <em>My plays</em>, so you can call your own situation plays on the board.', '<strong>What do I do now?</strong> Pick <em>My position</em> or a player in <em>Focus…</em> and a cue appears on the board for every step — “Drive to 2 m, then receive the pass” — with that position’s note underneath; everyone else is dimmed.', '<strong>Steps 👁</strong> next to the Team / My position switch hides the step notes and the arrows on the board, so you watch the pure movement; press it again to bring them back. The choice is remembered on this device.' ]},
+    dashboard: { icon:'🏠', title:'help.dashboard.title', steps:[
+      'help.dashboard.s1',
+      'help.dashboard.s2',
+      'help.dashboard.s3',
+      'help.dashboard.s4',
+    ], tips:[ 'help.dashboard.t1', 'help.dashboard.t2', 'help.dashboard.t3', 'help.dashboard.t4', 'help.dashboard.t5' ]},
 
-    playbook: { icon:'📖', title:'Playbook — watch & understand a play', steps:[
-      'Pick a <strong>situation</strong> in the top bar (6 on 6 … 1 on GK) and <strong>Offense/Defense</strong>.',
-      'Choose a play on the left — it opens on the board.',
-      'Press <strong>▶</strong> to watch the movement, <strong>⏮ ⏭</strong> to move one step at a time, or drag the slider.',
-      'Reading the board: <strong>solid white arrow</strong> = a player’s swim for one step · <strong>dashed orange arrow with a numbered badge</strong> = a pass · faint lines = defenders.',
-      '<strong>Team / My position</strong> switches between the whole play and just your job; tapping a row in <strong>Assignments</strong> focuses that position.',
-      '<strong>Problem / Solution</strong>: freeze the setup as a question, then <strong>Reveal solution ▶</strong> to see the answer animate.',
+    playbook: { icon:'📖', title:'help.playbook.title', steps:[
+      'help.playbook.s1',
+      'help.playbook.s2',
+      'help.playbook.s3',
+      'help.playbook.s4',
+      'help.playbook.s5',
+      'help.playbook.s6',
     ], tips:[
-      'Keyboard: <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> step back/forward.',
-      'Coaches: <strong>paused = draggable</strong> — just grab a player and move him; a save bar appears. <strong>Edit</strong> opens the full editor.',
+      'help.playbook.t1',
+      'help.playbook.t2',
     ]},
 
-    adjust: { icon:'✋', title:'Adjust — pause the play, then just drag', steps:[
-      'Open a play — it starts <strong>paused</strong>, and paused means <strong>draggable</strong>. (Playing? Press <strong>⏸</strong> or <kbd>Space</kbd> first.)',
-      '<strong>Press and hold a player disc, drag it</strong> to the new spot, release. The movement arrow follows immediately. The <strong>ball</strong> drags the same way.',
-      'Use <strong>⏮ ⏭</strong> to switch steps — every step is one keyframe, so dragging at step 2 changes where the player swims <em>to</em>.',
-      'After your first change a bar appears: <strong>↩ Undo</strong> a drag, <strong>Discard</strong>, <strong>Save changes</strong> (overwrites) or <strong>Save as new ⑂</strong> (keeps the original, saves a variant).',
-      'Press <strong>▶</strong> any time (after saving or discarding) to watch the movement again.',
+    adjust: { icon:'✋', title:'help.adjust.title', steps:[
+      'help.adjust.s1',
+      'help.adjust.s2',
+      'help.adjust.s3',
+      'help.adjust.s4',
+      'help.adjust.s5',
     ], tips:[
-      'Sample plays are never lost — saving over a sample makes it your own copy.',
-      'Waiting players (subs, excluded) can be dragged into the staging zones too.',
+      'help.adjust.t1',
+      'help.adjust.t2',
     ]},
 
-    editor: { icon:'✏️', title:'Editor — record a movement from scratch', steps:[
-      'Press the green <strong>＋ New play</strong> button (top of the play list, left side) or the dashed <strong>＋ Create a new play</strong> card at the end of the list. Pick the <strong>situation</strong> and <strong>phase</strong>.',
-      'Fastest way: open <strong>✍️ Draft from words</strong> and simply WRITE the play — one line per step, e.g. <em>“3 drives to the middle and 2 lifts to the wing”, “3 passes to 2”, “2 shoots far corner”</em>. The board builds it as you type, shows what it understood, and fills each player’s assignment.',
-      'Or drag players and the ball into the <strong>starting</strong> spots by hand.',
-      'Press <strong>+ Capture step</strong>, then drag everyone to where they move <em>next</em>. Repeat — each capture records one step of the movement.',
-      'Set the <strong>ball carrier</strong> per step; add waiting players with <strong>+ Sub / + Excluded</strong>.',
-      'Optionally write per-position assignments, then <strong>Save scenario</strong> — or <strong>Save as new ⑂</strong> to keep the original untouched.',
-    ], tips:[ 'The arrows preview live while you drag, so you always see the whiteboard your players will see.' ]},
+    editor: { icon:'✏️', title:'help.editor.title', steps:[
+      'help.editor.s1',
+      'help.editor.s2',
+      'help.editor.s3',
+      'help.editor.s4',
+      'help.editor.s5',
+      'help.editor.s6',
+    ], tips:[ 'help.editor.t1' ]},
 
-    solutions: { icon:'💡', title:'Solutions Lab — ask a question, get a worked answer', steps:[
-      'Type a situation in your own words — e.g. <em>“I swim alone at the keeper who comes out to 5 m — what do I do, can they foul me?”</em> — and press <strong>Solve</strong>.',
-      'The best-matching solution opens on the right: <strong>What to do</strong> (the tactical steps), <strong>The rules</strong> (including fouls &amp; penalties), and an <strong>animated board</strong> that plays the movement with arrows.',
-      'No question yet? Browse the cards, or tap an example chip to see how it works.',
-      'Press <strong>▶ Replay</strong> to watch the board again, or <strong>Save as a play</strong> to drop the solution straight into your Playbook and adjust it there.',
+    solutions: { icon:'💡', title:'help.solutions.title', steps:[
+      'help.solutions.s1',
+      'help.solutions.s2',
+      'help.solutions.s3',
+      'help.solutions.s4',
     ], tips:[
-      'It understands plain phrasing — “2 on 1 break”, “double team at 2 m”, “draw a kick-out”, “defend the counter” all find the right answer.',
-      'Every answer’s rules follow the current World Aquatics laws (5 m penalty, 18 s exclusion, keeper limits).',
+      'help.solutions.t1',
+      'help.solutions.t2',
     ]},
 
-    autoscout: { icon:'🧠', title:'Auto-scout — the system builds the playbook from a video', steps:[
-      'In the Film Room, on an <strong>uploaded video file</strong> (Upload video — a YouTube or Veo link can’t be read by the analyser; download the match first), press <strong>🎯 Find the field</strong>: the app finds the pool in the frame by itself (blue water, straight edges) and shows the corners — drag one if it is off, or use <em>Click corners</em>. With <strong>📷 moving camera</strong> on (default) the backend re-finds the pool about once a second while scouting, so a panning / zooming camera is fine; seconds where the pool is not visible enough are reported as <em>unread</em>, never guessed. Then press <strong>🧠 Scout this video</strong>.',
-      'The default view is <strong>what each team was trying to play, by situation</strong>: for the white caps and the blue caps, in 6 on 6, 6 on 5 (man-up) and 5 on 6 (man-down) — possessions, shots, goals, the repeated <em>ball paths</em> (e.g. point → left wing → 2 m → shot, seen 4×), where the ball lived, the recognised tactics and the defence they met. Possession follows <strong>who has the ball</strong>, with a few frames of patience before it changes hands, and each team is judged against the goal it attacks.',
-      'Below that, “Go further”: the scouting summary, plan vs reality, every attack with clip + board, and the shared debrief. Tactics recognised: drive &amp; kick, hole entry, pick &amp; roll, perimeter swing, wing isolation, counter-attack, man-up 4-2 / 3-3; defence: press / drop / zone.',
-      'You get a <strong>scouting summary</strong> in plain sentences (tendencies with percentages, shot zones, tempo, man-up count) for <em>both</em> teams — so it works to study your own movements or to read what the opponent is trying to play.',
-      'Press <strong>Add plays to my playbook</strong> — the distinct recognised plays land as real, editable plays (Team visibility). Anything below 80% confidence is flagged <em>needs review</em>; nothing is invented below 50%.',
+    autoscout: { icon:'🧠', title:'help.autoscout.title', steps:[
+      'help.autoscout.s1',
+      'help.autoscout.s2',
+      'help.autoscout.s3',
+      'help.autoscout.s4',
+      'help.autoscout.s5',
     ], tips:[
-      'Accuracy is bounded by what the detector can see: clean cap colours and a steady camera give the best results today; the trained model (see docs) raises it further — the tactic layer itself doesn’t change.',
-      'Pick which caps are “us” with the White / Dark switch so the summary reads from your side.',
+      'help.autoscout.t1',
+      'help.autoscout.t2',
     ]},
 
-    gameplan: { icon:'🎯', title:'Game plan → plan vs reality → team debrief', steps:[
-      'Before (or after) the match, open it in the Film Room and tick under <strong>🎯 Game plan</strong> what you asked the players for — e.g. “Man-up: play 4-2”, “Press”, “Deny the hole feed”, “Shoot high”.',
-      'Run <strong>🧠 Scout this video</strong>. The report gains a <strong>Plan vs reality</strong> table: per instruction, how many attacks there were, how often the plan was followed, and the shots / goals when it was followed vs. when it was not — plus how many attacks the detector could not read.',
-      '<strong>Every attack</strong> is listed with its time, tactic and result; <em>▶ Clip</em> cuts that possession out of the match video on the backend, <em>Board ⚡</em> opens it as an animated play in the editor.',
-      '<strong>📣 Share debrief with the team</strong> publishes the summary, the plan table and every attack (clip + board play) to <strong>Team debriefs</strong>, where players replay the board, watch the clips and leave comments per play or on the whole match.',
+    gameplan: { icon:'🎯', title:'help.gameplan.title', steps:[
+      'help.gameplan.s1',
+      'help.gameplan.s2',
+      'help.gameplan.s3',
+      'help.gameplan.s4',
     ], tips:[
-      'Debriefs and comments are stored on the club’s analysis backend, so everyone on the same backend sees them; they are not shared outside the club.',
-      'A “followed” judgement is only as good as the tactic recognition — clean, steady footage first; unread attacks are always shown as a count.',
+      'help.gameplan.t1',
+      'help.gameplan.t2',
     ]},
 
-    share: { icon:'📤', title:'Download, import &amp; share plays — sets and video reels', steps:[
-      '<strong>⬇ Download ▾</strong> (top right of an open play) offers formats: <em>Play file</em> (.thplay.json, importable), <em>Image sheet</em> (.png, every step on one picture), <em>Vector board</em> (.svg, current step), <em>Print / PDF</em> (steps + notes, one play per page) and <em>Video</em>. In select mode, <strong>🖨 PDF</strong> prints all selected plays as a booklet.',
-      '<strong>⬆ Import ▾</strong> (left, above the play list) brings plays in from earlier sessions: <em>From files</em> (.thplay.json, plain .json, a saved backup, or .txt / .md written steps), <em>Paste a link or steps</em> (a 🔗 share link, JSON, or lines like “2 drives to 2 m on the right”), and <strong>💾 Backup all my plays</strong> makes one file with everything you made — import it on another device. Drop files on the list too. Plays already in your playbook are skipped, not duplicated.',
-      '<strong>🔗 Share</strong> makes a link that carries the whole play: whoever opens it sees it animated and can press <em>Save to my playbook</em>. On a phone it opens the share sheet (WhatsApp, Mail, AirDrop…).',
-      '<strong>☑ Select</strong> lets you pick several plays — e.g. all your defense scenarios — then <strong>⬇ Set</strong> downloads them as one file, and <strong>🎬 Reel</strong> renders them into ONE video: a title card and the animation for each play, ready to send to the team.',
+    share: { icon:'📤', title:'help.share.title', steps:[
+      'help.share.s1',
+      'help.share.s2',
+      'help.share.s3',
+      'help.share.s4',
     ], tips:[
-      'Private and team-only plays ask you to confirm before they leave the app — a file or link can’t be taken back.',
-      'A share link works without a login for the play itself; saving it into a playbook needs a signed-in (or demo) user.',
+      'help.share.t1',
+      'help.share.t2',
     ]},
 
-    shooting: { icon:'🎯', title:'Shot zones, the shot step &amp; the keeper’s view', steps:[
-      '<strong>Zones 🟩</strong> in the controls paints the shot-chance territory on any play: <span style="color:#2ecc71">green</span> (inside 4 m and no wider than a metre outside the posts) ~70%, <span style="color:#ffd166">yellow</span> (out to 7 m, two metres outside the posts) ~30%, everything else under 10%. Toggle it on and off at any time; it is remembered on this device.',
-      'Those percentages are a <strong>coaching guide, not a measurement</strong>. Published elite data has no spot-level probability: what it does have is situation rates — penalty ~80%, man-up ~48%, even play ~24% — and one solid modifier: a defender in the shooting lane cuts conversion by about a fifth (0.43 → 0.34). See docs/SHOT_ZONES.md.',
-      '<strong>Mark the shot step.</strong> In the editor, tick <em>“Step N: 4 shoots”</em> next to the ball carrier (or use the ⚡ audibles <em>Take the shot</em> / <em>Lob over the keeper</em>). The board then draws the shot line and a target ring, the shooter’s cue says “shoot”, and the play finally states where it finishes.',
-      '<strong>Keeper view 🧤</strong> opens a small panel on the board showing the goal mouth as the shooter sees it: the keeper in red, any defender in the lane in dark, the biggest open gap in green, and the chance for a shot or a lob from that spot.',
-      '<strong>What the shooter should try</strong>, underneath, is a short menu built from that same read: a high corner over the hands, a low corner skimmed along the water, and — only when they genuinely apply — a lob straight over a keeper caught close and off the line, or a skip/bounce shot and a fake-then-return, both aimed at whichever side the keeper has shaded away from. Each is tagged best / good / risky for this exact spot. A one-line note underneath reads the same moment from the keeper’s side — stay set, or recover to centre.',
+    shooting: { icon:'🎯', title:'help.shooting.title', steps:[
+      'help.shooting.s1',
+      'help.shooting.s2',
+      'help.shooting.s3',
+      'help.shooting.s4',
+      'help.shooting.s5',
     ], tips:[
-      'The lob number only becomes interesting once the keeper is off the line — that is the situation the lob exists for. Lobs are rare (1–7% of elite shots) and, overall, less successful than a drive shot.',
-      'Zones are drawn for the goal you attack (the right-hand goal on the board).',
+      'help.shooting.t1',
+      'help.shooting.t2',
     ]},
 
-    scene3d: { icon:'🎥', title:'3D replay camera', steps:[
-      '<strong>3D 🎥</strong> in the controls turns the flat board into an orbiting camera over the same play — drag to look around, scroll or pinch to zoom, double-click to reset.',
-      '<strong>Camera follows…</strong> switches what the camera tracks: the whole pool, the ball as it moves, or one named player — the camera keeps orbiting around whichever you pick as they swim.',
-      'Everyone is a plain capped figure — white, dark or the keeper’s red — no faces, no gender, just the same team colours the flat board already uses.',
-      'The poses follow the tactics, not a guess: a defender inside the green shot-chance zone raises a hand to block; outside it, they take a wider stance shadowing the passing lane. The attacker holding the ball always shows it raised in hand; the others face the goal, ready to receive. Anyone moving between spots swims.',
+    scene3d: { icon:'🎥', title:'help.scene3d.title', steps:[
+      'help.scene3d.s1',
+      'help.scene3d.s2',
+      'help.scene3d.s3',
+      'help.scene3d.s4',
     ], tips:[
-      'This is a stylized camera over the same 2D positions the flat board uses — there is no motion capture and no real swimming footage behind it, and the app says so on screen.',
-      'It’s a watch-only view. Drag players and build the play in the normal 2D board; open 3D afterwards to see it from any angle.',
+      'help.scene3d.t1',
+      'help.scene3d.t2',
     ]},
 
-    development: { icon:'📈', title:'My Development — your own log, your own goal', steps:[
-      'This is <strong>your data, not the team\'s</strong>. Your profile, your self-set goal, your test results and your home-training streak — only you, and your coach or trainer, ever see it.',
-      '<strong>Profile &amp; self target:</strong> your season tier picks which target column the benchmarks below compare you against. Write your goal in your own words — there is no wrong answer.',
-      '<strong>Test results</strong> are logged against your season\'s benchmarks — the same tests a real club testing programme uses, four of them shared with the official Swiss Aquatics PISTE test. A green card means a <strong>confirmed</strong> result at target; yellow shows exactly how far to go.',
-      '<strong>Anything you log yourself is saved straight away and shown as waiting.</strong> Your coach confirms it from your record, and only then does it move a benchmark card or the tests-at-target count. A coach\'s own entries, and an imported club workbook, are confirmed already.',
-      '<strong>Coaches</strong> open this menu on a <strong>squad view</strong>: one row per player — home training this week, tests at target, when they were last tested — and tapping a row opens that player\'s full record.',
-      '<strong>Home training</strong> is the part you control completely: wall passing, mobility, a shoulder-band routine, bodyweight strength, ball feel, watching matches — a small weekly target for each. Log a session and the mascot notices; keep it up and it thrives, let it go quiet and it says so.',
-      '<strong>Swim weeks</strong> count club metres and home/self metres side by side, plus sessions attended — exactly how a real training log tracks it.',
-      'Coaches and trainers can <strong>import a whole team\'s existing logbook</strong> (.xlsx or .csv) in one go, matched to the roster by name; players can download their own test log and swim weeks as a CSV at any time.',
+    development: { icon:'📈', title:'help.development.title', steps:[
+      'help.development.s1',
+      'help.development.s2',
+      'help.development.s3',
+      'help.development.s4',
+      'help.development.s5',
+      'help.development.s6',
+      'help.development.s7',
+      'help.development.s8',
     ], tips:[
-      'There are no bad numbers here. Only starting points. Honest entries matter more than fast ones.',
-      'Confirmation is a fairness mechanism, not a security control — the record lives in this browser, so it keeps everyone honest about what counts, it does not make the file tamper-proof.',
-      'A coach viewing a player\'s record sees the same thing the player does — nothing is hidden, and nothing is shared beyond the coaching team.',
+      'help.development.t1',
+      'help.development.t2',
+      'help.development.t3',
     ]},
 
-    announcements: { icon:'📣', title:'Announcements — a note to one player, or the team', steps:[
-      'The 🔔 bell in the top bar opens your announcements: a personal note your coach sent just to you, or a team-wide message everyone gets — like the tactic for an upcoming game.',
-      '<strong>Coaches and trainers</strong> compose one from the bell panel: choose "Whole team" or "One player", write a title and a message, optionally tie it to an upcoming match, and optionally attach one or more plays from the library.',
-      'An attached play imports straight into your own playbook with one tap — no need to go find it in the shared library yourself.',
-      'Unread announcements show a number on the bell; opening one marks it read.',
+    announcements: { icon:'📣', title:'help.announcements.title', steps:[
+      'help.announcements.s1',
+      'help.announcements.s2',
+      'help.announcements.s3',
+      'help.announcements.s4',
     ], tips:[
-      'Announcements live on the analysis backend, not just this device — unlike most of this app, which only ever lives on the device you\'re using. That\'s what lets a coach\'s note actually reach a player\'s own phone.',
-      'If the backend isn\'t reachable, the panel says so plainly rather than showing an empty list.',
+      'help.announcements.t1',
+      'help.announcements.t2',
     ]},
 
-    privacy: { icon:'🔒', title:'Confidential tactics &amp; anonymous learning', steps:[
-      'Every play has a <strong>Who can see it</strong> setting: <strong>👥 Team</strong> (your team only, the default), <strong>🌐 Club</strong> (everyone in the club) or <strong>🔒 Private</strong> (only you — for confidential tactics). Others simply never see private plays in their library.',
-      '<strong>The system still learns from private plays — anonymously.</strong> It reduces a play to a handful of pattern features (situation, number of steps, passes, shot zone, a coarse formation shape) and strips the title, description, notes, owner and club. The play itself never leaves the device.',
-      'Those features only ever feed <strong>counts</strong>, and a pattern is only reported once at least <strong>5</strong> plays of that kind exist (k-anonymity) — so no single tactic can be reverse-engineered from the “Anonymous learnings” on the dashboard.',
+    privacy: { icon:'🔒', title:'help.privacy.title', steps:[
+      'help.privacy.s1',
+      'help.privacy.s2',
+      'help.privacy.s3',
     ], tips:[
-      'Use 🔒 Private for set pieces and match-specific game plans; 👥 Team for the everyday playbook.',
-      'When the club backend runs, anonymous features are pooled across teams — the club learns as a whole, and nobody’s secrets are exposed.',
+      'help.privacy.t1',
+      'help.privacy.t2',
     ]},
 
-    season: { icon:'📅', title:'Season — plan &amp; calendar', steps:[
-      '<strong>Goal → plan:</strong> name your goal, set the date you want to <em>peak</em> for, pick training days/week and focus, then <strong>Generate plan</strong>. You get a periodised plan — General Prep → Specific Prep → Competition → Taper — with a weekly load wave and water-polo sessions.',
-      '<strong>🤽 Matches &amp; results</strong> pulls your club\'s real fixtures, results, box scores and league table from <strong>wpmatch.ch</strong>, the official Swiss Aquatics match centre. Search your team once — a club usually has several (seniors, U18, U16…) — and it is remembered. <strong>＋ Add to calendar</strong> drops the dated fixtures into the agenda below, so they flow into the .ics export and the subscribe feed like any other match.',
-      'Scores are shown from <em>your</em> side: “vs” at home, “at” away, green for a win. <strong>Stats</strong> opens the official box score — quarter by quarter, % extra player, and every player\'s goals and exclusion fouls by cap number.',
-      '<strong>The plan also reads your own test log.</strong> Whatever you are furthest behind on gets extra sessions and the first — freshest — session of each week, and the plan says which test drove it. Self-reported results count for less than coach-confirmed ones, and unticking <strong>Use my test results</strong> turns it off. The test catalogue measures physical qualities only, so shooting and tactics stay your own choices.',
-      'Press <strong>Add all sessions to the calendar</strong> to drop the whole plan onto your schedule.',
-      '<strong>Calendar:</strong> add matches and events (with time &amp; location). <strong>⬇ Export .ics</strong> gives a file that opens in Apple Calendar, Google Calendar or Outlook.',
-      '<strong>🔗 Subscribe (all devices):</strong> publishes a live feed URL. Subscribe to it once on each phone/computer and it <strong>auto-updates</strong> whenever you publish new matches — iOS, Android and Windows all support subscribed calendars.',
+    season: { icon:'📅', title:'help.season.title', steps:[
+      'help.season.s1',
+      'help.season.s2',
+      'help.season.s3',
+      'help.season.s4',
+      'help.season.s5',
+      'help.season.s6',
+      'help.season.s7',
     ], tips:[
-      'The taper automatically cuts training volume in the last week or two so the team peaks on the goal date.',
-      'A subscribed calendar keeps everyone in sync — publish once, the whole team’s calendars refresh.',
+      'help.season.t1',
+      'help.season.t2',
     ]},
 
-    video: { icon:'🎬', title:'Generate a video of the play', steps:[
-      'Build the play first — write it in <strong>✍️ Draft from words</strong> (e.g. <em>“white cap 2 drives to 2m on the right; defender 6 tries to foul 2; 2 passes to 4; 4 shoots far corner from the left”</em>, one action per line) or drag it out by hand.',
-      'Open <strong>🎬 Generate video</strong> → <strong>Generate animated video</strong>. The tool renders a clean top-down clip of the exact movement and gives you a <strong>player + Download</strong> button — share it in team chat.',
-      'The animation runs <strong>entirely on your device</strong>, is free, and shows precisely what you described.',
-      '<strong>Photoreal (optional):</strong> to get life-like footage instead, add a text-to-video provider (endpoint + key) under <em>Photoreal</em>. It’s a paid external service you supply — and today those models look real but may not follow the tactics exactly. See <strong>docs/VIDEO.md</strong>.',
+    video: { icon:'🎬', title:'help.video.title', steps:[
+      'help.video.s1',
+      'help.video.s2',
+      'help.video.s3',
+      'help.video.s4',
     ], tips:[
-      'One action per line makes the cleanest animation — each line becomes a step.',
-      'The clip downloads as a video file (WebM/MP4) you can send anywhere.',
+      'help.video.t1',
+      'help.video.t2',
     ]},
 
-    commands: { icon:'⚡', title:'Commands (audibles) — call a play, the board runs it', steps:[
-      'A <strong>command</strong> is a ready-made tactical move. Instead of dragging, you press one button and the board executes it — like calling a play from the bench.',
-      'Two places to use them. In the <strong>editor</strong>, open <strong>⚡ Commands (audibles)</strong> to build a play from calls — each command adds its movement step and fills the assignments. Chain a few (e.g. <em>Feed the Hole → Pick &amp; Roll</em>).',
-      'On the board, the <strong>⚡ Audible</strong> button (bottom-right of the pool) flashes a call onto the play you’re watching — the board pauses, runs the move, and you can drag to tweak then <strong>Save as new ⑂</strong>.',
-      'Choose <strong>Apply to</strong> first: <strong>Whole team</strong> for unit moves (collapse, press, counter), or a single <strong>player / GK</strong> for individual calls (front the hole, tactical foul, wing iso).',
-      'Offense calls move the white attackers; defense calls move the black defenders and the keeper. Everything you add is still fully draggable afterwards.',
-      'Every command is a <strong>real water polo movement</strong> from coach-education curricula (World Aquatics / USA Water Polo and the classic club schools) — the umbrella drive with rotation, entry to the centre, pick at the top, perimeter rotation, clear-out for the centre, 4-2 and 3-3 man-up sets, the front-court press, the M-drop, fronting and crashing on the centre, the man-down zone, help-and-recover, counter lanes and transition defence. Hover one to read <em>when</em> to call it and <em>why</em> it works.',
+    commands: { icon:'⚡', title:'help.commands.title', steps:[
+      'help.commands.s1',
+      'help.commands.s2',
+      'help.commands.s3',
+      'help.commands.s4',
+      'help.commands.s5',
+      'help.commands.s6',
     ], tips:[
-      'The classics are all there: <strong>Pick &amp; Roll</strong>, <strong>Double-team the Hole</strong>, <strong>Goalie Out Front</strong>, <strong>Collapse</strong> (everyone between the two attackers) and the <strong>Ordinary Foul</strong> to stop an attack.',
-      'A command that needs a player who isn’t in the current situation is skipped with a note — pick a valid target and try again.',
+      'help.commands.t1',
+      'help.commands.t2',
     ]},
 
-    film: { icon:'🎬', title:'Film Room — analyse a real match', steps:[
-      'Add a match: paste a <strong>YouTube link</strong> or <strong>Upload video</strong> (stored on this device).',
-      'Watch. At an interesting moment press <strong>⏱ Mark moment</strong> — the timestamp fills in (or type it as m:ss).',
-      'Describe it: event type, situation, shooter position, <strong>✔ right / ✘ wrong</strong>.',
-      'Tap the <strong>goal mouth</strong> where the shot went, and on the <strong>situation board</strong> drag players + ball to match what you see in the video (the ball’s spot = shot origin).',
-      'Write <strong>what would have stopped it</strong>, then <strong>Save moment</strong>.',
-      'The timeline jumps the video on tap; the shot chart, origin map and insights build themselves from your tags.',
-      '<strong>Board ⚡</strong> on any moment opens your staged positions in the editor — add the correction steps and save it as a play.',
-      'For uploaded clips: <strong>🔎 Auto-analyse</strong> finds the busy moments by motion, and <strong>📍 Position tracking</strong> reads the caps &amp; ball straight onto your board — calibrate once by clicking the four corners of the field of play, then <strong>Track positions</strong> and open it as a play.',
-      'Leave <strong>Hardened (Tier 2)</strong> on: it tracks a short passage from the current time, rejects splash, and bridges brief occlusions for steadier positions. Turn it off for a quick single-frame read of the whole clip. The chip beside it shows the on-device detector — <strong>colour</strong> by default, or <strong>model</strong> if a neural model pack has been loaded.',
-      '<strong>☁️ Cloud analysis</strong> runs the same auto-tag → confirm workflow. With no endpoint it uses the on-device engine and lists the detected formation to <strong>Confirm → play</strong> or dismiss; paste a cloud URL to use the full pipeline once it’s live. Your confirmations are exactly what the cloud model learns from.',
-    ], tips:[ 'Tag 5–10 moments per match; the insights get sharper with every tag.', 'Position tracking is offline &amp; private — nothing leaves your device. It reads cap colour, so it works best on clear, steady footage.' ]},
+    film: { icon:'🎬', title:'help.film.title', steps:[
+      'help.film.s1',
+      'help.film.s2',
+      'help.film.s3',
+      'help.film.s4',
+      'help.film.s5',
+      'help.film.s6',
+      'help.film.s7',
+      'help.film.s8',
+      'help.film.s9',
+      'help.film.s10',
+    ], tips:[ 'help.film.t1', 'help.film.t2' ]},
 
-    trivia: { icon:'🎓', title:'Trivia — learn the rules & the legends', steps:[
-      'Pick a quiz: <strong>Rules & basics</strong> or <strong>History, legends & stories</strong>.',
-      'Answer — options shuffle every time, so learn the answer, not the position.',
-      'Every answer shows a short explanation; your best score per quiz is saved.',
-    ], tips:[ 'Perfect runs earn badges: ⭐ Trivia Ace and 🏛️ Historian. Players also get 🏆 play challenges on their dashboard.' ]},
+    trivia: { icon:'🎓', title:'help.trivia.title', steps:[
+      'help.trivia.s1',
+      'help.trivia.s2',
+      'help.trivia.s3',
+    ], tips:[ 'help.trivia.t1' ]},
 
-    basics: { icon:'📘', title:'Basics — fundamentals & official rules', steps:[
-      'Read the cards: object of the game, positions, match numbers (4×8 min, 28 s possession, 18 s exclusion…), lines, fouls, keeper, core skills.',
-      '<strong>Roles & responsibilities</strong>: what players, the coach and the referee each own.',
-      'The <strong>official rule books</strong> panel links the current World Aquatics & Swiss Aquatics documents — refreshed automatically every week.',
+    basics: { icon:'📘', title:'help.basics.title', steps:[
+      'help.basics.s1',
+      'help.basics.s2',
+      'help.basics.s3',
     ]},
 
-    admin: { icon:'🛡️', title:'Admin — approvals & roles', steps:[
-      'New sign-ups appear in the <strong>approval queue</strong> — Approve or Deny.',
-      'Change anyone’s role with the dropdown in <strong>People</strong>.',
-      'The <strong>activity feed</strong> shows sign-ins, approvals, play edits, film tags and quiz results as they happen.',
+    admin: { icon:'🛡️', title:'help.admin.title', steps:[
+      'help.admin.s1',
+      'help.admin.s2',
+      'help.admin.s3',
     ]},
   };
 
@@ -219,7 +224,7 @@ const HELP = (() => {
     modal.className = 'modal-backdrop help-backdrop';
     modal.hidden = true;
     modal.innerHTML = `<div class="modal help-modal">
-      <div class="modal-head"><h3 id="help-title">How to use</h3><button class="modal-x" id="help-x">✕</button></div>
+      <div class="modal-head"><h3 id="help-title">${TH('help.modalTitle')}</h3><button class="modal-x" id="help-x">✕</button></div>
       <div class="modal-body" id="help-body"></div>
     </div>`;
     document.body.appendChild(modal);
@@ -232,10 +237,10 @@ const HELP = (() => {
   function show(topicId) {
     const t = TOPICS[topicId] || TOPICS.playbook;
     const m = ensureModal();
-    m.querySelector('#help-title').innerHTML = `${t.icon} ${t.title}`;
+    m.querySelector('#help-title').innerHTML = `${t.icon} ${TH(t.title)}`;
     m.querySelector('#help-body').innerHTML =
-      `<ol class="help-steps">${t.steps.map(s=>`<li>${s}</li>`).join('')}</ol>` +
-      (t.tips && t.tips.length ? `<div class="help-tips">${t.tips.map(x=>`<div class="help-tip">💡 ${x}</div>`).join('')}</div>` : '');
+      `<ol class="help-steps">${t.steps.map(s=>`<li>${TH(s)}</li>`).join('')}</ol>` +
+      (t.tips && t.tips.length ? `<div class="help-tips">${t.tips.map(x=>`<div class="help-tip">💡 ${TH(x)}</div>`).join('')}</div>` : '');
     m.hidden = false;
   }
   function hide() { if (modal) modal.hidden = true; }

@@ -10,27 +10,31 @@
    Pure + unit-tested; no DOM.
    ============================================================ */
 const GAMEPLAN = (() => {
+  /* INSTRUCTIONS below hold KEY NAMES in `label` — the array is built once at load, so real
+     text in it would freeze the boot language. verdict() and summary() return finished,
+     already-translated sentences, so their callers need no change. */
+  const GT = (k, vars) => (typeof I18N !== 'undefined') ? I18N.t(k, vars) : k;
   const INSTRUCTIONS = [
     // ---- offense (our possessions)
-    { id: 'o-drive-kick', side: 'offense', label: 'Drive & kick',                 when: '6v6', tactics: ['drive-and-kick'] },
-    { id: 'o-hole-entry', side: 'offense', label: 'Feed the hole (2 m)',          when: '6v6', tactics: ['hole-entry'] },
-    { id: 'o-pick-roll',  side: 'offense', label: 'Pick & roll',                  when: '6v6', tactics: ['pick-and-roll'] },
-    { id: 'o-swing',      side: 'offense', label: 'Swing the ball on the perimeter', when: '6v6', tactics: ['perimeter-swing'] },
-    { id: 'o-wing-iso',   side: 'offense', label: 'Wing isolation',               when: '6v6', tactics: ['wing-iso'] },
-    { id: 'o-counter',    side: 'offense', label: 'Counter-attack fast',          when: 'any', tactics: ['counter-attack'] },
-    { id: 'o-manup-42',   side: 'offense', label: 'Man-up: play 4-2',             when: '6v5', tactics: ['man-up-4-2'] },
-    { id: 'o-manup-33',   side: 'offense', label: 'Man-up: play 3-3',             when: '6v5', tactics: ['man-up-3-3'] },
-    { id: 'o-shoot-high', side: 'offense', label: 'Shoot high (top corners)',     when: 'any', shotZone: 'T' },
-    { id: 'o-shoot-low',  side: 'offense', label: 'Shoot low (bottom corners)',   when: 'any', shotZone: 'B' },
-    { id: 'o-quick',      side: 'offense', label: 'Quick attacks (≤ 3 passes)',   when: 'any', maxPasses: 3 },
-    { id: 'o-patient',    side: 'offense', label: 'Patient attacks (≥ 4 passes)', when: 'any', minPasses: 4 },
+    { id: 'o-drive-kick', side: 'offense', label: 'gp.oDriveKick',                 when: '6v6', tactics: ['drive-and-kick'] },
+    { id: 'o-hole-entry', side: 'offense', label: 'gp.oHoleEntry',          when: '6v6', tactics: ['hole-entry'] },
+    { id: 'o-pick-roll',  side: 'offense', label: 'gp.oPickRoll',                  when: '6v6', tactics: ['pick-and-roll'] },
+    { id: 'o-swing',      side: 'offense', label: 'gp.oSwing', when: '6v6', tactics: ['perimeter-swing'] },
+    { id: 'o-wing-iso',   side: 'offense', label: 'gp.oWingIso',               when: '6v6', tactics: ['wing-iso'] },
+    { id: 'o-counter',    side: 'offense', label: 'gp.oCounter',          when: 'any', tactics: ['counter-attack'] },
+    { id: 'o-manup-42',   side: 'offense', label: 'gp.oManup42',             when: '6v5', tactics: ['man-up-4-2'] },
+    { id: 'o-manup-33',   side: 'offense', label: 'gp.oManup33',             when: '6v5', tactics: ['man-up-3-3'] },
+    { id: 'o-shoot-high', side: 'offense', label: 'gp.oShootHigh',     when: 'any', shotZone: 'T' },
+    { id: 'o-shoot-low',  side: 'offense', label: 'gp.oShootLow',   when: 'any', shotZone: 'B' },
+    { id: 'o-quick',      side: 'offense', label: 'gp.oQuick',   when: 'any', maxPasses: 3 },
+    { id: 'o-patient',    side: 'offense', label: 'gp.oPatient', when: 'any', minPasses: 4 },
     // ---- defense (their possessions)
-    { id: 'd-press',      side: 'defense', label: 'Press',                        when: 'any', defence: 'press' },
-    { id: 'd-drop',       side: 'defense', label: 'Drop (protect the hole)',      when: 'any', defence: 'drop' },
-    { id: 'd-zone',       side: 'defense', label: 'Zone',                         when: 'any', defence: 'zone' },
-    { id: 'd-deny-hole',  side: 'defense', label: 'Deny the hole feed',           when: 'any', deny: ['hole-entry'] },
-    { id: 'd-stop-drive', side: 'defense', label: 'Stop the drive & kick',        when: 'any', deny: ['drive-and-kick'] },
-    { id: 'd-no-counter', side: 'defense', label: 'Concede no counter-attacks',   when: 'any', deny: ['counter-attack'] },
+    { id: 'd-press',      side: 'defense', label: 'gp.dPress',                        when: 'any', defence: 'press' },
+    { id: 'd-drop',       side: 'defense', label: 'gp.dDrop',      when: 'any', defence: 'drop' },
+    { id: 'd-zone',       side: 'defense', label: 'gp.dZone',                         when: 'any', defence: 'zone' },
+    { id: 'd-deny-hole',  side: 'defense', label: 'gp.dDenyHole',           when: 'any', deny: ['hole-entry'] },
+    { id: 'd-stop-drive', side: 'defense', label: 'gp.dStopDrive',        when: 'any', deny: ['drive-and-kick'] },
+    { id: 'd-no-counter', side: 'defense', label: 'gp.dNoCounter',   when: 'any', deny: ['counter-attack'] },
   ];
   const byId = id => INSTRUCTIONS.find(i => i.id === id);
 
@@ -74,29 +78,38 @@ const GAMEPLAN = (() => {
     });
   }
   function verdict(r) {
-    if (!r.attacks) return 'nothing to judge in this situation';
-    if (r.followedPct == null) return 'could not be read from the video';
+    if (!r.attacks) return GT('gp.vNothingToJudge');
+    if (r.followedPct == null) return GT('gp.vUnreadable');
     const a = r.whenFollowed, b = r.whenNot;
     const rate = x => x.n ? Math.round(100 * (r.side === 'offense' ? x.shots : x.n - x.shots) / x.n) : null;
     const rf = rate(a), rn = rate(b);
-    const base = r.followedPct >= 70 ? 'largely followed' : r.followedPct >= 40 ? 'followed about half the time' : 'mostly not followed';
+    const base = r.followedPct >= 70 ? GT('gp.vLargelyFollowed') : r.followedPct >= 40 ? GT('gp.vHalfFollowed') : GT('gp.vMostlyNot');
     if (rf != null && rn != null && a.n >= 2 && b.n >= 2) {
-      const better = r.side === 'offense' ? (rf > rn) : (rf > rn);
-      return `${base} — ${better ? 'and it worked better' : 'but it did not work better'} (${rf}% vs ${rn}%)`;
+      return GT(rf > rn ? 'gp.vWorkedBetter' : 'gp.vNotBetter', { base, rf, rn });
     }
     return base;
   }
 
   /* plain sentences for the report */
   function summary(rows) {
+    /* Singular and plural are separate keys rather than an English "s" appended to a
+       placeholder: no other language pluralises that way. */
+    const word = (n, one, many) => GT(n === 1 ? one : many);
     return rows.map(r => {
-      if (!r.attacks) return `${r.label}: nothing to judge in this situation.`;
+      const label = GT(r.label);
+      if (!r.attacks) return GT('gp.sumNothingToJudge', { label });
       const f = r.whenFollowed, n = r.whenNot;
-      const outcome = r.side === 'offense'
-        ? `when followed ${f.shots} shot${f.shots === 1 ? '' : 's'} / ${f.goals} goal${f.goals === 1 ? '' : 's'} in ${f.n}; when not ${n.shots} / ${n.goals} in ${n.n}`
-        : `when followed they got ${f.shots} shot${f.shots === 1 ? '' : 's'} / ${f.goals} goal${f.goals === 1 ? '' : 's'} in ${f.n}; when not ${n.shots} / ${n.goals} in ${n.n}`;
-      const unit = byId(r.id) && byId(r.id).shotZone ? 'shot' : 'attack';
-      return `${r.label}: ${r.attacks} ${unit}${r.attacks === 1 ? '' : 's'}, followed ${r.followedPct == null ? '–' : r.followedPct + '%'}${r.unread ? ` (${r.unread} unread)` : ''}; ${outcome}. ${r.verdict}.`;
+      const outcome = GT(r.side === 'offense' ? 'gp.sumOutcomeUs' : 'gp.sumOutcomeThem', {
+        fs: f.shots, fg: f.goals, fn: f.n, ns: n.shots, ng: n.goals, nn: n.n,
+        shotWord: word(f.shots, 'gp.wShot', 'gp.wShots'), goalWord: word(f.goals, 'gp.wGoal', 'gp.wGoals'),
+      });
+      const unit = byId(r.id) && byId(r.id).shotZone
+        ? word(r.attacks, 'gp.wShot', 'gp.wShots') : word(r.attacks, 'gp.wAttack', 'gp.wAttacks');
+      return GT('gp.sumLine', {
+        label, n: r.attacks, unit, outcome, verdict: r.verdict,
+        pct: r.followedPct == null ? '–' : r.followedPct + '%',
+        unread: r.unread ? GT('gp.sumUnread', { n: r.unread }) : '',
+      });
     });
   }
 

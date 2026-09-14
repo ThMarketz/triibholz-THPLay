@@ -89,28 +89,35 @@ const FILM = (() => {
   }
 
   const TYPES = [
-    { id:'goal-for',           label:'⚽ Goal — us',            shot:true,  against:false },
-    { id:'goal-against',       label:'🥅 Goal conceded',        shot:true,  against:true  },
-    { id:'shot-for-saved',     label:'🧤 Our shot saved/missed',shot:true,  against:false },
-    { id:'shot-against-saved', label:'🛡️ Their shot stopped',   shot:true,  against:true  },
-    { id:'exclusion-for',      label:'💪 Exclusion won',        shot:false, against:false },
-    { id:'exclusion-against',  label:'⚠️ Exclusion conceded',   shot:false, against:true  },
-    { id:'turnover',           label:'🔁 Turnover',             shot:false, against:false },
-    { id:'note',               label:'📝 Note',                 shot:false, against:false },
+    { id:'goal-for',           label:'film.typeGoalFor',            shot:true,  against:false },
+    { id:'goal-against',       label:'film.typeGoalAgainst',        shot:true,  against:true  },
+    { id:'shot-for-saved',     label:'film.typeShotForSaved',shot:true,  against:false },
+    { id:'shot-against-saved', label:'film.typeShotAgainstSaved',   shot:true,  against:true  },
+    { id:'exclusion-for',      label:'film.typeExclusionFor',        shot:false, against:false },
+    { id:'exclusion-against',  label:'film.typeExclusionAgainst',   shot:false, against:true  },
+    { id:'turnover',           label:'film.typeTurnover',             shot:false, against:false },
+    { id:'note',               label:'film.typeNote',                 shot:false, against:false },
   ];
   const typeOf = id => TYPES.find(t=>t.id===id) || TYPES[7];
+  /* A situation is STORED on the event as its id ('man-up'), so the id is the data and only
+     the label is translated. Falls back to the raw id for anything not in the dictionary. */
+  /* A recognised tactic's name is DATA — it is baked into saved play titles and into the
+     stored scouting report, so tactics.js keeps it English. Only the on-screen name is
+     translated, and it falls back to whatever the analysis produced. */
+  const tacName = (id, fallback) => { const k = 'tac.' + id, v = TX(k); return v === k ? fallback : v; };
+  const sitLabel = x => { if (!x) return ''; const k = 'film.sit.' + x, v = TX(k); return v === k ? x : v; };
   const SITUATIONS = ['6v6','man-up','man-down','penalty','counter','other'];
   const ZONES = ['TL','TC','TR','ML','MC','MR','BL','BC','BR'];
   const ZONE_HINTS = {
-    TL:'High near-side: press the shooter earlier; keeper owns the short high lane.',
-    TC:'High centre: a hand must be in the lane — keeper stays tall, no early sink.',
-    TR:'High far-side: the wing closes the angle; keeper shades the far post.',
-    ML:'Mid near: win the shoulder position before the catch, not after.',
-    MC:'Through the middle: front the centre — no free catch at 2 m.',
-    MR:'Mid far: earlier weak-side slide; the skip lane stays closed.',
-    BL:'Low near: block DOWN with the inside hand; keeper low on the near post.',
-    BC:'Low centre: legs! Keeper holds ground; defender pressures the release.',
-    BR:'Low far: deny the cross-cage angle — earlier drop from position 4.',
+    TL:'film.zoneHintTL',
+    TC:'film.zoneHintTC',
+    TR:'film.zoneHintTR',
+    ML:'film.zoneHintML',
+    MC:'film.zoneHintMC',
+    MR:'film.zoneHintMR',
+    BL:'film.zoneHintBL',
+    BC:'film.zoneHintBC',
+    BR:'film.zoneHintBR',
   };
   const mapToBoard = s => s==='man-up' ? '6v5' : s==='man-down' ? '6v5' : s==='counter' ? '3v2' : s==='penalty' ? 'GK' : '6v6';
 
@@ -186,7 +193,7 @@ const FILM = (() => {
       const byZone = {};
       ga.forEach(e => { if (e.zone) byZone[e.zone] = (byZone[e.zone]||0)+1; });
       const top = Object.entries(byZone).sort((a,b)=>b[1]-a[1])[0];
-      if (top) out.push(TX('film.insightConcededZone', { n: top[1], total: ga.length, zone: top[0], hint: ZONE_HINTS[top[0]] }));
+      if (top) out.push(TX('film.insightConcededZone', { n: top[1], total: ga.length, zone: top[0], hint: TX(ZONE_HINTS[top[0]]) }));
       const bySit = {};
       ga.forEach(e => { if (e.situation) bySit[e.situation] = (bySit[e.situation]||0)+1; });
       const topSit = Object.entries(bySit).sort((a,b)=>b[1]-a[1])[0];
@@ -337,7 +344,7 @@ const FILM = (() => {
     const det = FIELD.detect(data, Wc, Hc, { step: 2 });
     if (!det.found) {
       vHomography = null; vFieldMode = 'none'; setFieldStatus();
-      out.innerHTML = `<div class="muted">${TX('film.fieldNotFound', { why: esc(det.why || 'no pool edges'), pct: Math.round(det.coverage * 100) })}</div>`;
+      out.innerHTML = `<div class="muted">${TX('film.fieldNotFound', { why: esc(det.why || TX('film.noPoolEdges')), pct: Math.round(det.coverage * 100) })}</div>`;
       return;
     }
     vCorners = det.corners.map(c => ({ x: c.x, y: c.y })); vHomography = det.H; vFieldConf = det.confidence; vFieldMode = 'auto';
@@ -558,7 +565,7 @@ const FILM = (() => {
     const fm = result && result.meta && result.meta.field;
     const meta = (result && result.meta ? TX('film.metaSecondsAnalysed', { n: Math.round(result.meta.seconds) }) : '') + (fm && fm.mode === 'auto' ? TX('film.metaFieldTracked', { pct: fm.readPct, unread: fm.unreadSeconds ? TX('film.metaUnreadSeconds', { n: fm.unreadSeconds }) : '' }) : fm && fm.mode === 'fixed' ? TX('film.metaFixedCamera') : '');
     const teamRows = Object.keys(sc.profile || {}).map(k => { const t = sc.profile[k]; return `<div class="scout-team"><strong>${k === 'att' ? TX('film.whiteCaps') : TX('film.blueCaps')}</strong> — ${TX('film.teamRowStats', { poss: t.possessions, rate: Math.round(t.shotRate * 100), passes: t.avgPasses })}
-      <div class="scout-tend">${(t.tendencies || []).slice(0, 4).map(x => `<span class="tag">${esc(x.name)} ${x.pct}%</span>`).join('') || `<span class="muted">${TX('film.noRecognisedTactics')}</span>`}</div></div>`; }).join('');
+      <div class="scout-tend">${(t.tendencies || []).slice(0, 4).map(x => `<span class="tag">${esc(tacName(x.tactic, x.name))} ${x.pct}%</span>`).join('') || `<span class="muted">${TX('film.noRecognisedTactics')}</span>`}</div></div>`; }).join('');
     out.innerHTML = `<div class="scout-box">
       ${teamAnalysisHtml(sc, result)}
       <details class="scout-more"><summary>${TX('film.goFurther')}</summary>
@@ -586,16 +593,16 @@ const FILM = (() => {
   function teamAnalysisHtml(sc, result) {
     const T = sc.teams; if (!T) return '';
     const us = (root.querySelector('#scout-us') || {}).value || 'white';
-    const label = k => (k === 'att' ? 'White caps' : 'Blue caps') + ((k === 'att') === (us === 'white') ? TX('film.labelUs') : TX('film.labelOpponent'));
+    const label = k => (k === 'att' ? TX('film.whiteCaps') : TX('film.blueCaps')) + ((k === 'att') === (us === 'white') ? TX('film.labelUs') : TX('film.labelOpponent'));
     const hasVideo = !!(result && result.meta && result.meta.videoRef);
     const heatGrid = heat => { const H = {}; (heat || []).forEach(h => H[h.zone] = h.pct); const cell = (z, name) => `<span class="hz ${H[z] ? 'on' : ''}" style="--p:${(H[z] || 0) / 100}" title="${name}: ${H[z] || 0}%">${H[z] ? H[z] + '%' : ''}</span>`;
       return `<div class="heat" title="${TX('film.whereBallLived')}">${cell('LW', TX('film.zoneLeftWing'))}${cell('LP', TX('film.zoneLeftPost'))}<span class="hz goal">🥅</span>${cell('PT', TX('film.zonePoint'))}${cell('HOLE', '2 m')}<span class="hz goal"></span>${cell('RW', TX('film.zoneRightWing'))}${cell('RP', TX('film.zoneRightPost'))}<span class="hz goal"></span></div>`; };
     const card = (k, sit, b) => `<div class="ta-card">
         <div class="ta-head"><strong>${esc(b.label)}</strong> <span class="muted">${TX('film.taCardStats', { n: b.possessions, shots: b.shots, rate: Math.round(b.shotRate * 100), goals: b.goals, passes: b.avgPasses, dur: b.avgDuration, unread: b.unread ? TX('film.unreadCount', { n: b.unread }) : '' })}</span></div>
         <div class="ta-body">
-          <div class="ta-pats">${b.patterns.length ? b.patterns.map(x => `<div class="ta-pat"><span class="tp-name">${esc(x.name)}</span><span class="muted">${TX('film.patShots', { n: x.n, shots: x.shots })}${x.goals ? TX('film.patGoals', { n: x.goals }) : ''}${x.tactic !== 'unclassified' ? ` · ${esc(x.tacticName)} ${Math.round(x.confidence * 100)}%` : ''}</span>
+          <div class="ta-pats">${b.patterns.length ? b.patterns.map(x => `<div class="ta-pat"><span class="tp-name">${esc(x.name)}</span><span class="muted">${TX('film.patShots', { n: x.n, shots: x.shots })}${x.goals ? TX('film.patGoals', { n: x.goals }) : ''}${x.tactic !== 'unclassified' ? ` · ${esc(tacName(x.tactic, x.tacticName))} ${Math.round(x.confidence * 100)}%` : ''}</span>
             <span class="ar-actions">${hasVideo ? `<button class="btn-ghost sm" data-pclip="${x.example.index}">${TX('film.exampleClip')}</button>` : ''}<button class="btn-ghost sm" data-board="${x.example.index}">${TX('film.boardBtn')}</button></span><div class="ar-clip" hidden></div></div>`).join('') : `<div class="muted">${TX('film.noBallPath')}</div>`}</div>
-          <div class="ta-side">${heatGrid(b.ballHeat)}${b.tactics.length ? `<div class="scout-tend">${b.tactics.slice(0, 3).map(t => `<span class="tag">${esc(t.name)} ${t.pct}%</span>`).join('')}</div>` : ''}${sit === '6v5' && b.topFormation && b.topFormation !== 'set' ? `<span class="tag">${TX('film.setUpTag', { formation: esc(b.topFormation) })}</span>` : ''}${b.topDefence ? `<span class="muted">${TX('film.vsDefence', { defence: esc(b.topDefence) })}</span>` : ''}</div>
+          <div class="ta-side">${heatGrid(b.ballHeat)}${b.tactics.length ? `<div class="scout-tend">${b.tactics.slice(0, 3).map(t => `<span class="tag">${esc(tacName(t.tactic, t.name))} ${t.pct}%</span>`).join('')}</div>` : ''}${sit === '6v5' && b.topFormation && b.topFormation !== 'set' ? `<span class="tag">${TX('film.setUpTag', { formation: esc(b.topFormation) })}</span>` : ''}${b.topDefence ? `<span class="muted">${TX('film.vsDefence', { defence: esc(b.topDefence) })}</span>` : ''}</div>
         </div></div>`;
     const teamBlock = k => { const r = T[k]; if (!r) return '';
       const sits = Object.keys(r.bySituation);
@@ -619,7 +626,7 @@ const FILM = (() => {
   function planPanelHtml(s) {
     if (typeof GAMEPLAN === 'undefined') return '';
     const plan = Array.isArray(s.plan) ? s.plan : [];
-    const side = sd => GAMEPLAN.INSTRUCTIONS.filter(i => i.side === sd).map(i => `<button class="plan-chip ${plan.includes(i.id) ? 'on' : ''}" data-ins="${i.id}" title="${i.when === 'any' ? TX('film.everyAttackTip') : TX('film.inWhen', { when: i.when })}">${esc(i.label)}</button>`).join('');
+    const side = sd => GAMEPLAN.INSTRUCTIONS.filter(i => i.side === sd).map(i => `<button class="plan-chip ${plan.includes(i.id) ? 'on' : ''}" data-ins="${i.id}" title="${i.when === 'any' ? TX('film.everyAttackTip') : TX('film.inWhen', { when: i.when })}">${esc(TX(i.label))}</button>`).join('');
     return `<div class="film-auto" id="film-plan">
       <div class="fa-head"><strong>${TX('film.gamePlan')} <span class="fa-beta">${TX('film.gamePlanBadge')}</span></strong>
         <span class="cloud-status cloud" id="plan-count">${plan.length ? `${plan.length > 1 ? TX('film.nInstructions', { n: plan.length }) : TX('film.oneInstruction', { n: plan.length })}` : TX('film.nothingAskedYet')}</span>
@@ -637,7 +644,7 @@ const FILM = (() => {
     const pct = r => r.followedPct == null ? '–' : r.followedPct + '%';
     const sg = b => `${b.shots}/${b.goals}`;
     return `<table class="plan-table"><thead><tr><th>${TX('film.thAsked')}</th><th>${TX('film.thAttacks')}</th><th>${TX('film.thFollowed')}</th><th title="${TX('film.shotsGoals')}">${TX('film.thWhenFollowed')}</th><th title="${TX('film.shotsGoals')}">${TX('film.thWhenNot')}</th><th>${TX('film.thVerdict')}</th></tr></thead><tbody>
-      ${rows.map(r => `<tr class="${r.side}"><td>${r.side === 'defense' ? '🛡 ' : '⚔ '}${esc(r.label)}</td><td>${r.attacks}${r.unread ? `<span class="muted"> ${TX('film.unreadParen', { n: r.unread })}</span>` : ''}</td><td><strong>${pct(r)}</strong></td><td>${sg(r.whenFollowed)} <span class="muted">${TX('film.inN', { n: r.whenFollowed.n })}</span></td><td>${sg(r.whenNot)} <span class="muted">${TX('film.inN', { n: r.whenNot.n })}</span></td><td class="muted">${esc(r.verdict)}</td></tr>`).join('')}
+      ${rows.map(r => `<tr class="${r.side}"><td>${r.side === 'defense' ? '🛡 ' : '⚔ '}${esc(TX(r.label))}</td><td>${r.attacks}${r.unread ? `<span class="muted"> ${TX('film.unreadParen', { n: r.unread })}</span>` : ''}</td><td><strong>${pct(r)}</strong></td><td>${sg(r.whenFollowed)} <span class="muted">${TX('film.inN', { n: r.whenFollowed.n })}</span></td><td>${sg(r.whenNot)} <span class="muted">${TX('film.inN', { n: r.whenNot.n })}</span></td><td class="muted">${esc(r.verdict)}</td></tr>`).join('')}
     </tbody></table>`;
   }
   function planReportHtml(sc) {
@@ -693,7 +700,7 @@ const FILM = (() => {
       for (let i = 0; i < plays.length; i++) {
         const p = plays[i]; if (st) st.textContent = ` — ${TX('film.preparingClip', { i: i + 1, n: plays.length })}`;
         let clipUrl = null; if (result && result.meta && result.meta.videoRef) { try { clipUrl = await cutClip(result.meta.videoRef, p.tStart, p.tEnd); } catch (e) {} }
-        const asked = rows.filter(r => r.side === (p.offense === usSide ? 'offense' : 'defense')).map(r => r.label).join(', ');
+        const asked = rows.filter(r => r.side === (p.offense === usSide ? 'offense' : 'defense')).map(r => TX(r.label)).join(', ');
         const followed = rows.length && typeof GAMEPLAN !== 'undefined' ? (() => { const js = cur.plan.map(id => GAMEPLAN.byId(id)).filter(Boolean).map(ins => GAMEPLAN.judge(ins, p, us)).filter(j => j.applies && j.read); return js.length ? js.some(j => j.followed) : null; })() : null;
         items.push({ t0: p.tStart, t1: p.tEnd, title: `${fmt(p.tStart)} · ${p.offense === usSide ? 'us' : 'them'} · ${p.name}`, note: (p.steps || []).join(' → '), result: resultOf(p), asked, followed, clipUrl, frames: p.frames, notes: p.notes });
       }
@@ -890,8 +897,8 @@ const FILM = (() => {
       ${canEdit ? `<div class="film-tagbar">
         <button class="btn-primary sm" id="film-mark">${TX('film.markMoment')}</button>
         <input type="text" id="film-t" class="film-t" placeholder="m:ss" />
-        <select id="film-type" class="focus-select">${TYPES.map(t=>`<option value="${t.id}">${t.label}</option>`).join('')}</select>
-        <select id="film-sit" class="focus-select">${SITUATIONS.map(x=>`<option>${x}</option>`).join('')}</select>
+        <select id="film-type" class="focus-select">${TYPES.map(t=>`<option value="${t.id}">${TX(t.label)}</option>`).join('')}</select>
+        <select id="film-sit" class="focus-select">${SITUATIONS.map(x=>`<option value="${x}">${sitLabel(x)}</option>`).join('')}</select>
         <select id="film-pos" class="focus-select"><option value="">${TX('film.posPrompt')}</option>${['1','2','3','4','5','6','GK'].map(p=>`<option>${p}</option>`).join('')}</select>
         <span class="verdict-toggle">
           <button class="v-btn v-right" data-v="right">${TX('film.right')}</button>
@@ -961,8 +968,8 @@ const FILM = (() => {
             const T = typeOf(e.type);
             return `<div class="film-ev ${e.verdict||''}" data-id="${e.id}">
               <button class="fe-t" data-seek="${e.t}">${fmt(e.t)}</button>
-              <span class="fe-main"><strong>${T.label}</strong>
-                <span>${esc(e.situation||'')}${e.pos?` · ${TX('film.posLabel', { n: esc(e.pos) })}`:''}${e.zone?` · ${e.zone}`:''}${e.verdict?` · ${e.verdict==='right'?'✔ right':'✘ wrong'}`:''}</span>
+              <span class="fe-main"><strong>${TX(T.label)}</strong>
+                <span>${esc(sitLabel(e.situation))}${e.pos?` · ${TX('film.posLabel', { n: esc(e.pos) })}`:''}${e.zone?` · ${e.zone}`:''}${e.verdict?` · ${e.verdict==='right'?TX('film.right'):TX('film.wrong')}`:''}</span>
                 ${e.counter?`<span class="fe-counter">🎯 ${esc(e.counter)}</span>`:''}
                 ${e.note?`<span class="fe-note">${esc(e.note)}</span>`:''}</span>
               <span class="fe-actions">
@@ -1022,7 +1029,7 @@ const FILM = (() => {
       s.plan = Array.isArray(s.plan) ? s.plan : [];
       const i = s.plan.indexOf(b.dataset.ins); if (i >= 0) s.plan.splice(i, 1); else s.plan.push(b.dataset.ins);
       b.classList.toggle('on', i < 0); save(sessions);
-      const c = main.querySelector('#plan-count'); if (c) c.textContent = s.plan.length ? TX('film.planInstructions', { n: s.plan.length }) : 'nothing asked yet';
+      const c = main.querySelector('#plan-count'); if (c) c.textContent = s.plan.length ? TX('film.planInstructions', { n: s.plan.length }) : TX('film.nothingAskedYet');
       if (lastScout && lastScout.sessionId === s.id) renderScout(lastScout.sc, lastScout.result);
     });
     loadDebriefs();
