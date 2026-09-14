@@ -26,13 +26,17 @@ const PRIVACY = (() => {
 
   /* ---------- visibility ---------- */
   function levelOf(item) { return LEVELS.indexOf(item && item.visibility) >= 0 ? item.visibility : 'team'; }
+  // team scope = the user record's teamCode (set at sign-up), same field plays are stamped
+  // from and film.js/announce.js scope by. Users have no .team — reading it let every team in.
+  // A user WITHOUT a teamCode (demo personas) belongs to no team: they see un-stamped team
+  // plays (samples, their own) but never another team's — fail closed, like the 'club' bucket.
   function canView(item, user) {
     if (!item) return false;
     const lvl = levelOf(item);
     if (lvl === 'public') return true;
     if (!user) return false;
     if (user.role === 'super-admin' && lvl === 'team') return true;
-    if (lvl === 'team') return !item.team || !user.team || item.team === user.team;
+    if (lvl === 'team') return !item.team || item.team === user.teamCode;
     return !!item.owner && item.owner === user.email;          // private
   }
 

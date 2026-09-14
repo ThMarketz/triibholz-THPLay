@@ -72,7 +72,8 @@ const TESTLOG = (() => {
     if (target == null) return { value, target: null, met: null, deltaText: 'baseline — no fixed target yet' };
     const met = test.lower ? value <= target : value >= target;
     const diff = test.lower ? (value - target) : (target - value);
-    const unitTxt = /s$|min:s/.test(test.unit) && test.unit !== '% vs baseline' ? 's' : (test.unit.split(' ')[0] === '%' ? '%' : '');
+    // whole-unit match: 'reps' ends in 's' too, and "6.0s to go" for a rep count is simply wrong
+    const unitTxt = (test.unit === 's' || test.unit === 'min:s') ? 's' : (test.unit.split(' ')[0] === '%' ? '%' : '');
     const deltaText = met
       ? `at target${diff !== 0 ? ` (by ${Math.abs(diff).toFixed(1)}${unitTxt})` : ''}`
       : `${Math.abs(diff).toFixed(1)}${unitTxt} to go`;

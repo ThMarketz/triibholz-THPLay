@@ -674,7 +674,9 @@ const FILM = (() => {
     });
   }
   /* ---------- Debriefs: share with the team, comments ---------- */
-  const teamOf = () => (ctx && ctx.user && (ctx.user.team || ctx.user.club)) || 'club';
+  // team scope = the user record's teamCode (set at sign-up), same convention as plays + announcements.
+  // Users have no .team/.club — reading those put every club's debriefs in one shared 'club' bucket.
+  const teamOf = user => (user && user.teamCode) || 'club';
   async function shareDebrief(btn, sc, result) {
     const st = root.querySelector('#scout-share-status'); btn.disabled = true;
     const us = (root.querySelector('#scout-us') || {}).value || 'white', usSide = typeof GAMEPLAN !== 'undefined' ? GAMEPLAN.usSide(us) : 'att';
@@ -690,7 +692,7 @@ const FILM = (() => {
         items.push({ t0: p.tStart, t1: p.tEnd, title: `${fmt(p.tStart)} · ${p.offense === usSide ? 'us' : 'them'} · ${p.name}`, note: (p.steps || []).join(' → '), result: resultOf(p), asked, followed, clipUrl, frames: p.frames, notes: p.notes });
       }
       if (st) st.textContent = ' — publishing…';
-      const body = { team: teamOf(), title: `Debrief: ${cur.title}`, matchTitle: cur.title, author: ctx.user && ctx.user.name, us, summary: (sc.narrative || []).concat(sc.summary || []).slice(0, 12), plan: rows, items };
+      const body = { team: teamOf(ctx.user), title: `Debrief: ${cur.title}`, matchTitle: cur.title, author: ctx.user && ctx.user.name, us, summary: (sc.narrative || []).concat(sc.summary || []).slice(0, 12), plan: rows, items };
       const r = await fetch(scoutBase() + '/api/debriefs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       if (!r.ok) throw new Error('debrief-' + r.status);
       if (st) st.textContent = ' — shared ✓ (see Team debriefs below)'; ctx.toast('Debrief shared with the team');
@@ -700,7 +702,7 @@ const FILM = (() => {
   async function loadDebriefs() {
     const list = root && root.querySelector('#debrief-list'); if (!list) return;
     try {
-      const r = await fetch(scoutBase() + '/api/debriefs?team=' + encodeURIComponent(teamOf()));
+      const r = await fetch(scoutBase() + '/api/debriefs?team=' + encodeURIComponent(teamOf(ctx.user)));
       const { debriefs } = await r.json();
       if (!debriefs.length) { list.innerHTML = '<span class="muted">No debriefs shared yet.' + (ctx.canEdit ? ' Scout a video, then “Share debrief with the team”.' : '') + '</span>'; return; }
       list.className = 'debrief-list';
@@ -1116,5 +1118,5 @@ const FILM = (() => {
     };
   }
 
-  return { render, load, parseSource, ZONE_HINTS, _insights: insights, motionScan };
+  return { render, load, parseSource, ZONE_HINTS, _insights: insights, motionScan, teamOf };
 })();

@@ -521,9 +521,15 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     const f = PRIVACY.anonymize(secret);
     ok('anonymized features carry no title/notes/owner/id', PRIVACY.isAnonymous(f) && !JSON.stringify(f).includes('SECRET') && !JSON.stringify(f).includes('trick'));
     ok('features still describe the pattern', f.situation==='6v5' && f.passes===1 && f.endsInShot===true && f.shotZone==='T');
-    const owner={email:'coach@club.ch',team:'A',role:'coach'}, mate={email:'m@club.ch',team:'A',role:'coach'}, admin={email:'a@x',role:'super-admin'};
+    // real user records carry teamCode (set at sign-up), never .team — test that shape
+    const owner={email:'coach@club.ch',teamCode:'A',role:'coach'}, mate={email:'m@club.ch',teamCode:'A',role:'coach'}, admin={email:'a@x',role:'super-admin'};
     ok('private: owner sees it, teammate + admin do not', PRIVACY.canView(secret,owner) && !PRIVACY.canView(secret,mate) && !PRIVACY.canView(secret,admin));
-    ok('team: same team yes, other team no', PRIVACY.canView({visibility:'team',team:'A'},mate) && !PRIVACY.canView({visibility:'team',team:'B'},mate));
+    ok('team: same teamCode yes, other teamCode no', PRIVACY.canView({visibility:'team',team:'A'},mate) && !PRIVACY.canView({visibility:'team',team:'B'},mate));
+    ok('team: a stray .team on the user is ignored (only teamCode scopes)', !PRIVACY.canView({visibility:'team',team:'B'},{email:'x@club.ch',team:'B',teamCode:'A',role:'coach'}));
+    const demo={email:'coach@demo.triibholz',role:'coach'};   // demo personas have no teamCode
+    ok('team: no teamCode → un-stamped team plays yes, another team\'s no', PRIVACY.canView({visibility:'team'},demo) && !PRIVACY.canView({visibility:'team',team:'A'},demo));
+    ok('team: super-admin still sees every team', PRIVACY.canView({visibility:'team',team:'B'},admin));
+    ok('privacy.js reads no user.team / user.club', !/user\.(team|club)\b/.test(readFileSync(join(APP, 'js/privacy.js'), 'utf8')));
     let agg=PRIVACY.emptyAgg(); for (let i=0;i<4;i++) agg=PRIVACY.contribute(agg,f);
     ok('k-anonymity: nothing reported below 5', PRIVACY.report(agg).length===0);
     agg=PRIVACY.contribute(agg,f);
@@ -542,7 +548,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     const saved = DATA.load().find(x=>x.title==='Confidential corner play');
     ok('saved play is private + owned by me', !!saved && saved.visibility==='private' && !!saved.owner);
     ok('the system learned from it anonymously (aggregate n+1)', PRIVACY.load().n===nBefore+1);
-    ok('another user cannot view it', !PRIVACY.canView(saved,{email:'someone@else.ch',team:saved.team,role:'coach'}));
+    ok('another user cannot view it', !PRIVACY.canView(saved,{email:'someone@else.ch',teamCode:saved.team,role:'coach'}));
     ok('library marks it with a lock', qa('.scn-card .tag.vis-private').length>=1);
   }
 
@@ -1165,6 +1171,11 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
   qa('#film-plan .plan-chip').find(b=>b.dataset.ins==='o-drive-kick').click(); await wait(10);
   ok('ticking an instruction stores it on the match', (FILM.load().find(x=>x.id===(FILM.load()[0].id))||{}).plan!==undefined && JSON.stringify(FILM.load()).includes('"o-drive-kick"') && q('#plan-count').textContent.includes('1 instruction'));
   ok('📣 Team debriefs panel present for everyone', !!q('#film-debriefs') && !!q('#debrief-list'));
+  // debriefs are team-scoped by the user's teamCode — the record has no .team/.club, and reading
+  // those once sent every club's debriefs to one shared 'club' bucket on the backend
+  ok('debrief team = the user\'s teamCode', FILM.teamOf({ teamCode: 'SC-HORGEN' }) === 'SC-HORGEN');
+  ok('debrief team ignores non-existent .team/.club fields', FILM.teamOf({ team: 'X', club: 'Y' }) === 'club' && FILM.teamOf(null) === 'club');
+  ok('film.js reads no ctx.user.team / ctx.user.club', !/ctx\.user\.(team|club)\b/.test(readFileSync(join(APP, 'js/film.js'), 'utf8')));
   ok('board ball draggable', !!q('#film-board .ball.editable'));
   // board follows the situation select
   q('#film-sit').value='man-down'; q('#film-sit').dispatchEvent(new window.Event('change')); await wait(20);
@@ -1205,8 +1216,35 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
   q('#setup-continue').click(); await wait(40);
   ok('new player lands on pending gate', q('#pending-screen').classList.contains('active'));
   const sam = DATA.findUserByEmail('sam@gmail.com'); DATA.setUserStatus(sam.id,'approved');
+  // privacy wiring: two team-only plays stamped the way stampPrivacy() does — one with sam's
+  // teamCode, one with another team's. Injected before sam enters so enterApp() loads them.
+  const OWN_T = 'Team-only: our overload', OTHER_T = 'Team-only: rival club secret';
+  const mkTeamPlay = (id, title, team) => Object.assign(DATA.newScenario('6v6', 'offense'), { id, title, visibility: 'team', owner: 'x@club.ch', team });
+  DATA.save(DATA.load().concat([mkTeamPlay('priv-own', OWN_T, sam.teamCode), mkTeamPlay('priv-other', OTHER_T, 'RIVAL-2026')]));
   q('#pending-recheck').click(); await wait(40);
   ok('approved player enters', q('#app-screen').classList.contains('active'));
+  {
+    const cardTitles = () => qa('#scenario-list .scn-card').map(c => c.textContent);
+    q('.nav-btn[data-view="playbook"]').click(); await wait(30);
+    ok('signed-up user has a teamCode that is not the rival\'s (' + sam.teamCode + ')', !!sam.teamCode && sam.teamCode !== 'RIVAL-2026');
+    ok('library lists the team play stamped with my teamCode', cardTitles().some(t => t.includes(OWN_T)));
+    ok('library hides a team play stamped with a different team code', !cardTitles().some(t => t.includes(OTHER_T)));
+    q('.nav-btn[data-view="dashboard"]').click(); await wait(20);
+  }
+  {
+    // debrief wiring: the list request the Film Room really sends carries the signed-in user's teamCode
+    // (sam signed up through setup, so the record has one — demo personas don't, and fall back to 'club')
+    const me = DATA.findUserByEmail(JSON.parse(window.localStorage.getItem('thplay.session.v1')).email);
+    const hadFetch = 'fetch' in window, prevFetch = window.fetch, urls = [];
+    window.fetch = async (u) => { urls.push(String(u)); return { ok: true, status: 200, json: async () => ({ debriefs: [] }) }; };
+    q('.nav-btn[data-view="film"]').click(); await wait(60);
+    const listUrl = urls.find(u => /\/api\/debriefs\?team=/.test(u)) || '';
+    const sentTeam = new URL(listUrl || 'http://x/').searchParams.get('team');
+    ok('signed-in user has a teamCode (' + (me && me.teamCode) + ')', !!(me && me.teamCode));
+    ok('Film Room lists debriefs for the user\'s team, not the shared "club" bucket (' + sentTeam + ')', !!me && sentTeam === me.teamCode && sentTeam !== 'club');
+    if (hadFetch) window.fetch = prevFetch; else delete window.fetch;
+    q('.nav-btn[data-view="dashboard"]').click(); await wait(20);
+  }
   ok('progress card + challenge', !!q('.progress-card') && !!q('[data-challenge]'));
   q('[data-challenge]').click(); await wait(20);
   for (let k=0;k<30 && q('#challenge-modal') && !q('#ch-done'); k++){
@@ -1220,6 +1258,14 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
   ok('back at auth', q('#auth-screen').classList.contains('active'));
   qa('.demo-btn').find(b=>b.dataset.demo==='coach').click(); await wait(40);
   ok('coach demo enters instantly', q('#app-screen').classList.contains('active'));
+  {
+    // demo personas have no teamCode → they belong to no team and see neither stamped team play
+    q('.nav-btn[data-view="playbook"]').click(); await wait(30);
+    const titles = qa('#scenario-list .scn-card').map(c => c.textContent);
+    ok('demo persona (no teamCode) sees no team-stamped play', !titles.some(t => t.includes(OWN_T) || t.includes(OTHER_T)));
+    ok('demo persona still sees the un-stamped sample plays', qa('#scenario-list .scn-card:not(.scn-new)').length > 0);
+    DATA.save(DATA.load().filter(s => s.id !== 'priv-own' && s.id !== 'priv-other'));
+  }
 
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);
   process.exit(fail?1:0);

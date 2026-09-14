@@ -76,11 +76,21 @@ served with range requests from `/api/clips/…`); **Board ⚡** opens it as an 
 the editor.
 
 **📣 Share debrief with the team** publishes summary + plan table + up to 12 attacks (clip +
-board play + "asked / followed") to `POST /api/debriefs`. Everyone on the same backend sees
+board play + "asked / followed") to `POST /api/debriefs`. Everyone on the same team sees
 **Team debriefs** at the bottom of the Film Room, replays each play on the board, watches the
 clip, and comments per play or on the whole match (`POST /api/debriefs/:id/comments`).
-Debriefs are stored per team in the backend data directory — one club per backend today;
-the multi‑club tenancy layer from the rollout roadmap takes over later.
+Debriefs are stored per team in the backend data directory, keyed by the user's `teamCode`
+(the code set at sign-up from the invite link, the same key plays and announcements use).
+Demo personas have no `teamCode` and share the fallback `club` bucket. This scoping is a
+list filter, not access control: `GET /api/debriefs/:id` does not check the team. The
+multi‑club tenancy layer from the rollout roadmap takes over later.
+
+> **Fixed after v1.35.0:** the client used to read `user.team || user.club`, and user records
+> have neither field, so **every** team's debriefs were posted to and listed from the one
+> `club` bucket. Debriefs shared before the fix are still stored under `team: "club"` and no
+> longer appear for teams with a `teamCode`. They are not migrated, because the backend is at
+> prototype stage and the old records don't say which team published them. To keep one, edit
+> its `team` field in `DATA_DIR/debriefs/<id>.json` to the right team code.
 
 **Synthetic demo clip:** `docs/demo/triibholz-demo-attack.mp4` (20 s, white drive & kick
 then a dark possession) is generated, not filmed — it proves the pipeline end‑to‑end and

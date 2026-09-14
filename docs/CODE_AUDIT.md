@@ -45,3 +45,19 @@ Metrics were measured, not estimated.
 5. **Split `app.js`** into view modules (dashboard / playbook / editor / season / solutions) behind the same globals — zero behaviour change, big maintainability gain.
 6. **Rate limiting + request‑provider lockdown** on the backend before it's public.
 7. **FADP/GDPR pack**: consent capture, export, delete, retention, privacy notice (DE/FR/IT).
+
+## Addendum — v1.35.1 (2026‑09‑14): team scope was not enforced
+The **Privacy** grade above credited "visibility levels", but 👥 Team visibility never actually
+scoped anything. `PRIVACY.canView()` compared `item.team` with `user.team`, and film debriefs read
+`user.team || user.club`. User records have neither field; the team key is `user.teamCode`, set
+at sign‑up. So every team‑only play was visible to every user, and every team's debriefs shared
+one `club` bucket. The unit tests passed only because they built users with a `.team` field
+that real users never have.
+- Fixed: both now read `teamCode`. A user without one (demo personas) sees un‑stamped team
+  plays (samples, their own) and never another team's.
+- The smoke tests now use the real user shape. They also check through the UI that a
+  signed‑up user's library hides another team's play, and they fail if `privacy.js` or
+  `film.js` reads `user.team` or `user.club` again.
+- Still open: this scoping runs in the client, and plays live in one device's localStorage.
+  On the backend, `GET /api/debriefs/:id` does not check the team. Real enforcement needs
+  fixes 2 and 3 above.
