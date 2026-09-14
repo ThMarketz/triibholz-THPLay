@@ -33,6 +33,10 @@
     clearTimeout(toast._t); toast._t = setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.hidden=true,250); }, 2000);
   }
   function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  /* Translate. Module-scope on purpose: it used to be re-declared inside individual render
+     functions, which is why a T() written anywhere else silently threw. t() reads the live
+     language from its own closure, so a switch re-renders correctly. */
+  const T = (k, vars) => (typeof I18N !== 'undefined') ? I18N.t(k, vars) : k;
 
   /* ---------------- auth (simulated Apple / Google) ---------------- */
   const MOCK = {
@@ -587,117 +591,117 @@
       <div class="dev-hero">
         <div class="dev-hero-mascot">${(typeof FX !== 'undefined') ? FX.mascot(84, mascot.mood) : ''}</div>
         <div class="dev-hero-info">
-          <div class="dev-hero-id"><h1>${escapeHtml(displayName)} <button class="help-chip" data-help="development" title="How this works">？</button></h1><span class="tag">${escapeHtml(tierLabel)}</span>${dev.info.position ? `<span class="tag">Pos ${escapeHtml(dev.info.position)}</span>` : ''}${dev.info.isGK ? `<span class="tag">GK</span>` : ''}
-            ${devCanCoach() ? `<button class="btn-ghost sm" id="dev-back-team">◀ Squad</button>` : ''}
-            ${canEditThis ? `<button class="btn-ghost sm" id="dev-edit-profile">Edit profile</button>` : ''}</div>
+          <div class="dev-hero-id"><h1>${escapeHtml(displayName)} <button class="help-chip" data-help="development" title="${T('dev.howThisWorks')}">？</button></h1><span class="tag">${escapeHtml(tierLabel)}</span>${dev.info.position ? `<span class="tag">Pos ${escapeHtml(dev.info.position)}</span>` : ''}${dev.info.isGK ? `<span class="tag">GK</span>` : ''}
+            ${devCanCoach() ? `<button class="btn-ghost sm" id="dev-back-team">${T('dev.squad')}</button>` : ''}
+            ${canEditThis ? `<button class="btn-ghost sm" id="dev-edit-profile">${T('dev.editProfile')}</button>` : ''}</div>
           <div class="dev-hero-goal">${dev.info.goalBlock ? `🎯 ${escapeHtml(dev.info.goalBlock)}` : (canEditThis ? 'No goal set yet — tap Edit profile' : 'No goal set yet')}</div>
           <div class="dev-hero-line">${escapeHtml(mascot.line)}${mascot.streak > 0 ? ` · 🔥 ${mascot.streak}-week streak` : ''}</div>
         </div>
       </div>
 
       <div class="dev-stats">
-        <div class="dev-stat"><b>${metCount}/${testCat.length}</b><span>tests at target</span></div>
-        <div class="dev-stat"><b>${Math.round(row.compliance * 100)}%</b><span>home training this week</span></div>
-        <div class="dev-stat"><b>${row.metres.toLocaleString()} m</b><span>swum this week</span></div>
-        <div class="dev-stat"><b>${(dev.tests || []).length}</b><span>tests logged, all time${pendingCount ? ' · ' + pendingCount + ' awaiting' : ''}</span></div>
+        <div class="dev-stat"><b>${metCount}/${testCat.length}</b><span>${T('dev.testsAtTarget')}</span></div>
+        <div class="dev-stat"><b>${Math.round(row.compliance * 100)}%</b><span>${T('dev.homeTrainingThisWeek')}</span></div>
+        <div class="dev-stat"><b>${row.metres.toLocaleString()} m</b><span>${T('dev.swumThisWeek')}</span></div>
+        <div class="dev-stat"><b>${(dev.tests || []).length}</b><span>${T('dev.testsLoggedAllTime')}${pendingCount ? ' · ' + T('dev.nAwaiting', { n: pendingCount }) : ''}</span></div>
       </div>
 
       ${roster.length ? `<details class="dev-coach-tools"><summary>👥 Coach tools — viewing <b>${devViewing ? escapeHtml((roster.find(u => u.email === devViewing) || {}).name || devViewing) : 'myself'}</b></summary>
         <div class="dev-coach-row"><select id="dev-roster-select" class="focus-select"><option value="">Myself</option>${roster.map(u => `<option value="${escapeHtml(u.email)}" ${devViewing === u.email ? 'selected' : ''}>${escapeHtml(u.name || u.email)}${u.position ? ' · ' + escapeHtml(u.position) : ''}</option>`).join('')}</select>
-          <button class="btn-ghost sm" id="dev-import-btn">⬆ Import team logbook (.xlsx / .csv)</button><input type="file" id="dev-import-file" accept=".xlsx,.csv" hidden multiple></div></details>` : ''}
+          <button class="btn-ghost sm" id="dev-import-btn">${T('dev.importTeamLogbookXlsx')}</button><input type="file" id="dev-import-file" accept=".xlsx,.csv" hidden multiple></div></details>` : ''}
 
       ${devCanCoach() && reviewRows.length ? `<div class="dev-card dev-review">
-        <h3>🧪 Awaiting your confirmation <span class="rightbar-hint">${pendingCount} self-reported</span></h3>
+        <h3>${T('dev.awaitingYourConfirmation')} <span class="rightbar-hint">${pendingCount} ${T('dev.selfReportedWord')}</span></h3>
         ${reviewRows.map(r => `<div class="dev-review-row">
           <span class="drv-main"><b>${escapeHtml(r.test)}</b> <span class="drv-res">${escapeHtml(String(r.result))} ${escapeHtml(r.unit || '')}</span>
             <span class="muted">${escapeHtml(r.date)}${r.testedBy ? ' · ' + escapeHtml(r.testedBy) : ''}${r.remark ? ' · ' + escapeHtml(r.remark) : ''}</span></span>
           <span class="drv-actions">${r.status === 'denied' ? '<span class="status-chip denied">rejected</span>' : ''}
-            <button class="btn-primary sm" data-test-verify="${r.id}">Confirm</button>
+            <button class="btn-primary sm" data-test-verify="${r.id}">${T('dev.confirm')}</button>
             ${r.status === 'pending' ? `<button class="btn-ghost sm danger" data-test-deny="${r.id}">Reject</button>` : ''}</span>
         </div>`).join('')}
       </div>` : ''}
 
       ${canEditThis ? `<div class="dev-actions">
-        <button class="dev-tile" data-open-modal="test"><span class="dev-tile-ic">🧪</span>Log a test result</button>
-        <button class="dev-tile" data-open-modal="swim"><span class="dev-tile-ic">🏊</span>Log this week's swim</button>
+        <button class="dev-tile" data-open-modal="test"><span class="dev-tile-ic">🧪</span>${T('dev.logATestResult')}</button>
+        <button class="dev-tile" data-open-modal="swim"><span class="dev-tile-ic">🏊</span>${T('dev.logThisWeekS')}</button>
       </div>` : ''}
 
       <div class="dev-card dev-home">
-        <h3>🏠 Home training <span class="rightbar-hint">this week</span></h3>
+        <h3>${T('dev.homeTraining')} <span class="rightbar-hint">${T('dev.thisWeek')}</span></h3>
         <div class="dev-home-list">${TESTLOG.HOME_ACTIVITIES.map(a => {
           const n = home.log.filter(e => e.week === wk && e.activityId === a.id).length;
           const done = Math.min(n, a.perWeek);
           return `<div class="dev-home-item"><div class="dev-home-h"><b>${escapeHtml(a.label)}</b><span class="muted">${done}/${a.perWeek === Math.round(a.perWeek) ? a.perWeek : a.perWeek.toFixed(1)} · ${a.minutes} min</span></div>
             <div class="dev-home-bar"><span style="width:${Math.min(100, Math.round(100 * done / a.perWeek))}%"></span></div>
             <span class="fa-note">${escapeHtml(a.note)}</span>
-            ${isSelf ? `<button class="btn-ghost sm" data-home-log="${a.id}">＋ Log it</button>` : ''}</div>`;
+            ${isSelf ? `<button class="btn-ghost sm" data-home-log="${a.id}">${T('dev.logIt')}</button>` : ''}</div>`;
         }).join('')}</div>
       </div>
 
       <div class="dev-card dev-bench">
-        <h3>📈 Test results <span class="rightbar-hint">vs this season's target</span></h3>
+        <h3>${T('dev.testResults')} <span class="rightbar-hint">${T('dev.vsThisSeasonS')}</span></h3>
         <div class="dev-bench-grid">${testCat.map(benchCard).join('')}</div>
       </div>
 
-      <details class="dev-history"><summary>Test log history (${testRows.length})</summary>
-        <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>Date</th><th>Test</th><th>Result</th><th>Tested by</th><th>Status</th><th>Remark</th>${canEditThis ? '<th></th>' : ''}</tr></thead>
+      <details class="dev-history"><summary>${T('dev.testLogHistory', { n: testRows.length })}</summary>
+        <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>${T('dev.date')}</th><th>${T('dev.test')}</th><th>${T('dev.result')}</th><th>${T('dev.testedBy')}</th><th>${T('dev.status')}</th><th>${T('dev.remark')}</th>${canEditThis ? '<th></th>' : ''}</tr></thead>
           <tbody>${testRows.map(r => `<tr><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.test)}</td><td>${escapeHtml(String(r.result))} ${escapeHtml(r.unit || '')}</td><td>${escapeHtml(r.testedBy || '')}</td>
             <td><span class="status-chip ${r.status}">${r.status === 'approved' ? 'confirmed' : r.status === 'denied' ? 'rejected' : 'self-reported'}</span>${r.verifiedBy ? ` <span class="muted">${escapeHtml(r.verifiedBy)}${r.verifiedAt ? ' · ' + escapeHtml(r.verifiedAt) : ''}</span>` : ''}</td>
             <td class="muted">${escapeHtml(r.remark || '')}</td>${canEditThis ? `<td>${(devCanCoach() || (isSelf && r.status === 'pending')) ? `<button class="btn-ghost sm danger" data-test-del="${r.id}">✕</button>` : ''}</td>` : ''}</tr>`).join('') || `<tr><td colspan="${canEditThis ? 7 : 6}" class="muted">No tests logged yet.</td></tr>`}</tbody></table></div>
-        <button class="btn-ghost sm" id="dev-export-tests">⬇ Download CSV</button>
+        <button class="btn-ghost sm" id="dev-export-tests">${T('dev.downloadCsv')}</button>
       </details>
-      <details class="dev-history"><summary>Swim weeks history (${swimRows.length})</summary>
-        <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>Week</th><th>Club</th><th>Self/home</th><th>Total</th><th>Attended</th>${canEditThis ? '<th></th>' : ''}</tr></thead>
+      <details class="dev-history"><summary>${T('dev.swimWeeksHistory', { n: swimRows.length })}</summary>
+        <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>${T('dev.week')}</th><th>${T('dev.club')}</th><th>${T('dev.selfHome')}</th><th>${T('dev.total')}</th><th>${T('dev.attended')}</th>${canEditThis ? '<th></th>' : ''}</tr></thead>
           <tbody>${swimRows.map(r => `<tr><td>${escapeHtml(r.week)}</td><td>${escapeHtml(String(r.metersClub || 0))}</td><td>${escapeHtml(String(r.metersSelf || 0))}</td><td><b>${escapeHtml(String(r.total || ((+r.metersClub || 0) + (+r.metersSelf || 0))))}</b></td><td class="muted">${escapeHtml(String(r.attended || 0))}/${escapeHtml(String(r.possible || 0))}</td>${canEditThis ? `<td><button class="btn-ghost sm danger" data-swim-del="${r.id}">✕</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="5" class="muted">No weeks logged yet.</td></tr>`}</tbody></table></div>
-        <button class="btn-ghost sm" id="dev-export-swim">⬇ Download CSV</button>
+        <button class="btn-ghost sm" id="dev-export-swim">${T('dev.downloadCsv')}</button>
       </details>
 
       <div class="modal-backdrop dev-modal" id="dev-profile-modal" hidden><div class="modal modal-sm">
-        <div class="modal-head"><h3>Profile &amp; self target</h3><span class="spacer"></span><button class="modal-x" data-close-modal="dev-profile-modal">✕</button></div>
+        <div class="modal-head"><h3>${T('dev.profileAndSelfTarget')}</h3><span class="spacer"></span><button class="modal-x" data-close-modal="dev-profile-modal">✕</button></div>
         <div class="modal-body">
           <div class="dev-form">
             <label>Name<input type="text" id="dev-name" value="${escapeHtml(dev.info.name || (isSelf ? state.user.name : ''))}"></label>
-            <label>Birth year<input type="text" id="dev-birth" value="${escapeHtml(dev.info.birthYear)}" placeholder="e.g. 2013"></label>
-            <label>Band / age group<input type="text" id="dev-band" value="${escapeHtml(dev.info.band)}" placeholder="e.g. Core (2013–14)"></label>
+            <label>${T('dev.birthYear')}<input type="text" id="dev-birth" value="${escapeHtml(dev.info.birthYear)}" placeholder="e.g. 2013"></label>
+            <label>${T('dev.bandAgeGroup')}<input type="text" id="dev-band" value="${escapeHtml(dev.info.band)}" placeholder="${T('dev.eGCore2013')}"></label>
             <label>Position<input type="text" id="dev-position" value="${escapeHtml(dev.info.position || state.user.position || '')}"></label>
-            <label class="fa-check">Goalkeeper?<input type="checkbox" id="dev-isgk" ${dev.info.isGK ? 'checked' : ''}></label>
-            <label>Season tier<select id="dev-tier">${TESTLOG.TIERS.map((t, i) => `<option value="${i}" ${dev.info.tier == i ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select></label>
-            <label>Talent card<input type="text" id="dev-card" value="${escapeHtml(dev.info.talentCard)}" placeholder="e.g. National"></label>
-            <label>Card valid until<input type="text" id="dev-card-until" value="${escapeHtml(dev.info.cardValidUntil)}" placeholder="YYYY-MM"></label>
-            <label>Last PISTE test<input type="text" id="dev-piste" value="${escapeHtml(dev.info.lastPiste)}" placeholder="YYYY-MM-DD"></label>
+            <label class="fa-check">${T('dev.goalkeeper')}<input type="checkbox" id="dev-isgk" ${dev.info.isGK ? 'checked' : ''}></label>
+            <label>${T('dev.seasonTier')}<select id="dev-tier">${TESTLOG.TIERS.map((t, i) => `<option value="${i}" ${dev.info.tier == i ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select></label>
+            <label>${T('dev.talentCard')}<input type="text" id="dev-card" value="${escapeHtml(dev.info.talentCard)}" placeholder="${T('dev.eGNational')}"></label>
+            <label>${T('dev.cardValidUntil')}<input type="text" id="dev-card-until" value="${escapeHtml(dev.info.cardValidUntil)}" placeholder="${T('dev.yyyyMm')}"></label>
+            <label>${T('dev.lastPisteTest')}<input type="text" id="dev-piste" value="${escapeHtml(dev.info.lastPiste)}" placeholder="${T('dev.yyyyMmDd')}"></label>
           </div>
-          <label class="dev-goal">My goal this block<input type="text" id="dev-goal-block" value="${escapeHtml(dev.info.goalBlock)}" placeholder="e.g. sub-35s on the 50 free"></label>
-          <label class="dev-goal">My goal, in my own words<textarea id="dev-goal-words" rows="2" placeholder="What do I want to be true by the end of this block?">${escapeHtml(dev.info.goalWords)}</textarea></label>
-          <p class="fa-note">There are no bad numbers here — only starting points. Honest entries matter more than fast ones.</p>
+          <label class="dev-goal">${T('dev.myGoalThisBlock')}<input type="text" id="dev-goal-block" value="${escapeHtml(dev.info.goalBlock)}" placeholder="${T('dev.eGSub35s')}"></label>
+          <label class="dev-goal">${T('dev.myGoalInMy')}<textarea id="dev-goal-words" rows="2" placeholder="${T('dev.whatDoIWant')}">${escapeHtml(dev.info.goalWords)}</textarea></label>
+          <p class="fa-note">${T('dev.thereAreNoBad')}</p>
         </div>
-        <div class="modal-foot"><button class="btn-ghost" data-close-modal="dev-profile-modal">Cancel</button><button class="btn-primary" id="dev-profile-save">Save</button></div>
+        <div class="modal-foot"><button class="btn-ghost" data-close-modal="dev-profile-modal">${T('dev.cancel')}</button><button class="btn-primary" id="dev-profile-save">${T('dev.save')}</button></div>
       </div></div>
 
       <div class="modal-backdrop dev-modal" id="dev-test-modal" hidden><div class="modal modal-sm">
-        <div class="modal-head"><h3>Log a test result</h3><span class="spacer"></span><button class="modal-x" data-close-modal="dev-test-modal">✕</button></div>
+        <div class="modal-head"><h3>${T('dev.logATestResult')}</h3><span class="spacer"></span><button class="modal-x" data-close-modal="dev-test-modal">✕</button></div>
         <div class="modal-body dev-add-form">
           <select id="dev-test-id">${testCat.map(t => `<option value="${t.id}">${escapeHtml(t.label)}</option>`).join('')}</select>
-          <input type="text" id="dev-test-date" placeholder="Date (YYYY-MM-DD)" value="${new Date().toISOString().slice(0, 10)}">
-          <input type="text" id="dev-test-result" placeholder="Result (e.g. 37.4 or 1:22)">
+          <input type="text" id="dev-test-date" placeholder="${T('dev.dateYyyyMmDd')}" value="${new Date().toISOString().slice(0, 10)}">
+          <input type="text" id="dev-test-result" placeholder="${T('dev.resultEG37')}">
           ${devCanCoach()
             ? `<input type="text" id="dev-test-by" placeholder="Tested by" value="${escapeHtml(state.user.name)}">`
             : `<input type="text" id="dev-test-by" readonly value="${escapeHtml(state.user.name)}">`}
-          <input type="text" id="dev-test-remark" placeholder="Remark (optional)">
+          <input type="text" id="dev-test-remark" placeholder="${T('dev.remarkOptional')}">
           ${devCanCoach() ? '' : '<p class="fa-note">Your coach confirms the number before it counts towards your targets — log it honestly, it shows up either way.</p>'}
         </div>
-        <div class="modal-foot"><button class="btn-ghost" data-close-modal="dev-test-modal">Cancel</button><button class="btn-primary" id="dev-test-add">Save result</button></div>
+        <div class="modal-foot"><button class="btn-ghost" data-close-modal="dev-test-modal">${T('dev.cancel')}</button><button class="btn-primary" id="dev-test-add">${T('dev.saveResult')}</button></div>
       </div></div>
 
       <div class="modal-backdrop dev-modal" id="dev-swim-modal" hidden><div class="modal modal-sm">
-        <div class="modal-head"><h3>Log this week's swim</h3><span class="spacer"></span><button class="modal-x" data-close-modal="dev-swim-modal">✕</button></div>
+        <div class="modal-head"><h3>${T('dev.logThisWeekS')}</h3><span class="spacer"></span><button class="modal-x" data-close-modal="dev-swim-modal">✕</button></div>
         <div class="modal-body dev-add-form">
-          <input type="text" id="dev-swim-week" placeholder="Week (Monday, YYYY-MM-DD)" value="${TESTLOG.mondayOf(new Date())}">
-          <input type="number" id="dev-swim-club" placeholder="Metres — club">
-          <input type="number" id="dev-swim-self" placeholder="Metres — self / home">
-          <input type="number" id="dev-swim-att" placeholder="Sessions attended">
-          <input type="number" id="dev-swim-poss" placeholder="Sessions possible">
+          <input type="text" id="dev-swim-week" placeholder="${T('dev.weekMondayYyyyMm')}" value="${TESTLOG.mondayOf(new Date())}">
+          <input type="number" id="dev-swim-club" placeholder="${T('dev.metresClub')}">
+          <input type="number" id="dev-swim-self" placeholder="${T('dev.metresSelfHome')}">
+          <input type="number" id="dev-swim-att" placeholder="${T('dev.sessionsAttended')}">
+          <input type="number" id="dev-swim-poss" placeholder="${T('dev.sessionsPossible')}">
         </div>
-        <div class="modal-foot"><button class="btn-ghost" data-close-modal="dev-swim-modal">Cancel</button><button class="btn-primary" id="dev-swim-add">Save week</button></div>
+        <div class="modal-foot"><button class="btn-ghost" data-close-modal="dev-swim-modal">${T('dev.cancel')}</button><button class="btn-primary" id="dev-swim-add">${T('dev.saveWeek')}</button></div>
       </div></div>`;
 
     wireDevelopment(root, email, dev, home, wk, canEditThis);
@@ -728,12 +732,12 @@
     const sorted = rows.slice().sort(sorters[devTeamSort] || sorters.name);
 
     const cell = (x) => {
-      if (!x.started) return `<td colspan="6" class="muted">No record yet — nothing logged or imported on this device</td>`;
+      if (!x.started) return `<td colspan="6" class="muted">${T('dev.noRecordYetNothing')}</td>`;
       const r = x.r;
       const pct = Math.round(r.compliance * 100);
       const testCls = (r.metVerified > 0 && r.metVerified === r.total) ? 'dev-team-ok' : (r.hasTests ? 'dev-team-gap' : '');
       return `<td><span class="tag">${escapeHtml(TESTLOG.TIERS[x.tier] || TESTLOG.TIERS[0])}</span></td>
-        <td class="${testCls}">${r.hasTests ? `${r.metVerified}/${r.total}${r.metUnverified ? ` <span class="muted">+${r.metUnverified} self-reported</span>` : ''}` : '—'}</td>
+        <td class="${testCls}">${r.hasTests ? `${r.metVerified}/${r.total}${r.metUnverified ? ` <span class="muted">+${r.metUnverified} ${T('dev.selfReportedWord')}</span>` : ''}` : '—'}</td>
         <td>${r.lastDate ? escapeHtml(r.lastDate) + (r.lastVerified ? '' : ' <span class="tag tag-self">self</span>') : '—'}</td>
         <td><div class="dev-bench-bar"><span style="width:${pct}%"></span></div> ${pct}% ${(typeof FX !== 'undefined') ? FX.mascot(22, r.mood) : ''}</td>
         <td>${r.streak > 0 ? '🔥 ' + r.streak : '—'}</td>
@@ -743,37 +747,37 @@
     root.innerHTML = `
       <div class="dev-hero">
         <div class="dev-hero-info">
-          <div class="dev-hero-id"><h1>Squad development <button class="help-chip" data-help="development" title="How this works">？</button></h1></div>
-          <div class="dev-hero-line">Development records live on each device — this shows what was logged or imported <b>here</b>. Unlike announcements, it does not sync.</div>
+          <div class="dev-hero-id"><h1>${T('dev.squadDevelopment')} <button class="help-chip" data-help="development" title="${T('dev.howThisWorks')}">？</button></h1></div>
+          <div class="dev-hero-line">${T('dev.recordsAreDeviceLocal', { here: '<b>' + T('dev.hereWord') + '</b>' })}</div>
         </div>
       </div>
 
       <div class="dev-stats">
-        <div class="dev-stat"><b>${roster.length}</b><span>players on the roster</span></div>
-        <div class="dev-stat"><b>${keeping}/${live.length || 0}</b><span>keeping up home training</span></div>
-        <div class="dev-stat"><b>${noRecord}</b><span>no record yet</span></div>
-        <div class="dev-stat"><b>${awaiting}</b><span>results awaiting your confirmation</span></div>
+        <div class="dev-stat"><b>${roster.length}</b><span>${T('dev.playersOnTheRoster')}</span></div>
+        <div class="dev-stat"><b>${keeping}/${live.length || 0}</b><span>${T('dev.keepingUpHomeTraining')}</span></div>
+        <div class="dev-stat"><b>${noRecord}</b><span>${T('dev.noRecordYet')}</span></div>
+        <div class="dev-stat"><b>${awaiting}</b><span>${T('dev.resultsAwaitingYourConfirmation')}</span></div>
       </div>
 
       <details class="dev-coach-tools" open><summary>👥 Coach tools${selfReported ? ` — ${selfReported} self-reported result${selfReported > 1 ? 's' : ''} not yet confirmed` : ''}</summary>
         <div class="dev-coach-row">
           <select id="dev-team-sort" class="focus-select">
-            <option value="name" ${devTeamSort === 'name' ? 'selected' : ''}>Sort: name</option>
-            <option value="home" ${devTeamSort === 'home' ? 'selected' : ''}>Sort: home training, lowest first</option>
-            <option value="tests" ${devTeamSort === 'tests' ? 'selected' : ''}>Sort: tests at target, lowest first</option>
-            <option value="tested" ${devTeamSort === 'tested' ? 'selected' : ''}>Sort: last tested, oldest first</option>
+            <option value="name" ${devTeamSort === 'name' ? 'selected' : ''}>${T('dev.sortName')}</option>
+            <option value="home" ${devTeamSort === 'home' ? 'selected' : ''}>${T('dev.sortHomeTrainingLowest')}</option>
+            <option value="tests" ${devTeamSort === 'tests' ? 'selected' : ''}>${T('dev.sortTestsAtTarget')}</option>
+            <option value="tested" ${devTeamSort === 'tested' ? 'selected' : ''}>${T('dev.sortLastTestedOldest')}</option>
           </select>
-          <button class="btn-ghost sm" id="dev-import-btn">⬆ Import team logbook (.xlsx / .csv)</button><input type="file" id="dev-import-file" accept=".xlsx,.csv" hidden multiple>
+          <button class="btn-ghost sm" id="dev-import-btn">${T('dev.importTeamLogbookXlsx')}</button><input type="file" id="dev-import-file" accept=".xlsx,.csv" hidden multiple>
         </div>
       </details>
 
       <div class="dev-card">
-        <h3>👥 Every player <span class="rightbar-hint">this week</span></h3>
+        <h3>${T('dev.everyPlayer')} <span class="rightbar-hint">${T('dev.thisWeek')}</span></h3>
         <div class="dev-table-wrap"><table class="dev-table dev-team-table">
-          <thead><tr><th>Player</th><th>Tier</th><th>Tests at target</th><th>Last tested</th><th>Home training (self-logged)</th><th>Streak</th><th>Metres (self-declared)</th></tr></thead>
+          <thead><tr><th>${T('dev.player')}</th><th>${T('dev.tier')}</th><th>${T('dev.testsAtTarget2')}</th><th>${T('dev.lastTested')}</th><th>${T('dev.homeTrainingSelfLogged')}</th><th>${T('dev.streak')}</th><th>${T('dev.metresSelfDeclared')}</th></tr></thead>
           <tbody>${sorted.map(x => `<tr class="dev-team-row" data-dev-open="${escapeHtml(x.u.email)}">
             <td><button class="btn-ghost sm">${escapeHtml(x.u.name || x.u.email)}</button>${x.u.position ? ` <span class="tag">Pos ${escapeHtml(x.u.position)}</span>` : ''}${x.isGK ? ' <span class="tag">GK</span>' : ''}</td>
-            ${cell(x)}</tr>`).join('') || `<tr><td colspan="7" class="muted">No approved players on the roster yet.</td></tr>`}</tbody>
+            ${cell(x)}</tr>`).join('') || `<tr><td colspan="7" class="muted">${T('dev.noApprovedPlayersOn')}</td></tr>`}</tbody>
         </table></div>
       </div>`;
     wireDevTeam(root);

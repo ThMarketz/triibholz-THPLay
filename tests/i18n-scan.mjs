@@ -97,7 +97,7 @@ export const UI_FILES = ['js/app.js', 'js/film.js'];
    ever go DOWN. Its job is to make the next hard-coded string fail the build on the day it
    is written — which is the only thing that stops this drifting again, and is exactly how
    the app ended up with 73 translated keys and 392 untranslated ones. */
-export const BASELINE = { 'js/app.js': 280, 'js/film.js': 112 };
+export const BASELINE = { 'js/app.js': 196, 'js/film.js': 112 };
 
 // compare real paths — import.meta.url is percent-encoded and this repo lives under "Mobile Documents"
 if (fileURLToPath(import.meta.url) === process.argv[1]) {
