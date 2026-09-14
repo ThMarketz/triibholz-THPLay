@@ -61,7 +61,7 @@ export function scanFile(relPath) {
   const push = (idx, text, kind) => {
     const s = text.replace(/\s+/g, ' ').trim();
     if (!s || !looksLikeProse(s) || isAllowed(s)) return;
-    findings.push({ file: relPath, line: lineOf(src, idx), kind, text: s.slice(0, 90) });
+    findings.push({ file: relPath, line: lineOf(src, idx), kind, text: s });   // full text — the CLI truncates for display, callers need it whole to match source
   };
 
   // 1) text between tags, inside template literals only (so we don't scan comments/CSS)
@@ -69,8 +69,11 @@ export function scanFile(relPath) {
   let m;
   while ((m = tpl.exec(src))) {
     const start = m.index;
-    const body = blankInterpolations(m[0]);
+    let body = blankInterpolations(m[0]);
     if (!/</.test(body)) continue;                       // not markup — skip plain strings here
+    // <style> and <script> bodies are code, not copy — printHtml() embeds both
+    body = body.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '<style></style>')
+               .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '<script></script>');
     let t;
     const between = />([^<>]{2,})</g;
     while ((t = between.exec(body))) push(start + t.index, t[1], 'text');
@@ -97,7 +100,7 @@ export const UI_FILES = ['js/app.js', 'js/film.js'];
    ever go DOWN. Its job is to make the next hard-coded string fail the build on the day it
    is written — which is the only thing that stops this drifting again, and is exactly how
    the app ended up with 73 translated keys and 392 untranslated ones. */
-export const BASELINE = { 'js/app.js': 196, 'js/film.js': 112 };
+export const BASELINE = { 'js/app.js': 195, 'js/film.js': 112 };
 
 // compare real paths — import.meta.url is percent-encoded and this repo lives under "Mobile Documents"
 if (fileURLToPath(import.meta.url) === process.argv[1]) {
@@ -106,7 +109,7 @@ if (fileURLToPath(import.meta.url) === process.argv[1]) {
   found.forEach(f => { (byFile[f.file] = byFile[f.file] || []).push(f); });
   Object.keys(byFile).forEach(f => {
     console.log(`\n${f} — ${byFile[f].length} untranslated`);
-    byFile[f].slice(0, Number(process.env.SHOW || 25)).forEach(x => console.log(`  ${String(x.line).padStart(5)} [${x.kind}] ${x.text}`));
+    byFile[f].slice(0, Number(process.env.SHOW || 25)).forEach(x => console.log(`  ${String(x.line).padStart(5)} [${x.kind}] ${x.text.slice(0, 90)}`));
     if (byFile[f].length > Number(process.env.SHOW || 25)) console.log(`  … and ${byFile[f].length - Number(process.env.SHOW || 25)} more`);
   });
   console.log(`\nTOTAL untranslated chrome strings: ${found.length}`);
