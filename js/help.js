@@ -121,6 +121,16 @@ const HELP = (() => {
       'A coach viewing a player\'s record sees the same thing the player does — nothing is hidden, and nothing is shared beyond the coaching team.',
     ]},
 
+    announcements: { icon:'📣', title:'Announcements — a note to one player, or the team', steps:[
+      'The 🔔 bell in the top bar opens your announcements: a personal note your coach sent just to you, or a team-wide message everyone gets — like the tactic for an upcoming game.',
+      '<strong>Coaches and trainers</strong> compose one from the bell panel: choose "Whole team" or "One player", write a title and a message, optionally tie it to an upcoming match, and optionally attach one or more plays from the library.',
+      'An attached play imports straight into your own playbook with one tap — no need to go find it in the shared library yourself.',
+      'Unread announcements show a number on the bell; opening one marks it read.',
+    ], tips:[
+      'Announcements live on the analysis backend, not just this device — unlike most of this app, which only ever lives on the device you\'re using. That\'s what lets a coach\'s note actually reach a player\'s own phone.',
+      'If the backend isn\'t reachable, the panel says so plainly rather than showing an empty list.',
+    ]},
+
     privacy: { icon:'🔒', title:'Confidential tactics &amp; anonymous learning', steps:[
       'Every play has a <strong>Who can see it</strong> setting: <strong>👥 Team</strong> (your team only, the default), <strong>🌐 Club</strong> (everyone in the club) or <strong>🔒 Private</strong> (only you — for confidential tactics). Others simply never see private plays in their library.',
       '<strong>The system still learns from private plays — anonymously.</strong> It reduces a play to a handful of pattern features (situation, number of steps, passes, shot zone, a coarse formation shape) and strips the title, description, notes, owner and club. The play itself never leaves the device.',

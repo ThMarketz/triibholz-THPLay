@@ -17,6 +17,12 @@ function hook(page, tag){
   page.on('console', m=>{ if(m.type()==='error' && !thirdParty(m.text())) errs.push(`[${tag}] ${m.text()}`); });
 }
 const skipTour = async (page)=>{ if (await page.locator('#tour-skip').count()) await page.click('#tour-skip').catch(()=>{}); };
+// poll a condition instead of a fixed sleep — network round-trips (announcements, debriefs, …) don't have a fixed latency
+const waitUntil = async (fn, { timeout = 6000, interval = 150 } = {}) => {
+  const start = Date.now();
+  while (Date.now() - start < timeout) { if (await fn()) return true; await new Promise(r => setTimeout(r, interval)); }
+  return false;
+};
 const dragBy = async (page, locator, dx, dy) => {
   const bb = await locator.boundingBox();
   await page.mouse.move(bb.x + bb.width/2, bb.y + bb.height/2);
@@ -472,6 +478,68 @@ await page.screenshot({ path:OUT+'/qa_35_development.png' });
 await page.reload({ waitUntil:'networkidle' }); await page.waitForTimeout(600);
 await page.click('.nav-btn[data-view="development"]'); await page.waitForTimeout(400);
 ok('the goal and the test result persist after a reload', /Sub-35 on the 50 free/.test(await page.locator('.dev-hero-goal').textContent()) && (await page.locator('.dev-bench-card.dev-bench-met').count())>=1);
+
+console.log('\n[11] Announcements — coach → player and coach → team, across two SEPARATE devices');
+// the analysis backend's data volume is NOT wiped between test runs, and the demo
+// accounts are fixed emails — so previous runs' announcements pile up server-side.
+// Tag everything this run creates so assertions target THIS run's items, not the backlog.
+const tag = 'RT' + Date.now().toString(36).slice(-6);
+const playTitle = `Press high (announce test ${tag})`;
+const teamTitle = `This week vs Red Sharks ${tag}`;
+const noteTitle = `Before Saturday ${tag}`;
+
+await page.click('#logout-btn'); await page.waitForTimeout(300);
+await page.click('.demo-btn[data-demo="coach"]'); await page.waitForTimeout(500); await skipTour(page);
+// give the coach a real play to attach, then reload so the composer's in-memory library picks it up
+await page.evaluate((title) => { const sc = DATA.newScenario('6v6', 'offense'); sc.title = title; const all = DATA.load(); all.push(sc); DATA.save(all); }, playTitle);
+await page.reload({ waitUntil: 'networkidle' }); await page.waitForTimeout(500);
+
+await page.click('#announce-btn'); await page.waitForTimeout(150);
+ok('a coach sees the "＋ New" compose trigger', await page.locator('#announce-new').count()===1);
+await page.click('#announce-new'); await page.waitForTimeout(150);
+ok('the freshly-created play is offered for attachment', (await page.locator('.ann-plays-pick').textContent()).includes(playTitle));
+await page.check(`.ann-plays-pick label:has-text("${playTitle}") input[type="checkbox"]`);
+await page.fill('#ann-title', teamTitle);
+await page.fill('#ann-body', 'Press high, drop on the switch.');
+await page.click('#ann-send');
+await waitUntil(async () => (await page.locator('#announce-compose-modal').count()) === 0, { timeout: 8000 });
+ok('the team broadcast sends and the modal closes', await page.locator('#announce-compose-modal').count()===0);
+
+await page.click('#announce-new'); await page.waitForTimeout(150);
+await page.click('[name="ann-scope"][value="player"]');
+ok('switching to "One player" reveals a roster including the demo player', await page.locator('#ann-to').isVisible() && /Demo Player/.test(await page.locator('#ann-to').textContent()));
+await page.selectOption('#ann-to', 'player@demo.triibholz');
+await page.fill('#ann-title', noteTitle);
+await page.fill('#ann-body', 'Watch the 2m — stay square.');
+await page.click('#ann-send');
+await waitUntil(async () => (await page.locator('#announce-compose-modal').count()) === 0, { timeout: 8000 });
+ok('the personal note sends and the modal closes', await page.locator('#announce-compose-modal').count()===0);
+
+// the player's OWN device — a separate browser context, separate localStorage, same team.
+// The backlog from earlier runs means the badge/list are never expected to be exactly
+// 2/empty — only that THIS run's two tagged items show up and behave correctly.
+const actx = await browser.newContext({ viewport:{ width:390, height:844 } });
+const ap = await actx.newPage(); hook(ap,'announce-player-device');
+await ap.goto(URL, { waitUntil:'networkidle' });
+await ap.click('.demo-btn[data-demo="player"]'); await ap.waitForTimeout(500); await skipTour(ap);
+const unreadBefore = await waitUntil(async () => +((await ap.locator('#announce-badge').textContent().catch(()=>'0'))||0) >= 2, { timeout: 10000 })
+  ? +(await ap.locator('#announce-badge').textContent()) : null;
+ok('the player sees an unread badge counting at least this run\'s 2 new items', unreadBefore !== null && unreadBefore >= 2);
+await ap.click('#announce-btn');
+await waitUntil(async () => (await ap.locator('.announce-item', { hasText: tag }).count()) === 2, { timeout: 8000 });
+ok('both the personal note and the team broadcast (this run\'s, by tag) are listed', (await ap.locator('.announce-item', { hasText: tag }).count())===2);
+await ap.click(`.announce-item:has-text("${noteTitle}")`);
+await waitUntil(async () => /Watch the 2m/.test(await ap.locator('#announce-detail').textContent()), { timeout: 5000 });
+ok('the personal note shows its own body text', /Watch the 2m/.test(await ap.locator('#announce-detail').textContent()));
+await ap.click(`.announce-item:has-text("${teamTitle}")`);
+await waitUntil(async () => (await ap.locator('#announce-detail [data-import-play]').count()) === 1, { timeout: 5000 });
+ok('the team broadcast offers its attached play for import', (await ap.locator('#announce-detail [data-import-play]').count())===1);
+await ap.click('#announce-detail [data-import-play]');
+await waitUntil(async () => ap.evaluate((t) => (JSON.parse(localStorage.getItem('thplay.scenarios.v1')||'{}').scenarios||[]).some(s => s.title === t), playTitle), { timeout: 5000 });
+ok('importing lands the play in the PLAYER\'s own separate playbook', await ap.evaluate((t) => (JSON.parse(localStorage.getItem('thplay.scenarios.v1')||'{}').scenarios||[]).some(s => s.title === t), playTitle));
+await waitUntil(async () => +((await ap.locator('#announce-badge').textContent().catch(()=>'0'))||0) === unreadBefore - 2, { timeout: 5000 });
+ok('opening both of this run\'s items brings the badge down by exactly 2, without losing the open detail view', +((await ap.locator('#announce-badge').textContent().catch(()=>'0'))||0) === unreadBefore - 2 && (await ap.locator('#announce-detail').textContent()).includes(teamTitle));
+await actx.close();
 
 console.log(`\n==== ${pass} passed, ${fail} failed ====`);
 console.log('CONSOLE ERRORS:', errs.length?('\n  '+errs.join('\n  ')):'none');

@@ -205,7 +205,41 @@ function frame(w, h) {
     ok('comments persist with author, item link and time', two.comments.length === 2 && two.comments[0].itemId === one.items[1].id && two.comments[1].itemId === null && two.comments[0].author === 'Sam (3)' && two.comments[0].at > 0);
     ok('unknown debrief → 404', (await fetch(base + '/api/debriefs/nope')).status === 404);
 
-    console.log('\n[3i] Auto field — frames mode with calibration.mode=auto');
+    console.log('\n[3i] Announcements — a coach note to one player, or a broadcast to the team');
+    const teamBroadcast = { team: 'schorgen-u17', scope: 'team', title: 'This week vs Red Sharks', body: 'Press high, drop on the switch.', fromName: 'Coach Ruiz', fromEmail: 'ruiz@triibholz.app', matchLabel: 'Sat · vs Red Sharks', plays: [{ format: 'thplay-play', version: 1, play: { title: 'Press high', situation: '6v6', phase: 'defense', frames: [{ att: {}, def: {}, gk: null, ball: null }] } }] };
+    const pb = await fetch(base + '/api/announcements', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(teamBroadcast) });
+    const pbj = await pb.json();
+    ok('publish a team broadcast → 201 {id}', pb.status === 201 && !!pbj.id);
+    const playerNote = { team: 'schorgen-u17', scope: 'player', to: 'Nora@ICloud.com', title: 'Before Saturday', body: 'Watch the 2m — stay square.', fromName: 'Coach Ruiz', fromEmail: 'ruiz@triibholz.app' };
+    const pp = await fetch(base + '/api/announcements', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(playerNote) });
+    const ppj = await pp.json();
+    ok('publish a personal note → 201 {id}', pp.status === 201 && !!ppj.id);
+    ok('missing title/body → 400', (await fetch(base + '/api/announcements', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ team: 'x', scope: 'team', title: '', body: '' }) })).status === 400);
+    ok('player scope without a valid email → 400', (await fetch(base + '/api/announcements', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ team: 'x', scope: 'player', to: '', title: 't', body: 'b' }) })).status === 400);
+    ok('bad scope → 400', (await fetch(base + '/api/announcements', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ team: 'x', scope: 'everyone', title: 't', body: 'b' }) })).status === 400);
+
+    const noraList = await (await fetch(base + '/api/announcements?team=schorgen-u17&for=' + encodeURIComponent('nora@icloud.com'))).json();
+    ok('the addressed player sees BOTH the team broadcast and her own note', noraList.announcements.length === 2);
+    const timoList = await (await fetch(base + '/api/announcements?team=schorgen-u17&for=' + encodeURIComponent('timo@gmail.com'))).json();
+    ok('a teammate NOT addressed sees only the team broadcast, never the other player\'s note', timoList.announcements.length === 1 && timoList.announcements[0].id === pbj.id);
+    ok('the personal note stays lower-cased and matches regardless of the reader\'s email casing', noraList.announcements.some(a => a.id === ppj.id));
+    ok('a different team sees nothing at all', (await (await fetch(base + '/api/announcements?team=other-club&for=nora@icloud.com')).json()).announcements.length === 0);
+    ok('freshly published items are unread for a reader who has not opened them', noraList.announcements.every(a => a.read === false) && noraList.unread === 2);
+
+    const noteDetail = await (await fetch(base + '/api/announcements/' + ppj.id)).json();
+    ok('full detail keeps the body, from, and any attached plays', noteDetail.body === 'Watch the 2m — stay square.' && noteDetail.from.name === 'Coach Ruiz');
+    const broadcastDetail = await (await fetch(base + '/api/announcements/' + pbj.id)).json();
+    ok('an attached play survives round-trip intact', broadcastDetail.plays.length === 1 && broadcastDetail.plays[0].play.title === 'Press high');
+    ok('unknown announcement → 404', (await fetch(base + '/api/announcements/nope')).status === 404);
+
+    const markRead = await fetch(base + '/api/announcements/' + pbj.id + '/read', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ by: 'nora@icloud.com' }) });
+    ok('marking read → 200 {ok:true}', markRead.status === 200 && (await markRead.json()).ok === true);
+    const afterRead = await (await fetch(base + '/api/announcements?team=schorgen-u17&for=nora@icloud.com')).json();
+    ok('the read item now reports read:true, the other stays unread', afterRead.announcements.find(a => a.id === pbj.id).read === true && afterRead.announcements.find(a => a.id === ppj.id).read === false && afterRead.unread === 1);
+    ok('marking read with no "by" → 400', (await fetch(base + '/api/announcements/' + pbj.id + '/read', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) })).status === 400);
+    ok('marking read on an unknown announcement → 404', (await fetch(base + '/api/announcements/nope/read', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ by: 'x@y' }) })).status === 404);
+
+    console.log('\n[3j] Auto field — frames mode with calibration.mode=auto');
     const W2 = 80, H2 = 45;
     const poolFrame = () => { const d = new Array(W2 * H2 * 4).fill(0); const put = (x0, y0, x1, y1, r, g, b) => { for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const i = (y * W2 + x) * 4; d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255; } };
       put(0, 0, W2, H2, 120, 118, 110); put(6, 4, 74, 41, 30, 90, 140); put(10, 8, 14, 12, 245, 248, 250); put(50, 9, 54, 13, 245, 248, 250); put(20, 20, 24, 24, 22, 26, 30); put(66, 20, 70, 25, 220, 40, 40); put(30, 14, 34, 18, 255, 130, 30); return d; };

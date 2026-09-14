@@ -188,6 +188,7 @@
     renderLibrary();
     show('app-screen');
     refreshAdminBadge();
+    if (typeof loadAnnouncements === 'function') loadAnnouncements();
     switchView('dashboard');
     if ($('import-btn')) $('import-btn').hidden = !canEdit();
     if (typeof SHARE!=='undefined' && SHARE.fromHash(location.hash)) openSharedPlay();
@@ -1801,6 +1802,136 @@
   }
 
   /* ======================================================
+     ANNOUNCEMENTS — a coach's note to one player, or a "here's the
+     plan for Saturday" broadcast to the whole team, optionally
+     carrying attached plays from the library. Unlike everything else
+     in this app, an announcement has to reach a DIFFERENT device (the
+     coach writes it, a player reads it elsewhere) — so it lives on
+     the analysis backend (one JSON file per announcement, the same
+     shape as team debriefs), scoped by the team's own invite code.
+     ====================================================== */
+  const announce = { list: [], unread: 0, reachable: true };
+  function announceTeam() { return (state.user && state.user.teamCode) || 'club'; }
+  async function loadAnnouncements() {
+    if (!state.user) return;
+    const base = feedBase().replace(/\/+$/, '');
+    try {
+      const r = await fetch(`${base}/api/announcements?team=${encodeURIComponent(announceTeam())}&for=${encodeURIComponent(state.user.email)}`);
+      if (!r.ok) throw new Error('list-' + r.status);
+      const data = await r.json();
+      announce.list = data.announcements || []; announce.unread = data.unread || 0; announce.reachable = true;
+    } catch (e) { announce.reachable = false; }
+    const badge = $('announce-badge');
+    if (badge) { badge.textContent = announce.unread; badge.hidden = !announce.unread; }
+    if ($('announce-panel') && !$('announce-panel').hidden) renderAnnouncePanel();
+  }
+  function toggleAnnouncePanel(force) {
+    const m = $('announce-panel'); if (!m) return;
+    m.hidden = force == null ? !m.hidden : !force;
+    if (!m.hidden) { renderAnnouncePanel(); loadAnnouncements(); }
+  }
+  function renderAnnouncePanel() {
+    const m = $('announce-panel'); if (!m) return;
+    const list = announce.list || [];
+    m.innerHTML = `<div class="announce-head"><b>📣 Announcements</b> <button class="help-chip" data-help="announcements" title="How announcements work">？</button>${canEdit() ? `<button class="btn-ghost xs" id="announce-new">＋ New</button>` : ''}</div>
+      <div class="announce-list">${
+        !announce.reachable ? `<div class="muted" style="padding:10px 4px">Announcements need the analysis backend — this device can’t reach it.</div>`
+        : list.length ? list.map(a => `<button class="announce-item${a.read ? '' : ' unread'}" data-ann="${escapeHtml(a.id)}">
+            <span class="ann-title">${a.scope === 'player' ? '👤' : '📣'} ${escapeHtml(a.title)}</span>
+            <span class="muted">${escapeHtml(a.from || '')} · ${new Date(a.createdAt).toLocaleDateString()}${a.matchLabel ? ' · ' + escapeHtml(a.matchLabel) : ''}${a.playCount ? ' · ' + a.playCount + ' play' + (a.playCount > 1 ? 's' : '') : ''}</span>
+          </button>`).join('')
+        : `<div class="muted" style="padding:10px 4px">Nothing here yet.</div>`
+      }</div>
+      <div id="announce-detail"></div>`;
+    const nb = $('announce-new'); if (nb) nb.onclick = e => { e.stopPropagation(); openAnnounceCompose(); };
+    m.querySelectorAll('[data-ann]').forEach(b => b.onclick = e => { e.stopPropagation(); openAnnounceDetail(b.dataset.ann); });
+  }
+  async function openAnnounceDetail(id) {
+    const box = $('announce-detail'); if (!box) return;
+    box.innerHTML = '<div class="muted" style="padding:8px 4px">Loading…</div>';
+    const base = feedBase().replace(/\/+$/, '');
+    let a; try { a = await (await fetch(`${base}/api/announcements/${id}`)).json(); } catch (e) { box.innerHTML = '<div class="muted">Could not load this.</div>'; return; }
+    box.innerHTML = `<div class="announce-open">
+      <div class="ann-open-head"><b>${escapeHtml(a.title)}</b><span class="muted">${escapeHtml((a.from && a.from.name) || '')} · ${new Date(a.createdAt).toLocaleString()}</span></div>
+      ${a.matchLabel ? `<div class="ann-match">🤽 ${escapeHtml(a.matchLabel)}</div>` : ''}
+      <p>${escapeHtml(a.body)}</p>
+      ${(a.plays || []).length ? `<div class="ann-plays">${a.plays.map((p, i) => `<button class="btn-ghost sm" data-import-play="${i}">▶ ${escapeHtml((p.play && p.play.title) || 'Play ' + (i + 1))} — import</button>`).join('')}</div>` : ''}
+    </div>`;
+    box.querySelectorAll('[data-import-play]').forEach(b => b.onclick = e => { e.stopPropagation(); importAnnouncedPlay(a.plays[+b.dataset.importPlay]); });
+    if (!(a.readBy || []).includes(state.user.email)) {
+      try { await fetch(`${base}/api/announcements/${id}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ by: state.user.email }) }); } catch (e) {}
+      // update the badge/list state quietly — a full re-render would wipe the detail view open right now
+      const item = (announce.list || []).find(x => x.id === id); if (item) item.read = true;
+      announce.unread = (announce.list || []).filter(x => !x.read).length;
+      const badge = $('announce-badge'); if (badge) { badge.textContent = announce.unread; badge.hidden = !announce.unread; }
+    }
+  }
+  function importAnnouncedPlay(packed) {
+    if (!packed || typeof SHARE === 'undefined') { toast('Could not import that play'); return; }
+    const r = SHARE.unpack(packed);
+    if (r.error || !r.plays.length) { toast('Could not import that play'); return; }
+    let n = 0;
+    r.plays.forEach(p => {
+      const sc = DATA.newScenario(p.situation || '6v6', p.phase || 'offense');
+      Object.assign(sc, p);
+      sc.id = 'usr-' + Math.abs(hash('ann' + JSON.stringify(p).slice(0, 80)));
+      sc.builtIn = false; sc.owner = state.user && state.user.email;
+      if (!state.scenarios.some(x => x.id === sc.id)) { state.scenarios.push(sc); n++; }
+    });
+    if (n) { DATA.save(state.scenarios); renderLibrary(); toast(n + ' play' + (n > 1 ? 's' : '') + ' added to your playbook'); }
+    else toast('Already in your playbook');
+  }
+  function openAnnounceCompose() {
+    const roster = DATA.loadUsers().filter(u => u.role === 'player' && u.status === 'approved').sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const matches = CALENDAR.agenda(CALENDAR.load(), new Date(), 120).filter(e => e.type === 'match');
+    const myPlays = (state.scenarios || []).filter(s => !s.builtIn).slice(0, 30);
+    const ov = document.createElement('div'); ov.className = 'modal-backdrop'; ov.id = 'announce-compose-modal';
+    ov.addEventListener('click', e => e.stopPropagation());   // this modal sits outside #announce-panel — never let a click here bubble to the document-level "close the bell panel" listener
+    document.body.appendChild(ov);
+    ov.innerHTML = `<div class="modal modal-sm">
+      <div class="modal-head"><h3>New announcement</h3><span class="spacer"></span><button class="modal-x" id="ann-x">✕</button></div>
+      <div class="modal-body ann-compose">
+        <div class="ann-scope-toggle">
+          <label><input type="radio" name="ann-scope" value="team" checked> Whole team</label>
+          <label><input type="radio" name="ann-scope" value="player"> One player</label>
+        </div>
+        <select id="ann-to" hidden>${roster.map(u => `<option value="${escapeHtml(u.email)}">${escapeHtml(u.name || u.email)}${u.position ? ' · Pos ' + escapeHtml(u.position) : ''}</option>`).join('') || '<option value="">No approved players yet</option>'}</select>
+        <input type="text" id="ann-title" placeholder="Title (e.g. This week's plan)">
+        <textarea id="ann-body" rows="4" placeholder="What do they need to know?"></textarea>
+        <select id="ann-match"><option value="">Not tied to a specific match</option>${matches.map(m => `<option value="${escapeHtml(m.id)}" data-label="${escapeHtml(fmtDay(m.start) + ' · ' + m.title)}">${escapeHtml(fmtDay(m.start))} · ${escapeHtml(m.title)}</option>`).join('')}</select>
+        ${myPlays.length ? `<div class="ann-plays-pick"><span class="ef-label">Attach plays (up to ${ANNOUNCE.MAX_PLAYS})</span>
+          ${myPlays.map(s => `<label class="chip-check"><input type="checkbox" value="${escapeHtml(s.id)}"> ${escapeHtml(s.title || 'Untitled')}</label>`).join('')}</div>` : ''}
+      </div>
+      <div class="modal-foot"><button class="btn-ghost" id="ann-cancel">Cancel</button><button class="btn-primary" id="ann-send">Send</button></div>
+    </div>`;
+    const close = () => ov.remove();
+    ov.querySelector('#ann-x').onclick = close; ov.querySelector('#ann-cancel').onclick = close;
+    ov.querySelectorAll('[name="ann-scope"]').forEach(rd => rd.onchange = () => { ov.querySelector('#ann-to').hidden = ov.querySelector('[name="ann-scope"]:checked').value !== 'player'; });
+    ov.querySelector('#ann-send').onclick = async () => {
+      const scope = ov.querySelector('[name="ann-scope"]:checked').value;
+      const title = ov.querySelector('#ann-title').value.trim(), body = ov.querySelector('#ann-body').value.trim();
+      if (!title || !body) { toast('Add a title and a message'); return; }
+      const toSel = ov.querySelector('#ann-to');
+      if (scope === 'player' && !toSel.value) { toast('Pick a player'); return; }
+      const matchSel = ov.querySelector('#ann-match'), matchOpt = matchSel.selectedOptions[0];
+      const plays = [...ov.querySelectorAll('.ann-plays-pick input:checked')].slice(0, ANNOUNCE.MAX_PLAYS)
+        .map(cb => state.scenarios.find(s => s.id === cb.value)).filter(Boolean).map(s => SHARE.pack(s));
+      const payload = { team: announceTeam(), scope, to: scope === 'player' ? toSel.value : null,
+        fromName: state.user.name, fromEmail: state.user.email, title, body,
+        matchLabel: matchOpt && matchOpt.value ? matchOpt.dataset.label : null,
+        matchEventId: matchOpt && matchOpt.value ? matchOpt.value : null, plays };
+      const btn = ov.querySelector('#ann-send'); btn.disabled = true; btn.textContent = 'Sending…';
+      try {
+        const base = feedBase().replace(/\/+$/, '');
+        const r = await fetch(`${base}/api/announcements`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!r.ok) throw new Error('send-' + r.status);
+        toast(scope === 'player' ? 'Note sent' : 'Sent to the whole team');
+        close(); loadAnnouncements();
+      } catch (e) { toast('Could not send (' + e.message + ')'); btn.disabled = false; btn.textContent = 'Send'; }
+    };
+  }
+
+  /* ======================================================
      PAUSE-TO-MOVE — whenever a play is PAUSED, coaches can drag
      players & the ball right on the board. The save bar appears
      automatically after the first change. (No mode to find.)
@@ -2843,6 +2974,9 @@
       if (on) FX.sound('whistle');
       toast(on ? 'Sound on' : 'Sound off');
     };
+
+    $('announce-btn').onclick = e => { e.stopPropagation(); toggleAnnouncePanel(); };
+    document.addEventListener('click', () => toggleAnnouncePanel(false));
 
     // "How to use" — the ？ in the top bar explains the CURRENT view; small
     // [data-help] chips sit next to each feature

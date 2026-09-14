@@ -15,9 +15,9 @@ window.TextDecoder = window.TextDecoder || TD;   // TESTLOG's XLSX reader needs 
 window.DecompressionStream = window.DecompressionStream || globalThis.DecompressionStream;   // jsdom has neither; Node does
 window.Response = window.Response || globalThis.Response;
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -132,7 +132,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     kb('ArrowRight'); await wait(20);
     ok('ArrowRight steps forward', q('#frame-label').textContent!==lbl);
   }
-  ok('19 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===19);
+  ok('20 help topics defined', Object.keys(window.__T.HELP.TOPICS).length===20);
   q('#help-btn').click(); await wait(15);
   ok('topbar ？ is context-aware (paused board → Adjust guide)', !!q('.help-backdrop:not([hidden])') &&
      /Adjust/i.test(q('#help-title').textContent));
@@ -1094,6 +1094,48 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     q('#dev-test-id').value = 'free50'; q('#dev-test-result').value = '34.0'; q('#dev-test-add').click(); await wait(30);
     ok('a saved test result appears in the history table and updates the benchmark card', /34/.test(q('.dev-table').textContent) && q('.dev-bench-card.dev-bench-met'));
     ok('a download-CSV button exists for the test log', !!q('#dev-export-tests'));
+  }
+
+  console.log('\n[6zzz] Announcements — coach note to a player, or a broadcast to the team (ANNOUNCE)');
+  {
+    const { ANNOUNCE } = window.__T;
+    // pure logic — shape, validation, visibility, read state
+    const teamOk = ANNOUNCE.sanitize({ scope: 'team', team: 'A', title: 'This week', body: 'Press high.', fromName: 'Coach', fromEmail: 'c@x' });
+    ok('a valid team announcement sanitizes cleanly', teamOk.ok === true && teamOk.value.scope === 'team' && teamOk.value.to === null);
+    const playerOk = ANNOUNCE.sanitize({ scope: 'player', to: 'nora@icloud.com', team: 'A', title: 'For you', body: 'Watch the 2m.', fromName: 'Coach', fromEmail: 'c@x' });
+    ok('a valid player announcement keeps the lower-cased "to" email', playerOk.ok === true && playerOk.value.to === 'nora@icloud.com');
+    ok('player scope with no email is rejected', ANNOUNCE.sanitize({ scope: 'player', to: '', title: 't', body: 'b' }).ok === false);
+    ok('missing title/body is rejected', ANNOUNCE.sanitize({ scope: 'team', title: '', body: 'b' }).ok === false);
+    ok('a bad scope is rejected', ANNOUNCE.sanitize({ scope: 'everyone', title: 't', body: 'b' }).ok === false);
+    ok('plays list is capped at MAX_PLAYS', ANNOUNCE.sanitize({ scope: 'team', title: 't', body: 'b', plays: Array.from({ length: 20 }, () => ({})) }).value.plays.length === ANNOUNCE.MAX_PLAYS);
+    const teamAnn = { team: 'A', scope: 'team', to: null }, playerAnn = { team: 'A', scope: 'player', to: 'nora@icloud.com' };
+    ok('a team announcement is visible to any teammate', ANNOUNCE.visibleTo(teamAnn, { team: 'A', email: 'anyone@x' }));
+    ok('a player announcement is visible only to its recipient', ANNOUNCE.visibleTo(playerAnn, { team: 'A', email: 'nora@icloud.com' }) && !ANNOUNCE.visibleTo(playerAnn, { team: 'A', email: 'timo@gmail.com' }));
+    ok('nothing is visible to a different team', !ANNOUNCE.visibleTo(teamAnn, { team: 'B', email: 'anyone@x' }));
+    ok('unreadCount only counts readers not yet in readBy', ANNOUNCE.unreadCount([{ readBy: ['a'] }, { readBy: [] }, { readBy: ['b', 'a'] }], 'a') === 1);
+    ok('summarize reflects read state for the given reader', ANNOUNCE.summarize({ id: '1', scope: 'team', title: 't', from: { name: 'Coach' }, createdAt: 1, plays: [], readBy: ['a'] }, { for: 'a' }).read === true);
+
+    // UI — bell, panel, compose modal (no live backend under jsdom, so network calls degrade gracefully)
+    ok('the bell panel starts hidden', q('#announce-panel').hidden === true);
+    q('#announce-btn').click(); await wait(30);
+    ok('clicking the bell opens the panel', q('#announce-panel').hidden === false);
+    ok('with no backend reachable, the panel says so plainly', /analysis backend/i.test(q('#announce-panel').textContent));
+    ok('a coach sees the "＋ New" compose trigger', !!q('#announce-new'));
+    q('#announce-new').click(); await wait(10);
+    ok('opens the compose modal', !!q('#announce-compose-modal'));
+    ok('scope defaults to the whole team, recipient select hidden', q('[name="ann-scope"]:checked').value === 'team' && q('#ann-to').hidden === true);
+    q('[name="ann-scope"][value="player"]').click(); q('[name="ann-scope"][value="player"]').dispatchEvent(new window.Event('change'));
+    ok('switching to "One player" reveals the recipient select', q('#ann-to').hidden === false);
+    ok('the roster select lists an approved player', /Nora|Timo/.test(q('#ann-to').textContent));
+    q('#ann-send').click(); await wait(10);
+    ok('sending with no title/body is refused client-side (modal stays open)', !!q('#announce-compose-modal'));
+    q('#ann-title').value = 'Test note'; q('#ann-body').value = 'Body text.';
+    q('#ann-send').click(); await wait(20);
+    ok('sending without a reachable backend fails gracefully (toast, no crash)', /Could not send/.test(q('#toast').textContent));
+    q('#announce-compose-modal').querySelector('#ann-cancel').click();
+    ok('Cancel removes the compose modal', !q('#announce-compose-modal'));
+    document.body.click(); await wait(10);
+    ok('clicking outside the bell panel closes it', q('#announce-panel').hidden === true);
   }
 
   console.log('\n[7] Basics + i18n');

@@ -24,6 +24,7 @@ const { makeDetector } = require('./detector.js');
 const videoadapter = require('./videoadapter.js');
 const CALENDAR = require('../js/calendar.js');
 const PRIVACY = require('../js/privacy.js');
+const ANNOUNCE = require('../js/announce.js');
 const INSIGHTS_FILE = () => path.join(DATA_DIR, 'insights.json');
 function loadInsights(){ try { return JSON.parse(fs.readFileSync(INSIGHTS_FILE(), 'utf8')); } catch (e) { return PRIVACY.emptyAgg(); } }
 const MODEL_ENDPOINT = process.env.MODEL_ENDPOINT || '';
@@ -48,9 +49,10 @@ const JOB_DIR = path.join(DATA_DIR, 'jobs');
 const CAL_DIR = path.join(DATA_DIR, 'calendars');
 const CLIP_DIR = path.join(DATA_DIR, 'clips');
 const DEBRIEF_DIR = path.join(DATA_DIR, 'debriefs');
+const ANNOUNCE_DIR = path.join(DATA_DIR, 'announcements');
 const MAX_BODY = +(process.env.MAX_BODY || 200 * 1024 * 1024);   // 200 MB
 const MAX_UPLOAD = +(process.env.MAX_UPLOAD || 4 * 1024 * 1024 * 1024);   // 4 GB — video uploads stream to disk, never into memory
-[DATA_DIR, VIDEO_DIR, JOB_DIR, CAL_DIR, CLIP_DIR, DEBRIEF_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
+[DATA_DIR, VIDEO_DIR, JOB_DIR, CAL_DIR, CLIP_DIR, DEBRIEF_DIR, ANNOUNCE_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
 const safeToken = t => String(t || '').replace(/[^\w.\-]/g, '').slice(0, 64);
 
 let hasFfmpeg = false;
@@ -154,6 +156,10 @@ const debriefPath = id => path.join(DEBRIEF_DIR, safeToken(id) + '.json');
 const loadDebrief = id => { try { return JSON.parse(fs.readFileSync(debriefPath(id), 'utf8')); } catch (e) { return null; } };
 const saveDebrief = d => fs.writeFileSync(debriefPath(d.id), JSON.stringify(d));
 const clean = (v, n) => String(v == null ? '' : v).slice(0, n || 400);
+const announcePath = id => path.join(ANNOUNCE_DIR, safeToken(id) + '.json');
+const loadAnnounce = id => { try { return JSON.parse(fs.readFileSync(announcePath(id), 'utf8')); } catch (e) { return null; } };
+const saveAnnounce = a => fs.writeFileSync(announcePath(a.id), JSON.stringify(a));
+const listAnnounces = () => fs.readdirSync(ANNOUNCE_DIR).filter(f => f.endsWith('.json')).map(f => loadAnnounce(f.replace(/\.json$/, ''))).filter(Boolean);
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -309,6 +315,38 @@ const server = http.createServer(async (req, res) => {
         const cm2 = { id: uid(), author: clean(c.author, 80) || 'Anonymous', text: clean(c.text, 1000).trim(), itemId: c.itemId ? safeToken(c.itemId) : null, at: Date.now() };
         deb.comments.push(cm2); if (deb.comments.length > 500) deb.comments = deb.comments.slice(-500); saveDebrief(deb);
         return send(res, 201, cm2);
+      }
+    }
+
+    // ---- announcements: a coach's note to one player, or a broadcast to the whole team
+    if (req.method === 'POST' && p === '/api/announcements') {
+      const body = await readBody(req);
+      let raw; try { raw = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
+      const r = ANNOUNCE.sanitize(raw);
+      if (!r.ok) return send(res, 400, { error: r.error });
+      const a = Object.assign({ id: uid(), createdAt: Date.now(), readBy: [] }, r.value);
+      saveAnnounce(a);
+      return send(res, 201, { id: a.id, createdAt: a.createdAt });
+    }
+    if (req.method === 'GET' && p === '/api/announcements') {
+      const team = safeToken(url.searchParams.get('team') || 'club');
+      const forEmail = String(url.searchParams.get('for') || '').trim().toLowerCase();
+      const list = listAnnounces().filter(a => ANNOUNCE.visibleTo(a, { team, email: forEmail }))
+        .sort((a, b) => b.createdAt - a.createdAt).slice(0, 100)
+        .map(a => ANNOUNCE.summarize(a, { for: forEmail }));
+      return send(res, 200, { announcements: list, unread: list.filter(s => !s.read).length });
+    }
+    const anm = p.match(/^\/api\/announcements\/([\w]+)(\/read)?$/);
+    if (anm) {
+      const a = loadAnnounce(anm[1]); if (!a) return send(res, 404, { error: 'not-found' });
+      if (req.method === 'GET' && !anm[2]) return send(res, 200, a);
+      if (req.method === 'POST' && anm[2]) {
+        const body = await readBody(req);
+        let rb; try { rb = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
+        const by = String(rb.by || '').trim().toLowerCase();
+        if (!by) return send(res, 400, { error: 'by-required' });
+        if (!a.readBy.includes(by)) { a.readBy.push(by); saveAnnounce(a); }
+        return send(res, 200, { ok: true });
       }
     }
 

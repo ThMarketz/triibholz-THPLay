@@ -148,6 +148,10 @@
           <button class="phase-btn active" data-phase="offense" data-i18n="phase.offense">Offense</button>
           <button class="phase-btn" data-phase="defense" data-i18n="phase.defense">Defense</button>
         </span>
+        <span class="dl-wrap" id="announce-wrap">
+          <button class="icon-btn" id="announce-btn" title="Announcements">🔔<span class="nav-badge" id="announce-badge" hidden>0</span></button>
+          <div class="dl-menu announce-menu" id="announce-panel" hidden></div>
+        </span>
         <button class="icon-btn" id="help-btn" title="How to use this page">？</button>
         <button class="icon-btn" id="sound-toggle" title="Sound effects">🔇</button>
         <div class="lang-switch" id="lang-switch-top"></div>
@@ -576,6 +580,7 @@
   <script src="js/tactics.js"></script>
   <script src="js/gameplan.js"></script>
   <script src="js/share.js"></script>
+  <script src="js/announce.js"></script>
   <script src="js/analysis.js"></script>
   <script src="js/film.js"></script>
   <script src="js/app.js"></script>
