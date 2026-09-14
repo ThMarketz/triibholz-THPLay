@@ -151,5 +151,5 @@ const I18N = (() => {
   function onChange(fn){ subs.push(fn); }
   function init(){ lang = detect(); if (typeof document!=='undefined'){ document.documentElement.lang = lang; } }
 
-  return { SUPPORTED, init, setLang, t, apply, onChange, get lang(){ return lang; } };
+  return { SUPPORTED, DICT, init, setLang, t, apply, onChange, get lang(){ return lang; } };
 })();

@@ -1280,6 +1280,31 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('deep links use the payload\'s own URL rather than a rebuilt one', WPMATCH.matchUrl(fx) === 'https://wpmatch.ch/event/260078/');
   }
 
+  console.log('\n[6i] i18n guard — new chrome must not ship English-only');
+  {
+    const { scanFile, UI_FILES, BASELINE } = await import('./i18n-scan.mjs');
+    const I = window.__T.I18N;
+    const langs = I.SUPPORTED.map(l => l.code);
+    ok('all four languages are offered', langs.join(',') === 'en,de,fr,it');
+    // every language must define exactly the same keys — a key present in en but missing in
+    // de is how a screen ends up half-translated
+    const keysOf = code => Object.keys((I.DICT || {})[code] || {});
+    const enKeys = keysOf('en');
+    ok('the dictionary is actually readable by this test (not vacuously empty)', enKeys.length > 50);
+    ok('no language is missing a key the others have', langs.every(c => { const k = keysOf(c); return k.length === enKeys.length && enKeys.every(x => k.includes(x)); }));
+    ok('and no language has a stray key the others lack', langs.every(c => keysOf(c).every(x => enKeys.includes(x))));
+
+    // the ratchet: this number may only ever go DOWN
+    let regressed = [];
+    UI_FILES.forEach(f => {
+      const n = scanFile(f).length, cap = BASELINE[f];
+      ok(`${f}: untranslated chrome ${n} ≤ agreed ${cap}`, n <= cap);
+      if (n > cap) regressed.push(f);
+      if (n < cap) console.log(`      ↓ ${f} improved to ${n} — lower BASELINE in tests/i18n-scan.mjs to lock it in`);
+    });
+    ok('no new hard-coded UI string was added', regressed.length === 0);
+  }
+
   console.log('\n[7] Basics + i18n');
   q('.nav-btn[data-view="basics"]').click(); await wait(25);
   ok('10 basics cards incl. responsibilities', qa('#view-basics .basics-card').length===10);
