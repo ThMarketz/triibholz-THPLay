@@ -57,10 +57,11 @@ const safeToken = t => String(t || '').replace(/[^\w.\-]/g, '').slice(0, 64);
 
 /* ---- accounts: off unless ACCOUNTS=1. When on, a wrong configuration or a database written by a
    newer build stops the server here, before it listens. No route uses accounts yet (slice 1). */
-let ACCOUNTS, accountsDb = null;
+let ACCOUNTS, accountsDb = null, auth = null;
 try {
   ACCOUNTS = require('./config.js').assertConfig();
   if (ACCOUNTS.accounts) accountsDb = require('./db.js').open(path.join(DATA_DIR, 'triibholz.db'));
+  if (accountsDb) auth = require('./auth.js').createAuth({ db: accountsDb, cfg: ACCOUNTS });
 } catch (e) {
   if (require.main !== module) throw e;
   console.error('[triibholz-analysis] not starting — ' + e.message);
@@ -180,6 +181,11 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
     const p = url.pathname;
+    // passkey sign-in: its own request rules and no CORS, so it is handled before everything else
+    if (p === '/api/auth' || p.startsWith('/api/auth/')) {
+      if (!auth) { res.writeHead(404, { 'content-type': 'application/json', 'cache-control': 'no-store' }); return res.end(JSON.stringify({ error: 'accounts-off' })); }
+      return auth.handle(req, res, p);
+    }
     if (req.method === 'OPTIONS') { cors(res); res.writeHead(204); return res.end(); }
 
     if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, accounts: !!accountsDb, engine: 'server', detector: makeDetector({ modelEndpoint: MODEL_ENDPOINT }).name, ffmpeg: hasFfmpeg, videoProvider: VIDEO_PROVIDER || null, queued: queue.length, running, maxUploadMB: Math.round(MAX_UPLOAD / 1048576) });
@@ -385,4 +391,4 @@ const server = http.createServer(async (req, res) => {
 if (require.main === module) {
   server.listen(PORT, () => console.log(`[triibholz-analysis] listening on :${PORT}  ffmpeg=${hasFfmpeg}  data=${DATA_DIR}`));
 }
-module.exports = { server, runEngine, accountsDb };
+module.exports = { server, runEngine, accountsDb, auth };

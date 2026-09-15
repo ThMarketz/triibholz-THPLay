@@ -5,6 +5,9 @@ FROM nginx:1.27-alpine
 
 # our server config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# TRUSTED_PROXY → real visitor addresses behind a tunnel (empty file unless set)
+COPY deploy/nginx-real-ip.sh /docker-entrypoint.d/40-triibholz-real-ip.sh
+RUN chmod +x /docker-entrypoint.d/40-triibholz-real-ip.sh && touch /etc/nginx/triibholz-real-ip.inc
 
 # app files
 COPY index.html /usr/share/nginx/html/index.html

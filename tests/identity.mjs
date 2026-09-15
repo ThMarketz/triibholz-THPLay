@@ -61,16 +61,17 @@ section('[2] Migrations — once, atomically, and never under an older build', (
   ok('WAL journal on a file database', db1.prepare('PRAGMA journal_mode').get().journal_mode === 'wal');
   db1.close();
   const db2 = DB.open(file);
-  ok('opening again applies nothing twice', db2.prepare('SELECT count(*) AS n FROM schema_migrations').get().n === 1 && DB.migrate(db2).length === 0);
+  ok('opening again applies nothing twice', db2.prepare('SELECT count(*) AS n FROM schema_migrations').get().n === DB.MIGRATIONS.length && DB.migrate(db2).length === 0);
   db2.close();
 
-  const broken = [...DB.MIGRATIONS, { id: 2, name: 'half-broken', sql: 'CREATE TABLE extra (x INT); CREATE TABLE users (dup INT);' }];
+  const NEXT = DB.MIGRATIONS[DB.MIGRATIONS.length - 1].id + 1;
+  const broken = [...DB.MIGRATIONS, { id: NEXT, name: 'half-broken', sql: 'CREATE TABLE extra (x INT); CREATE TABLE users (dup INT);' }];
   let threw = false; try { DB.open(file, { migrations: broken }); } catch (e) { threw = true; }
   const db3 = DB.open(file);
-  ok('a failing migration rolls back whole: no half-made table, not recorded', threw && !db3.prepare("SELECT 1 FROM sqlite_master WHERE name = 'extra'").get() && !db3.prepare('SELECT 1 FROM schema_migrations WHERE id = 2').get());
+  ok('a failing migration rolls back whole: no half-made table, not recorded', threw && !db3.prepare("SELECT 1 FROM sqlite_master WHERE name = 'extra'").get() && !db3.prepare('SELECT 1 FROM schema_migrations WHERE id = ?').get(NEXT));
   db3.close();
 
-  const newer = [...DB.MIGRATIONS, { id: 2, name: 'future', sql: 'CREATE TABLE future (x INT);' }];
+  const newer = [...DB.MIGRATIONS, { id: NEXT, name: 'future', sql: 'CREATE TABLE future (x INT);' }];
   DB.open(file, { migrations: newer }).close();
   ok('a database from a newer build is refused by this one', throwsCode(() => DB.open(file), 'db-newer'));
 });

@@ -40,6 +40,7 @@ function frame(w, h) {
     console.log('\n[1] Health');
     const h = await (await fetch(base + '/api/health')).json();
     ok('health ok + reports engine', h.ok === true && h.engine === 'server');
+    ok('health says accounts are off unless ACCOUNTS=1', h.accounts === false);
     ok('health reports ffmpeg availability (boolean)', typeof h.ffmpeg === 'boolean');
     ok('health reports the detector in use (colour by default)', h.detector === 'colour');
 
@@ -269,6 +270,8 @@ function frame(w, h) {
     const noFrames = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'frames', frames: [], calibration: { corners } }) });
     ok('empty frames → 422 no-frames', noFrames.status === 422 && (await noFrames.json()).error === 'no-frames');
     ok('unknown job → 404', (await fetch(base + '/api/jobs/nope')).status === 404);
+    const offR = await fetch(base + '/api/auth/me');
+    ok('accounts off: sign-in routes answer 404 accounts-off', offR.status === 404 && (await offR.json()).error === 'accounts-off');
     const nfR = await fetch(base + '/api/nope');
     ok('unknown route → 404, no-store', nfR.status === 404 && nfR.headers.get('cache-control') === 'no-store');
     const errR = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{oops' });

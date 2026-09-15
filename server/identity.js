@@ -59,11 +59,18 @@ function audit(db, { actor, action, subject = null, clubId = null, detail = null
 }
 
 /* ---- users ---- */
-function createUser(db, { displayName }, now) {
-  const name = String(displayName || '').trim();
+function cleanName(displayName) {
+  // no control or bidi-override characters: names are shown to other people
+  return String(displayName || '').replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').replace(/\s+/g, ' ').trim();
+}
+function createUser(db, { displayName, handle: given }, now) {
+  const name = cleanName(displayName);
   if (!name || name.length > 80) throw fail('bad-name', 'a display name of 1–80 characters is required');
   const id = newId('u');
-  const handle = randomBytes(32);   // the WebAuthn user.id: random, not the db id, no personal data
+  // the WebAuthn user.id: random, not the db id, no personal data. Registration hands it to the
+  // authenticator before the account exists, so it may be passed in.
+  const handle = given === undefined ? randomBytes(32) : given;
+  if (!Buffer.isBuffer(handle) || handle.length !== 32) throw fail('bad-handle');
   db.prepare('INSERT INTO users (id, display_name, webauthn_user_handle, created_at) VALUES (?, ?, ?, ?)').run(id, name, handle, now);
   return { id, handle };
 }
@@ -149,8 +156,12 @@ function issueCode(db, { kind, clubId = null, userId = null, role = null, actor,
    commit or roll back together. */
 function consumeCode(db, { code, kind, usedBy = null }, now) {
   const n = normalizeCode(code);
-  if (!n || !CODE_TTL[kind]) return null;
-  const hash = hashCode(n);
+  if (!n) return null;
+  return consumeCodeHash(db, { hash: hashCode(n), kind, usedBy }, now);
+}
+/* the same, for a code already reduced to its hash (kept on a challenge between two requests) */
+function consumeCodeHash(db, { hash, kind, usedBy = null }, now) {
+  if (!CODE_TTL[kind] || typeof hash !== 'string' || !/^[0-9a-f]{64}$/.test(hash)) return null;
   return tx(db, () => {
     const r = db.prepare(`UPDATE link_codes SET used_at = ?, used_by = ?
                           WHERE code_hash = ? AND kind = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?`)
@@ -175,6 +186,15 @@ function revokeCodes(db, { userId = null, clubId = null, kind = null, actor }, n
   });
 }
 
+/* A code that could still be claimed — for showing a form, never for granting anything. */
+function peekCode(db, { code, kinds }, now) {
+  const n = normalizeCode(code);
+  if (!n) return null;
+  const hash = hashCode(n);
+  const row = db.prepare('SELECT code_hash, kind, user_id, club_id, role, expires_at FROM link_codes WHERE code_hash = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?').get(hash, now);
+  return row && kinds.includes(row.kind) ? row : null;
+}
+
 /* ---- sessions (created in slice 2; ended here so the operator can always do it) ---- */
 function endSessions(db, { userId, actor }, now) {
   return tx(db, () => {
@@ -189,9 +209,10 @@ function endSessions(db, { userId, actor }, now) {
    being usable (the audit log keeps the history either way). */
 function purgeExpired(db, now) {
   return tx(db, () => ({
-    challenges: db.prepare('DELETE FROM challenges WHERE expires_at <= ? OR used_at IS NOT NULL').run(now).changes,
+    challenges: db.prepare('DELETE FROM challenges WHERE expires_at <= ?').run(now).changes,   // a used one stays until expiry: it blocks replays
     sessions: db.prepare('DELETE FROM sessions WHERE expires_at <= ? OR absolute_expires_at <= ?').run(now, now).changes,
     codes: db.prepare('DELETE FROM link_codes WHERE coalesce(used_at, revoked_at, expires_at) <= ?').run(now - 30 * 24 * HOUR).changes,
+    limits: db.prepare('DELETE FROM rate_limits WHERE window_start <= ?').run(now - 24 * HOUR).changes,
   }));
 }
 
@@ -201,6 +222,6 @@ module.exports = {
   audit, createUser, getUser, deleteUser,
   createClub, getClub, listClubs,
   addMember, getMember, updateMember,
-  issueCode, consumeCode, revokeCodes,
+  issueCode, consumeCode, consumeCodeHash, peekCode, revokeCodes, cleanName,
   endSessions, purgeExpired,
 };

@@ -5,6 +5,9 @@ services:
     container_name: triibholz
     ports:
       - "8088:80"        # open http://localhost:8088 — the API is at /api on the same address
+    environment:
+      # behind a tunnel: the tunnel's own fixed address, so rate limits see real visitors (docs/ACCOUNTS.md)
+      - TRUSTED_PROXY=${TRUSTED_PROXY:-}
     depends_on:
       - analysis
     restart: unless-stopped

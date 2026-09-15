@@ -138,6 +138,29 @@ const MIGRATIONS = [
       BEGIN SELECT RAISE(ABORT, 'last-admin'); END;
     `,
   },
+  {
+    id: 2, name: 'rate-limits',
+    sql: `
+      -- Fixed-window counters, in the database so a restart does not reset them.
+      CREATE TABLE rate_limits (
+        key          TEXT PRIMARY KEY,
+        window_start INTEGER NOT NULL,
+        count        INTEGER NOT NULL
+      );
+    `,
+  },
+  {
+    id: 3, name: 'server-keys',
+    sql: `
+      -- Random secrets the server makes for itself on first start (e.g. to sign stateless
+      -- sign-in challenges). Never shown, never leave the database.
+      CREATE TABLE server_keys (
+        name       TEXT PRIMARY KEY,
+        secret     BLOB NOT NULL CHECK (length(secret) >= 32),
+        created_at INTEGER NOT NULL
+      );
+    `,
+  },
 ];
 
 function tx(db, fn) {

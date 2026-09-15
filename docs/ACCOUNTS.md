@@ -19,8 +19,8 @@ the rules below, not a footnote.
 | Slice | What | Status |
 | --- | --- | --- |
 | 0 | API on the app's own origin (`/api` via nginx), service worker never caches `/api`, `no-store` everywhere, port 4200 loopback-only | **done** (9d96100) |
-| 1 | Database, migrations, `tx()`, configuration checks, operator CLI, last-admin rule | **done** |
-| 2 | Passkey registration and sign-in, sessions, behind `ACCOUNTS=1`; nothing depends on it yet | next |
+| 1 | Database, migrations, `tx()`, configuration checks, operator CLI, last-admin rule | **done** (02d9042) |
+| 2 | Passkey registration and sign-in, sessions, behind `ACCOUNTS=1`; nothing depends on it yet | **done** — server only; the app still signs in the simulated way |
 | 3 | Clubs and memberships: invites, join codes, approvals, roles, removal, step-up, UV for staff | |
 | 4 | The switch, in one release: the app signs in for real; every existing endpoint authorized | |
 | 5 | Teams, rosters, sheets, templates on the server; read-only offline copy for staff | |
@@ -136,7 +136,84 @@ docker exec triibholz-analysis node admin.js purge
 Every command writes an `operator` audit row. A code is printed once; lost means issue a new one.
 `clubs` flags clubs with no admin yet and clubs with only one.
 
-## Passkeys (slice 2) — verification rules
+## Passkeys (slice 2)
+
+### Routes
+
+All behind `ACCOUNTS=1`; with accounts off they answer `404 accounts-off`.
+
+| Route | Does |
+| --- | --- |
+| `POST /api/auth/register/options` `{code, displayName}` | checks the invite without using it; returns creation options and the club and role it is for |
+| `POST /api/auth/register/verify` `{challengeId, credential}` | verifies; in one transaction creates the person, claims the invite, stores the passkey, adds the membership, starts a session (and ends any session the browser still carried) |
+| `POST /api/auth/login/options` `{}` | request options for a discoverable passkey (no username) |
+| `POST /api/auth/login/verify` `{challengeId, credential}` | verifies; starts a new session and ends the one the request came with |
+| `POST /api/auth/logout` `{}` | ends the session, clears the cookie |
+| `GET /api/auth/me` | the person, their clubs and roles, the session — or `401 signed-out` |
+
+In this slice only an operator's `club-admin` invite creates an account. Every POST needs an
+`Origin` from `APP_ORIGINS` (a missing one counts as foreign → `403`), `application/json`
+(→ `415`), at most 64 kB (→ `413`), arriving within 10 seconds (→ `408`). No CORS headers at all,
+so a CORS preflight gets no permission. The server reads the clock **after** the body has
+arrived, so a client holding its body back cannot slip past a challenge's expiry. A client that
+hangs up mid-request is not logged as a server error.
+
+Challenges live 5 minutes. The two kinds are built differently on purpose:
+
+- **Registration challenges are rows**, and are **used up before the response is verified** — a
+  failed attempt cannot be retried with it. The route fixes the kind, and the invite, name and
+  handle are read back from the row. Only someone holding a valid invite can create one.
+- **Sign-in challenges are stateless:** 16 random bytes, the expiry, and an HMAC under a server
+  secret made on first start (`server_keys`). Anonymous option requests therefore write nothing,
+  so nobody can flood the database or fill the open-challenge limit without an invite. A sign-in
+  challenge is recorded as used once a correctly signed response arrives, and checked for reuse
+  **before** the signature counter is looked at — a replayed response is refused as a replay,
+  never mistaken for a cloned passkey. Used ones are kept until they expire.
+
+A challenge of one kind presented to the other route is refused. The invite is claimed only in
+the transaction that creates the account: a refused response never uses it up, and an invite
+revoked between options and verification leaves no account behind.
+
+Sign-in failures say only `sign-in-failed`. The one exception, `reason:
+user-verification-required`, is given only when the signature and user handle were valid — a
+staff member's own authenticator skipped verification — so nobody holding just a credential id
+can learn whether its owner is staff.
+
+### Limits
+
+| What | Limit |
+| --- | --- |
+| option requests per client address | 60 / minute |
+| verifications per client address | 60 / minute |
+| open registration challenges, everyone together | 5000 → `503 busy` |
+| failed sign-ins on one passkey | never a lock-out; the 10th within 15 minutes writes one `credential.failures` audit row |
+
+A correct signature is never refused because of earlier failures: a signature cannot be guessed,
+and a lock-out would let anyone who learns a credential id lock its owner out.
+
+Counters live in SQLite (`rate_limits`) so a restart does not reset them; housekeeping runs every
+minute. The client address is `X-Real-IP` only when the connection comes from a private or
+loopback address (nginx), otherwise the socket address. IPv6 addresses count per /64.
+
+**Behind a tunnel, set `TRUSTED_PROXY`.** Through Cloudflare → cloudflared → nginx every visitor
+reaches nginx from cloudflared's address, and the per-address limits would become one limit for
+the whole world — one noisy client could block every sign-in. With `TRUSTED_PROXY` set to the
+tunnel's own address, nginx takes the visitor's address from `CF-Connecting-IP`, and believes
+that header only on connections from that address (`deploy/nginx-real-ip.sh`, run at container
+start; it refuses to start on anything that is not an address or CIDR, or on ranges like
+`0.0.0.0/0`). For that to be safe: put cloudflared on the compose network with a fixed address,
+trust exactly that address, and publish `:8088` on `127.0.0.1` only. Never trust a shared address
+— on Docker Desktop `192.168.65.1` is every host-routed connection, the LAN included.
+`scripts/test-nginx-realip.sh` proves the behaviour with the real nginx image.
+
+A cloned passkey — a signature counter that did not move forward — is marked `suspect`, its
+sessions end, it can no longer sign in, and the event is audited. (Alerting the club's admins
+comes with slice 3.) The trade-off, accepted: if two sign-ins from one *counting* security key
+(not a synced passkey, which reports 0) reach the server out of order, the key is treated as
+cloned; the operator's `recover` or `club-admin-invite` restores access. Allowing a tolerance
+window instead would let a clone that signs in first keep its session while the owner is refused.
+
+### Verification rules
 
 Registration options: `rp {id: RP_ID}`, `user.id` = the person's 32-byte handle,
 `residentKey: required`, `userVerification: preferred`, `attestation: none`, algorithms -7, -8,
@@ -152,13 +229,15 @@ Verification, in order — every step a rejection on failure:
    duplicate map keys; lengths checked against the buffer before slicing; 64 kB cap.
 4. Any attestation `fmt` is accepted; `attStmt` is never verified and never stored. AAGUID and the
    backup flags are self-reported: display only.
-5. `authData`: `rpIdHash = sha256(RP_ID)`; UP set; AT set on registration; the COSE key plus
-   extensions (only if ED) end exactly at `authData.length`; the credential id equals `rawId`.
-6. Keys: EC2 P-256 with 32-byte x and y; Ed25519; RSA ≥ 2048 bits with e = 65537; the COSE `alg`
-   equals the negotiated one.
+5. `authData`: `rpIdHash = sha256(RP_ID)`; UP set; backed up (BS) never without backup
+   eligibility (BE); AT set on registration and never on sign-in; the COSE key plus extensions
+   (only if ED) end exactly at `authData.length`; the credential id equals `rawId`.
+6. Keys: EC2 P-256 with 32-byte x and y; Ed25519; RSA 2048–4096 bits with e = 65537; the COSE
+   `alg` matches the key type. CBOR text is decoded byte-exactly (a leading U+FEFF is kept).
 7. Assertion signature: `crypto.verify('sha256', authData ‖ sha256(clientDataJSON), key, sig)` —
    `authData` concatenated with the **hash** of the client data, hashed once by `verify`.
 8. `userHandle` required and equal to the owner's handle (an empty buffer counts as missing).
+   User verification, when required, is judged only after the signature and handle.
 9. Sign count: updated with `WHERE sign_count < new`; a regression (when counters are in use)
    marks the credential suspect, ends its sessions and alerts the club admins. Synced passkeys
    report 0 and are accepted.
@@ -174,9 +253,12 @@ recovery, exporting a roster, deleting an account — need a fresh UV assertion 
 Rotated on sign-in; sign-out deletes the row.
 
 Tests: the Node software authenticator (`tests/softauthn.mjs`, written from the WebAuthn data
-formats independently of the server, checked against RFC 8949 test vectors) for every negative
-case; the Chromium virtual authenticator against the real page; frozen real-device fixtures
-(Safari/iCloud, Chrome/Android, Windows Hello, Firefox, a security key).
+formats independently of the server) for every negative case, and **15 real captures** from
+py_webauthn's test suite (`tests/fixtures/webauthn-real.json`, BSD licence kept with them):
+registrations from a synced passkey, a phone over caBLE, a YubiKey on Firefox, an Apple passkey,
+three Windows Hello TPMs (RS256), an Android key and FIDO U2F keys; sign-ins with EC2, RSA and
+Ed25519 keys, plus a wrong key and a missing user verification. Still to do: the Chromium virtual
+authenticator against the real page (needs a Playwright browser download).
 
 ## Clubs and membership (slice 3)
 
@@ -295,6 +377,24 @@ None blocks local development. All are needed before real people sign in.
 
 - `tests/smoke.mjs` [16] — the real `sw.js` in a VM: `/api/` never intercepted, only `200` cached.
 - `tests/server.mjs` — `no-store` on JSON, errors, calendar, full and ranged clips.
+- `tests/auth.mjs` — the CBOR decoder (RFC 8949 vectors and every refusal), the 15 real
+  captures, 3000 mutated real responses (refused or accepted, never a crash), and over real HTTP:
+  request rules, account creation, 8 registration refusals that leave the invite intact, a
+  challenge race, a revoked invite, sign-in and sign-out, session rotation, 13 sign-in refusals,
+  a cloned passkey, failures that never lock out, address limits (IPv6 per /64), secure-mode
+  cookies, session sliding, absolute expiry and revocation, and [11] the fixes from the
+  adversarial review: stateless sign-in challenges (forged, expired, far-future, bit-flipped),
+  a replayed response refused as a replay rather than a clone alarm (also after housekeeping),
+  hang-ups not logged, stalled bodies cut off, a body held back past expiry refused. 46 protections
+  fault-injected; each fails a check. Two are deliberately layered and fail only with both layers
+  removed: ending a cloned passkey's sessions (sessions also refuse any passkey that is not active),
+  and the replay check before verification (the used-challenge insert refuses it again).
+- `scripts/test-nginx-realip.sh` — the real nginx image: `CF-Connecting-IP` believed only from
+  `TRUSTED_PROXY`, ignored without it or from any other address; bad values refuse to start.
+
+The design was reviewed a second time after slice 2 was written: 4 lenses (WebAuthn conformance,
+HTTP and sessions, transactions, hostile input), each finding reproduced with a script or refuted.
+9 confirmed, all fixed; 5 refuted, with the reasoning kept where it changed a rule.
 - `tests/identity.mjs` — configuration refusals (15 cases), migrations (idempotent, atomic, newer
   database refused), `tx()` (rollback, async refused, nested), users and clubs (random ids,
   handles carry nothing of the id, CHECKs), codes (format, hash-only on disk, forgiving input,
