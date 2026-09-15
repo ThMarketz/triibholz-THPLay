@@ -24,7 +24,7 @@ built-in `lavfi` test source, so nothing needs downloading. Fault-inject each ne
 | Phase | What | Size | Status |
 |-------|------|------|--------|
 | 0 | Land the three fixes already made | S | ☑ committed; both gates green on the commit |
-| 1 | Long videos analysed as 0.5 s and reported "done" | M | ☐ |
+| 1 | Long videos analysed as 0.5 s and reported "done" | M | ☑ done |
 | 2 | Partly unreadable videos look like complete ones | M | ☐ |
 | 3 | Coaches see raw error codes, in every language | S | ☐ |
 | 4 | Test and documentation gaps | S | ☐ |
@@ -86,6 +86,32 @@ ffmpeg, print the check as skipped. Don't count it as passed.
 
 **Done when** the WebM row above reads 45, and reverting the fix makes the check fail.
 
+**Done 2026‑09‑15.** The WebM row now reads 45.
+
+- **Seeking checked before building.** Chunk seeks in a header-less WebM are frame-exact, same as
+  MP4. They don't re-scan the file either: about 200 ms per chunk at 0, 5 and 10 minutes into
+  a 188 MB file. So the chunk loop stays. The alternative, one long ffmpeg stream, wasn't needed.
+- **How the end is found.** When the length is unknown, `videoToScout` reads until an empty
+  chunk follows a short or empty one. A non-video costs two quick empty reads and still ends
+  `no-frames`.
+- **Cap.** 12 h, overridable by `opts.maxSec`. A file on disk always ends, so the cap only
+  guards against a container whose seeks never do. Hitting it sets `meta.capped: true`, which
+  `js/analysis.js` now keeps (service worker cache → v66). **Showing it to the coach is
+  Phase 2.**
+- **`meta.seconds`.** Now counts frames actually read, for every file. `meta.chunks` counts
+  chunks that had frames.
+- **Progress.** Nothing passes `onProgress` today (no caller in `server/` or `js/`), so no
+  percentage was shown before either. The callback now gets `(fraction, or null when the
+  length is unknown, seconds read)` for whoever wires it up.
+- **Tests.** `tests/server.mjs` `[3g2]` runs 5 checks in the image. Real 45 s MP4 and
+  header-less WebM files go through upload → job → result, plus the cap and the
+  "known length is never capped" case. On a host without ffmpeg they print as SKIPPED, and
+  the summary counts them separately. A smoke check covers `meta.capped` in the normalizer.
+  Fault-injected three ways, each caught: the old engine, `capped` never set, and
+  end-of-video detection removed.
+- **A longer file.** A 10-minute header-less WebM (75 MB) went through the scout in 4.4 s:
+  600 s read, 30 chunks.
+
 ---
 
 ## Phase 2 — Partly unreadable videos look like complete ones
@@ -135,9 +161,10 @@ check, so it fails as soon as someone adds a new code without a message.
 
 ## Phase 4 — Test and documentation gaps
 
-- **The success path is never tested with a real video.** The only video in
-  `tests/server.mjs` is 28 bytes of junk. Add a generated mp4 in the image run: job ends
-  `done`, has a `scout` block, `meta.field.mode === 'fixed'`, and `/api/clip` returns an mp4.
+- **The success path with a real video.** Partly done in Phase 1: `[3g2]` runs real MP4
+  and WebM files through upload → job → `done` with a `scout` block and the right length.
+  Still missing: `meta.field.mode === 'fixed'`, and `/api/clip` on a real video returning an
+  mp4. The fixtures `[3g2]` generates can be reused for both.
 - **The clip check is loose.** "500 clip/ffmpeg or 503 no ffmpeg" accepts either on any
   host. Expect the exact status for the host, as the `[3g]` check now does.
 - **Auto mode on the video path.** Frames decoded but no pool found should give

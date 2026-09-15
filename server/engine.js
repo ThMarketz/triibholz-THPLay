@@ -28,6 +28,7 @@ const VISION = global.VISION, ANALYSIS = global.ANALYSIS, BYTETRACK = global.BYT
 const { makeDetector } = require('./detector.js');
 
 const WORK_W = 320, WORK_H = 180;   // analysis resolution
+const MAX_UNKNOWN_SEC = 12 * 3600;   // a file on disk always ends; this only stops a container whose seeks never do
 
 const isAuto = cal => !!(cal && cal.mode === 'auto');
 function homographyOf(cal) {
@@ -126,15 +127,24 @@ async function videoToScout(path, cal, opts) {
   const H = homographyOf(cal);
   if (!H && !isAuto(cal)) { const e = new Error('bad-calibration'); e.code = 'bad-calibration'; throw e; }
   const durSec = await probeDuration(path, opts.ffmpeg);
-  const total = Math.max(0.5, (opts.winSec ? Math.min(opts.winSec, durSec - (opts.start || 0)) : durSec - (opts.start || 0)));
+  const start = opts.start || 0;
+  // A file with no length header (browser recordings, streamed WebM: "Duration: N/A") used to be read
+  // for 0.5 s and reported done. Unknown length now means: read chunk after chunk until the video ends.
+  const lengthKnown = durSec > 0;
+  const total = lengthKnown ? Math.max(0.5, opts.winSec ? Math.min(opts.winSec, durSec - start) : durSec - start)
+                            : (opts.winSec || opts.maxSec || MAX_UNKNOWN_SEC);
   const detector = opts.detector || makeDetector({ modelEndpoint: opts.modelEndpoint, step: opts.step, minArea: opts.minArea });
-  const series = []; const start = opts.start || 0;
+  const series = [];
   const auto = isAuto(cal); const samples = []; const every = Math.max(1, Math.round(fps * (opts.fieldEverySec || 1)));   // detect the field about once a second
-  let unread = 0, decoded = 0;
+  let unread = 0, decoded = 0, chunks = 0, prevFull = true, ended = false;
   for (let t0 = 0; t0 < total; t0 += chunkSec) {
-    const frames = await decodeChunk(path, start + t0, Math.min(chunkSec, total - t0), w, h, fps, opts.ffmpeg);
+    const len = Math.min(chunkSec, total - t0);
+    const frames = await decodeChunk(path, start + t0, len, w, h, fps, opts.ffmpeg);
+    // unknown length: an empty chunk right after a short (or empty) one is the end of the video
+    if (!lengthKnown && !frames.length && !prevFull) { ended = true; break; }
+    prevFull = frames.length >= Math.round(len * fps) - 1;
     if (!frames.length) continue;
-    decoded += frames.length;
+    decoded += frames.length; chunks++;
     const perFrame = []; for (const f of frames) perFrame.push(await detector.detect(f, w, h));
     const snaps = BYTETRACK.series(perFrame, { minHits: 2, maxAge: 4, gate: Math.max(w, h) / 8 });
     let track = null;
@@ -149,14 +159,17 @@ async function videoToScout(path, cal, opts) {
       if (!Hi) { unread++; return; }
       series.push({ t, boardFrame: VISION.toBoardFrame(snap, Hi).frame });
     });
-    if (typeof opts.onProgress === 'function') opts.onProgress(Math.min(1, (t0 + chunkSec) / total));
+    // (fraction or null when the length is unknown, seconds read so far)
+    if (typeof opts.onProgress === 'function') opts.onProgress(lengthKnown ? Math.min(1, (t0 + chunkSec) / total) : null, +(decoded / fps).toFixed(1));
   }
   // nothing decoded (not a video, or an empty one) is not a missing field: say so, don't blame the pool
   if (!decoded) { const e = new Error('no-frames-decoded'); e.code = 'no-frames'; throw e; }
   if (!series.length) { const e = new Error('field-not-found'); e.code = 'field-not-found'; throw e; }
   const events = EVENTS.detect(series, {});
   const scout = scoutSeries(series, events, opts);
-  const meta = { seconds: total, fps, chunks: Math.ceil(total / chunkSec) };
+  // seconds actually read, not what the probe claimed; capped = an unknown-length video still going at the cap
+  const meta = { seconds: +(decoded / fps).toFixed(1), fps, chunks };
+  if (!lengthKnown && !ended && !opts.winSec) meta.capped = true;
   if (auto) { const tr = FIELD.timeline(samples, { minConf: cal.minConf || 0.4 }); meta.field = Object.assign({ mode: 'auto', unreadSeconds: +(unread / fps).toFixed(1) }, FIELD.stats(tr), { corners: (tr.find(x => x.corners) || {}).corners || null }); }
   else meta.field = { mode: 'fixed' };
   return ANALYSIS.normalizeResult({ engine: 'server', version: ANALYSIS.VERSION, tracks: [], frames: series.filter((_, i) => i % Math.max(1, Math.round(fps)) === 0), events, scout, meta });

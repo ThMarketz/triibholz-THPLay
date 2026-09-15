@@ -13,8 +13,9 @@ const PORT = 4278;
 process.env.PORT = String(PORT);
 process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'thplay-srv-'));
 
-let pass = 0, fail = 0;
+let pass = 0, fail = 0, skipped = 0;
 const ok = (n, c) => { if (c) { pass++; console.log('  ✓', n); } else { fail++; console.log('  ✗ FAIL:', n); } };
+const skip = (n, why) => { skipped++; console.log('  – SKIPPED:', n, '(' + why + ')'); };
 const base = `http://localhost:${PORT}`;
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
@@ -185,6 +186,42 @@ function frame(w, h) {
     const over = await fetch(base + '/api/upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: Buffer.alloc(6 * 1024 * 1024, 1) }).catch(() => null);
     ok('over the limit (MAX_UPLOAD=5 MB in tests) → 413 too-large with the limit, or a clean cut', !over || (over.status === 413 && (await over.json()).maxUploadMB === 5));
 
+    console.log('\n[3g2] Auto-scout reads the WHOLE video, with or without a length header (needs ffmpeg)');
+    {
+      const names = ['a 45 s MP4 (length in its header) → done, all 45 s read',
+        'the WebM test file really has no length header (ffmpeg says "Duration: N/A")',
+        'a 45 s WebM with no length header → done, all 45 s read (was 0.5 s)',
+        'no length header + opts.maxSec 20 → stops at 20 s and says so (meta.capped)',
+        'a video whose length is known is never marked capped'];
+      if (!h.ffmpeg) names.forEach(n => skip(n, 'no ffmpeg on this host — the image run covers it'));
+      else {
+        const { readFileSync, writeFileSync } = await import('node:fs');
+        const ff = process.env.FFMPEG || 'ffmpeg';
+        const src = ['-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=d=45:s=320x180:r=25', '-b:v', '150k'];
+        const mp4Path = join(process.env.DATA_DIR, 'fixture-45s.mp4'), webmPath = join(process.env.DATA_DIR, 'fixture-45s-nolength.webm');
+        spawnSync(ff, [...src, '-c:v', 'mpeg4', mp4Path]);
+        // written to a pipe, so the muxer can't go back and fill in the length (as in a browser recording)
+        const webm = spawnSync(ff, [...src, '-c:v', 'libvpx', '-f', 'webm', 'pipe:1'], { maxBuffer: 64 * 1024 * 1024 }).stdout;
+        writeFileSync(webmPath, webm);
+        const vCorners = [{ x: 0, y: 0 }, { x: 320, y: 0 }, { x: 320, y: 180 }, { x: 0, y: 180 }];
+        const scoutJob = async (bytes, opts) => {
+          const u = await (await fetch(base + '/api/upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: bytes })).json();
+          const q = await (await fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef: u.videoRef, calibration: { corners: vCorners }, scout: true, us: 'white', opts: Object.assign({ fps: 6, chunkSec: 20 }, opts) }) })).json();
+          let j = {}; for (let i = 0; i < 600 && j.status !== 'done' && j.status !== 'error'; i++) { await wait(100); j = await (await fetch(base + '/api/jobs/' + q.id)).json(); }
+          return j.status === 'done' ? { status: 'done', result: await (await fetch(base + '/api/jobs/' + q.id + '/result')).json() } : j;
+        };
+        const near = (a, b) => Math.abs(a - b) <= 0.5;
+        const mp4 = await scoutJob(readFileSync(mp4Path), {});
+        ok(names[0], mp4.status === 'done' && !!mp4.result.scout && near(mp4.result.meta.seconds, 45));
+        ok(names[1], /Duration: N\/A/.test(spawnSync(ff, ['-i', webmPath]).stderr.toString()));
+        const full = await scoutJob(webm, {});
+        ok(names[2], full.status === 'done' && !!full.result.scout && near(full.result.meta.seconds, 45) && !full.result.meta.capped);
+        const capped = await scoutJob(webm, { maxSec: 20 });
+        ok(names[3], capped.status === 'done' && near(capped.result.meta.seconds, 20) && capped.result.meta.capped === true);
+        ok(names[4], mp4.status === 'done' && mp4.result.meta.capped === undefined);
+      }
+    }
+
     console.log('\n[3h] Clips + team debriefs with comments');
     ok('clip of an unknown video → 404', (await fetch(base + '/api/clip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef: 'nope.mp4', start: 1, end: 5 }) })).status === 404);
     const clipR = await fetch(base + '/api/clip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef: upj.videoRef, start: 1, end: 5 }) });
@@ -282,7 +319,7 @@ function frame(w, h) {
     ok('error answers are no-store too', errR.headers.get('cache-control') === 'no-store');
 
     server.close();
-    console.log(`\n==== ${pass} passed, ${fail} failed ====`);
+    console.log(`\n==== ${pass} passed, ${fail} failed${skipped ? `, ${skipped} skipped` : ''} ====`);
     process.exit(fail ? 1 : 0);
   } catch (e) { console.error('THREW:', e && e.stack || e); process.exit(2); }
 })();

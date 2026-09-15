@@ -651,7 +651,8 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('summary: plain sentences with the team names', sc.summary.some(l=>/^Us \(white caps\): 1 possessions, 1 shots \(100%\)/.test(l)) && sc.summary.some(l=>/favour drive & kick — 100%/.test(l)));
     ok('summary never says "favour unclassified"', !sc.summary.some(l=>/unclassified/i.test(l)));
     ok('playbook: one ready-to-save scenario, confidence-gated, not flagged at 0.8', sc.playbook.length===1 && /Drive & kick · seen 1× \(auto-scout\)/.test(sc.playbook[0].title) && sc.playbook[0].needsReview===false && sc.playbook[0].source==='auto-scout' && sc.playbook[0].frames.length>=3);
-    { const nr=ANALYSIS.normalizeResult({engine:'server',version:1,tracks:[],events:[],frames:[],scout:sc,meta:{seconds:61.5,fps:6,chunks:4}}); ok('normalizeResult keeps the scout block + job meta', !!nr.scout && nr.meta.seconds===61.5 && nr.meta.chunks===4); }
+    { const nr=ANALYSIS.normalizeResult({engine:'server',version:1,tracks:[],events:[],frames:[],scout:sc,meta:{seconds:61.5,fps:6,chunks:4}}); ok('normalizeResult keeps the scout block + job meta', !!nr.scout && nr.meta.seconds===61.5 && nr.meta.chunks===4 && nr.meta.capped===undefined); }
+    { const cp=ANALYSIS.normalizeResult({engine:'server',version:1,tracks:[],events:[],frames:[],meta:{seconds:43200,fps:6,chunks:2160,capped:true}}); const junk=ANALYSIS.normalizeResult({engine:'server',version:1,tracks:[],events:[],frames:[],meta:{seconds:1,capped:'yes'}}); ok('normalizeResult keeps meta.capped (a video cut off at the length cap), only as a real true', cp.meta.capped===true && junk.meta.capped===undefined); }
     ok('help has an auto-scout topic', !!HELP.TOPICS.autoscout);
   }
 

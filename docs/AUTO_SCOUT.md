@@ -20,7 +20,9 @@ tracked positions the pipeline already produces:
 
 **Backend** — `videoToScout()` decodes the **whole** video in 20 s chunks (bounded
 memory, continuous timestamps), tracks each chunk, runs event detection on the joined
-series, then scouts it. Long videos run as a **background job**
+series, then scouts it. A file with no length in its header (browser recordings, streamed
+WebM) is read chunk by chunk until it ends, capped at 12 h (`meta.capped`). `meta.seconds`
+is what was actually read. Long videos run as a **background job**
 (`POST /api/upload` → `POST /api/jobs {videoRef, calibration, scout:true, us}` → poll →
 result with `scout`). Frames‑mode `/api/analyse` with `scout:true` works synchronously
 (that's what the tests use).
