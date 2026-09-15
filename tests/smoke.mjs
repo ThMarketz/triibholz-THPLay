@@ -15,9 +15,9 @@ window.TextDecoder = window.TextDecoder || TD;   // TESTLOG's XLSX reader needs 
 window.DecompressionStream = window.DecompressionStream || globalThis.DecompressionStream;   // jsdom has neither; Node does
 window.Response = window.Response || globalThis.Response;
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/sheetdoc.js','js/eligibility.js','js/teamsheet.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/sheetdoc.js','js/eligibility.js','js/teamsheet.js','js/teams.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET , TEAMS };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -1743,6 +1743,72 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('an Italian-labelled template is marked unofficial — there is no Italian form', !TS.buildModel({ langs: ['it', 'de'] }, data).official && TS.buildModel(TS.BUILTIN[0], data).official);
     ok('a filename a club secretary can file as it is', TS.fileName(data, 'pdf') === 'Spielaufstellung_Test-WPC_U14-Group-A_20261004.pdf');
     ok('the goalkeeper mark prints in the PDF font (X, not a tick it cannot draw)', S.toPdf(TS.buildModel({ columns: ['nr', 'name', 'licence', 'gk'] }, data)).substituted.length === 0);
+  }
+
+  console.log('\n[15] Teams & team sheets — the coach flow, end to end in the DOM');
+  {
+    const { TEAMS: TM, ELIGIBILITY: E } = window.__T;
+    // pure helpers first
+    const d0 = { teams: [], players: {}, templates: [], sheets: [] };
+    TM.upsertPlayers(d0, [{ licence: '50101', name: 'Anna Maria', firstName: 'Rossi', nameGuessed: true, status: 'Swiss', birthYear: '2013' }], 'wpmatch');
+    Object.assign(d0.players.L50101, { name: 'Rossi', firstName: 'Anna Maria', edited: true, gk: true });   // the coach fixes the split and ticks GK
+    TM.upsertPlayers(d0, [{ licence: '50101', name: 'Anna Maria', firstName: 'Rossi', status: 'Inactive License', birthYear: '2013' }], 'wpmatch');
+    const pl = d0.players.L50101;
+    ok('a wpmatch refresh updates what wpmatch knows — the licence status…', pl.status === 'Inactive License');
+    ok('…but never overwrites what the coach corrected: the name split and the GK tick', pl.name === 'Rossi' && pl.firstName === 'Anna Maria' && pl.gk === true);
+    ok('the licence number is the player\'s identity — one record, not two', Object.keys(d0.players).length === 1);
+    const pid = TM.upsertPlayers(d0, [{ name: 'New Signing' }], 'manual')[0];
+    ok('a player whose licence is still pending gets a local id rather than being dropped', /^m/.test(pid) && d0.players[pid].licence === '');
+
+    const G = (name, cap, gk) => ({ pid: name, name, cap: String(cap), gk: !!gk });
+    const squad = [G('F3', 3), G('K2', 7, true), G('F1', 2), G('K1', 1, true), G('F9', 9)];
+    const senior = TM.autoOrder(squad, 14, 'NLB'), youth = TM.autoOrder(squad, 14, 'U14');
+    ok('seniors: the keepers take the red caps 1 and 13', senior[0].name === 'K1' && senior[12].name === 'K2');
+    ok('U10–U14: only cap 1 is red, so the second keeper simply goes next', youth[0].name === 'K1' && youth[1].name === 'K2');
+    ok('everyone else follows by their usual cap number', senior.slice(1, 4).map(p => p && p.name).join() === 'F1,F3,F9');
+
+    // spy on every network call for the rest of this section — the privacy claim below has to be
+    // checkable, not assumed
+    const netLog = [], realFetch = window.fetch;
+    window.fetch = (url, opts) => { netLog.push(String(url) + ' ' + String((opts && opts.body) || ''));
+      return realFetch ? realFetch(url, opts) : Promise.reject(new Error('offline')); };
+    // the real screen, as a coach
+    q('#logout-btn').click(); await wait(20);
+    qa('.demo-btn').find(b => b.dataset.demo === 'player').click(); await wait(50);
+    if (q('#tour-skip')) q('#tour-skip').click();
+    ok('a player never sees the Teams tab — rosters hold licence numbers and birth years', q('.nav-btn[data-view="teams"]').hidden);
+    ok('…but gets their own player card on My Development', (() => { q('.nav-btn[data-view="development"]').click(); return true; })() && !!(await wait(40), q('#dev-playercard .tm-mycard')));
+    q('#logout-btn').click(); await wait(20);
+    qa('.demo-btn').find(b => b.dataset.demo === 'coach').click(); await wait(50);
+    if (q('#tour-skip')) q('#tour-skip').click();
+    ok('a coach does see it', !q('.nav-btn[data-view="teams"]').hidden);
+
+    // FICTIONAL squad: one keeper, one inactive licence, one boy born a year too early
+    const P = (lic, name, firstName, birthYear, o) => Object.assign({ pid: 'L' + lic, licence: lic, name, firstName, birthYear, gender: 'M', status: 'Swiss', cap: '', gk: false }, o);
+    const ps = [P('50101', 'Keller', 'Nina', '2013', { gender: 'F', gk: true, cap: '1' }), P('50102', 'Brunner', 'Jonas', '2014', { cap: '2' }),
+                P('50104', 'Frei', 'Luca', '2012', { cap: '4' }), P('50105', 'Huber', 'Mia', '2014', { gender: 'F', cap: '5', status: 'Inactive License' })];
+    window.localStorage.setItem(TM.KEY, JSON.stringify({ version: 1, teams: [{ id: 't1', name: 'U14 A', category: 'U14', club: 'Test WPC', leagueLabel: 'U14',
+      templateId: 'sa-2025', staff: { coach: 'Sam Beispiel' }, rules: {}, players: ps.map(p => p.pid), wpmatch: null }],
+      players: Object.fromEntries(ps.map(p => [p.pid, p])), templates: [], sheets: [] }));
+    q('.nav-btn[data-view="teams"]').click(); await wait(40);
+    ok('the team list shows the team', qa('#view-teams [data-team]').length === 1 && /U14 A/.test(q('#view-teams').textContent));
+    q('#view-teams [data-team="t1"]').click(); await wait(40);
+    ok('its roster lists every player with their status', qa('#view-teams .tm-roster tbody tr').length === 4 && /Inactive licence/.test(q('#view-teams .tm-roster').textContent));
+    q('#tm-new-sheet').click(); await wait(40);
+    ok('a new sheet has one row per line of the official form (14)', qa('#view-teams .tm-lineup tbody tr').length === 14);
+    ok('the keeper is placed in cap 1', q('#view-teams [data-row="0"]').value === 'L50101' && q('#view-teams [data-rowgk="0"]').checked);
+    const fs = qa('#view-teams .tm-findings li').map(li => li.textContent);
+    ok('the check flags the inactive licence by name', fs.some(t => /Inactive licence/.test(t) && /Mia Huber/.test(t)));
+    ok('…and the player born too early for U14 in 2026/27', fs.some(t => /Too old/.test(t) && /Luca Frei/.test(t)));
+    ok('…and cites the article each rule comes from', /Art\. 6\.4/.test(q('#view-teams .tm-findings').textContent));
+    ok('the live preview is the paper form, licence numbers in it', /OFFIZIELLE SPIELAUFSTELLUNG/.test(q('#view-teams .tm-preview').textContent) && /50105/.test(q('#view-teams .tm-preview').textContent));
+    q('#view-teams [data-rowcap="1"]').click(); await wait(40);
+    ok('choosing a captain writes "First Last #cap" onto the sheet', /Jonas Brunner #2/.test(q('#view-teams .tm-preview').textContent));
+    const saved = JSON.parse(window.localStorage.getItem(TM.KEY));
+    ok('the sheet is kept on this device for next time', saved.sheets.length === 1 && saved.sheets[0].rows[1].captain === true);
+    ok('the spy really is listening (a fetch made now is recorded)', (() => { const n = netLog.length; window.fetch('/spy-probe').catch(() => {}); return netLog.length === n + 1; })());
+    ok('no licence number or name left the device while building the sheet', !netLog.some(l => /5010[1-5]|Huber|Brunner/.test(l)));
+    window.fetch = realFetch;
   }
 
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);

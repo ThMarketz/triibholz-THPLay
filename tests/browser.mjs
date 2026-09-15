@@ -631,6 +631,56 @@ await waitUntil(async () => +((await ap.locator('#announce-badge').textContent()
 ok('opening both of this run\'s items brings the badge down by exactly 2, without losing the open detail view', +((await ap.locator('#announce-badge').textContent().catch(()=>'0'))||0) === unreadBefore - 2 && (await ap.locator('#announce-detail').textContent()).includes(teamTitle));
 await actx.close();
 
+console.log('\n[12] Team sheets — a real coach builds one and downloads real Word and PDF files');
+{
+  // its own context, so downloads are enabled and nothing else in this run is disturbed
+  const tctx = await browser.newContext({ viewport: { width: 1360, height: 900 }, acceptDownloads: true });
+  const tp = await tctx.newPage(); hook(tp, 'teams');
+  await tp.goto(URL); await tp.waitForTimeout(400);
+  // FICTIONAL U14 squad: a keeper, an inactive licence, a boy born a year too early, a foreigner
+  await tp.evaluate(() => {
+    const P = (lic, name, firstName, birthYear, o) => Object.assign({ pid: 'L' + lic, licence: lic, name, firstName, birthYear, gender: 'M', status: 'Swiss', cap: '', gk: false }, o);
+    const ps = [P('50101', 'Keller', 'Nina', '2013', { gender: 'F', gk: true, cap: '1' }), P('50102', 'Brunner', 'Jonas', '2014', { cap: '2' }),
+      P('50103', 'Müller', 'Lea', '2013', { gender: 'F', cap: '3' }), P('50104', 'Frei', 'Luca', '2012', { cap: '4' }),
+      P('50105', 'Huber', 'Mia', '2014', { gender: 'F', cap: '5', status: 'Inactive License' }), P('50106', 'Łukaszewicz', 'Paweł', '2014', { cap: '6', status: 'Ausländer/Étranger' })];
+    localStorage.setItem('thplay.teams.v1', JSON.stringify({ version: 1, teams: [{ id: 't1', name: 'U14 A', category: 'U14', club: 'Test WPC', leagueLabel: 'U14',
+      templateId: 'sa-2025', staff: { coach: 'Sam Beispiel' }, rules: {}, players: ps.map(p => p.pid), wpmatch: null }],
+      players: Object.fromEntries(ps.map(p => [p.pid, p])), templates: [], sheets: [] }));
+  });
+  await tp.reload(); await tp.waitForTimeout(400);
+  await tp.click('.demo-btn[data-demo="coach"]'); await tp.waitForTimeout(500); await skipTour(tp);
+  ok('the Teams tab is there for a coach', await tp.locator('.nav-btn[data-view="teams"]').isVisible());
+  await tp.click('.nav-btn[data-view="teams"]');
+  await tp.click('[data-team="t1"]');
+  ok('the roster shows all 6 players', (await tp.locator('.tm-roster tbody tr').count()) === 6);
+  await tp.click('#tm-new-sheet');
+  await waitUntil(async () => (await tp.locator('.tm-lineup tbody tr').count()) === 14);
+  ok('a new sheet has the 14 rows of the official form', (await tp.locator('.tm-lineup tbody tr').count()) === 14);
+  const findings = await tp.locator('.tm-findings').textContent();
+  ok('the check names the inactive licence and the over-age player', /Mia Huber/.test(findings) && /Luca Frei/.test(findings));
+  ok('the foreign player is NOT flagged — U14 has no foreigner limit', !/Paweł|Łukaszewicz/.test(findings));
+  await tp.check('[data-rowcap="1"]');
+  await waitUntil(async () => /Jonas Brunner #2/.test(await tp.locator('.tm-preview').textContent()));
+  ok('the captain appears on the preview as "Jonas Brunner #2"', /Jonas Brunner #2/.test(await tp.locator('.tm-preview').textContent()));
+  await tp.screenshot({ path: join(OUT, 'qa_40_team_sheet.png'), fullPage: false });
+
+  const { readFileSync } = await import('node:fs');
+  const [docx] = await Promise.all([tp.waitForEvent('download'), tp.click('#tm-dl-docx')]);
+  const docxPath = join(OUT, 'qa_team_sheet.docx'); await docx.saveAs(docxPath);
+  const db = readFileSync(docxPath);
+  ok('Firefox saves a real Word file: ZIP signature, sensible name', db.slice(0, 4).toString('latin1') === 'PK\x03\x04' && /^Spielaufstellung_Test-WPC_U14_\d{8}\.docx$/.test(docx.suggestedFilename()));
+  ok('…with every name in it exactly, Łukaszewicz included', db.toString('utf8').includes('Łukaszewicz') && db.toString('utf8').includes('Müller'));
+
+  const [pdf] = await Promise.all([tp.waitForEvent('download'), tp.click('#tm-dl-pdf')]);
+  const pdfPath = join(OUT, 'qa_team_sheet.pdf'); await pdf.saveAs(pdfPath);
+  const pb = readFileSync(pdfPath).toString('latin1');
+  ok('Firefox saves a real PDF', pb.startsWith('%PDF-1.4') && pb.trimEnd().endsWith('%%EOF'));
+  ok('the PDF writes Latin-1 names natively and transliterates Ł → L', pb.includes('(M\xFCller)') && pb.includes('(Lukaszewicz)'));
+  await waitUntil(async () => /Ł → L/.test(await tp.locator('#tm-dl-note').textContent()));
+  ok('…and TELLS the coach which letters changed, pointing to the Word file', /Ł → L/.test(await tp.locator('#tm-dl-note').textContent()));
+  await tctx.close();
+}
+
 console.log(`\n==== ${pass} passed, ${fail} failed ====`);
 console.log('CONSOLE ERRORS:', errs.length?('\n  '+errs.join('\n  ')):'none');
 await browser.close();

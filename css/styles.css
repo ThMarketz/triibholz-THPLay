@@ -1110,3 +1110,89 @@ kbd{background:#15324a;border:1px solid #24506f;border-radius:5px;padding:1px 6p
 .ann-compose textarea{resize:vertical}
 .ann-plays-pick{display:flex;flex-direction:column;gap:6px}
 .ann-plays-pick .chip-check{align-self:flex-start}
+
+/* ---- Teams & team sheets (v1.41) ---- */
+/* tokens only from :root — an undefined var() silently falls back to nothing */
+.tm-wrap .film-panel{margin-bottom:12px}
+.tm-tabs{display:inline-flex;gap:2px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:3px;margin:4px 0 12px}
+.tm-tabs .phase-btn.active{background:var(--teal-d);color:var(--white)}
+.tm-actions{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.tm-crumbs{margin-bottom:6px}
+.tm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.tm-card{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;color:var(--ink);cursor:pointer}
+.tm-card:hover{border-color:var(--teal)}
+.tm-card strong{font-size:15px}
+.tm-form{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin:8px 0}
+.tm-form label,.tm-lic{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--ink-dim)}
+.tm-form input,.tm-form select,.tm-lic textarea,.tm-wpm input,.tm-roster input,.tm-lineup select{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--ink);font:inherit;min-width:0}
+.tm-roster input{width:100%;padding:4px 6px}
+.tm-roster input.tm-cap{width:3.2em;text-align:center}
+.tm-lineup select{width:100%;max-width:340px}
+.tm-special{margin:6px 0}
+.tm-wpm{margin:8px 0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tm-wpm #tm-wpm-hits{display:flex;flex-wrap:wrap;gap:6px;width:100%}
+.tm-add{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.tm-lic{flex:1 1 260px}
+.tm-lic textarea{resize:vertical}
+.tm-add-btns{display:flex;flex-wrap:wrap;gap:6px}
+.tm-progress,.tm-notice{margin:6px 0}
+.tm-guess{display:inline-block;margin-left:4px;width:16px;height:16px;border-radius:50%;background:var(--orange);color:var(--black);font-size:11px;font-weight:700;text-align:center;line-height:16px;cursor:help}
+.tm-status{display:inline-block;font-size:11px;font-weight:600;padding:2px 7px;border-radius:999px;white-space:nowrap;border:1px solid var(--line)}
+.tm-status.tm-ok{color:var(--teal);border-color:var(--teal-d)}
+.tm-status.tm-mid{color:var(--orange);border-color:var(--orange)}
+.tm-status.tm-bad{color:var(--red);border-color:var(--red)}
+.tm-status.tm-none{color:var(--ink-faint)}
+.tm-sheet-list{display:flex;flex-direction:column;gap:4px}
+.tm-sheet-item{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line-soft)}
+.tm-sheet-item:last-child{border-bottom:none}
+.tm-builder{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px;align-items:start}
+@media (max-width:900px){.tm-builder{grid-template-columns:minmax(0,1fr)}}
+.tm-lineup td{vertical-align:middle}
+.tm-lineup .tm-capcell{font-weight:700;color:var(--ink-dim);width:2em;text-align:center}
+.tm-lineup tr.tm-empty .tm-capcell{color:var(--ink-faint)}
+.tm-lineup tr:first-child .tm-capcell,.tm-lineup tr:nth-child(13) .tm-capcell{color:var(--red)}  /* the red caps */
+.tm-move{white-space:nowrap}
+.tm-findings{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.tm-f{font-size:13px;line-height:1.4;padding:7px 9px;border-radius:8px;border:1px solid var(--line);margin:0}
+.tm-f-sev{font-weight:700;margin-right:4px}
+.tm-f-error{border-color:var(--red);background:rgba(255,80,80,.08)}
+.tm-f-error .tm-f-sev{color:var(--red)}
+.tm-f-warn{border-color:var(--orange);background:rgba(255,170,60,.07)}
+.tm-f-warn .tm-f-sev{color:var(--orange)}
+.tm-f-info .tm-f-sev{color:var(--ink-dim)}
+.tm-f-ok{border-color:var(--teal-d);color:var(--teal)}
+.tm-f-art{display:block;font-size:11px;color:var(--ink-faint);margin-top:2px}
+.tm-checks{display:flex;flex-wrap:wrap;gap:6px 14px;margin:4px 0 10px}
+.tm-wrap h4{margin:12px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-dim)}
+.tm-downloads .btn-primary{min-width:9em}
+
+/* the sheet preview — paper, not app chrome: black on white whatever the theme */
+.tm-preview{background:#fff;color:#000;border-radius:6px;padding:18px;overflow-x:auto}
+.ts-sheet{font:12px Verdana,Geneva,sans-serif;min-width:520px}
+.ts-title{font:700 16px Arial,Helvetica,sans-serif;margin:0 0 12px;color:#000}
+.ts-t{width:100%;border-collapse:collapse;margin:0 0 14px}
+.ts-t td,.ts-t th{border:1px solid #000;padding:3px 6px;text-align:left;vertical-align:top;font-weight:400;color:#000}
+.ts-roster td{height:17px}
+.ts-sign td{height:34px}
+.ts-2nd{color:#555}
+.ts-note p{margin:2px 0;font-weight:700}
+.ts-lead{color:#e4002b}
+.ts-i{font-style:italic}
+.tm-mycard{margin:12px 0}
+.tm-card-body{display:flex;flex-direction:column;gap:6px;padding:12px;border:1px dashed var(--line);border-radius:12px;margin:6px 0}
+.tm-card-name{font-size:18px;font-weight:700;color:var(--ink)}
+.tm-card-lic b{font-size:20px;letter-spacing:.06em;color:var(--teal)}
+.tm-card-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+/* On a phone the toggle columns squeezed the player picker to a sliver — you could not see who
+   was in which row, which is the whole point of the screen. Below 640px each row wraps: cap and
+   player on the first line, the GK / captain / younger toggles and the arrows underneath. */
+@media (max-width:640px){
+  .tm-lineup,.tm-lineup tbody{display:block}
+  .tm-lineup tr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:7px 0;border-bottom:1px solid var(--line-soft)}
+  .tm-lineup td{border:none;padding:0}
+  .tm-lineup td.tm-capcell{flex:0 0 2em}
+  .tm-lineup td:nth-child(2){flex:1 1 calc(100% - 3em)}
+  .tm-lineup td:nth-child(2) select{max-width:none}
+  .tm-lineup td:nth-child(3){margin-left:calc(2em + 10px)}
+  .tm-lineup td.tm-move{margin-left:auto}
+}

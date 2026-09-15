@@ -122,12 +122,13 @@
   function switchView(view) {
     state.view = view;
     document.querySelectorAll('#main-nav .nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view===view));
-    ['dashboard','playbook','basics','film','solutions','season','trivia','development','admin'].forEach(v => $('view-'+v).classList.toggle('active', v===view));
+    ['dashboard','playbook','basics','film','solutions','season','teams','trivia','development','admin'].forEach(v => $('view-'+v).classList.toggle('active', v===view));
     const inPlaybook = view==='playbook';
     $('situation-tabs').style.display = inPlaybook ? '' : 'none';
     $('phase-toggle').style.display = inPlaybook ? '' : 'none';
     if (view==='dashboard') renderDashboard();
     if (view==='basics') renderBasics();
+    if (view==='teams' && typeof TEAMS!=='undefined') TEAMS.render($('view-teams'), { user: state.user, canEdit: canEdit(), toast });
     if (view==='film' && typeof FILM!=='undefined') FILM.render($('view-film'), {
       user: state.user, canEdit: canEdit(), toast,
       // a tagged video moment becomes a play on the tactics board
@@ -187,6 +188,8 @@
     updateUserPill();
     const isAdmin = state.user.role==='super-admin';
     $('main-nav').querySelector('.nav-admin').hidden = !isAdmin;
+    // team sheets hold licence numbers and birth years — coaches, trainers and admins only
+    $('main-nav').querySelector('.nav-teams').hidden = !canEdit();
     $('new-scenario-btn').style.display = canEdit() ? '' : 'none';
     buildSituationTabs();
     renderLibrary();
@@ -600,6 +603,7 @@
         <div class="dev-stat"><b>${row.metres.toLocaleString()} m</b><span>${T('dev.swumThisWeek')}</span></div>
         <div class="dev-stat"><b>${(dev.tests || []).length}</b><span>${T('dev.testsLoggedAllTime')}${pendingCount ? ' · ' + T('dev.nAwaiting', { n: pendingCount }) : ''}</span></div>
       </div>
+      ${isSelf && typeof TEAMS !== 'undefined' ? '<div id="dev-playercard"></div>' : ''}
 
       ${roster.length ? `<details class="dev-coach-tools"><summary>${T('dev.coachToolsViewing')} <b>${devViewing ? escapeHtml((roster.find(u => u.email === devViewing) || {}).name || devViewing) : T('dev.myself')}</b></summary>
         <div class="dev-coach-row"><select id="dev-roster-select" class="focus-select"><option value="">${T('dev.myselfOption')}</option>${roster.map(u => `<option value="${escapeHtml(u.email)}" ${devViewing === u.email ? 'selected' : ''}>${escapeHtml(u.name || u.email)}${u.position ? ' · ' + escapeHtml(u.position) : ''}</option>`).join('')}</select>
@@ -850,6 +854,7 @@
     const exT = root.querySelector('#dev-export-tests'); if (exT) exT.onclick = () => downloadBlob(TESTLOG.toCSV(dev.tests || [], TESTLOG.TEST_COLS), (dev.info.name || 'player').replace(/[^\w]+/g, '-') + '-test-log.csv', 'text/csv');
     const exS = root.querySelector('#dev-export-swim'); if (exS) exS.onclick = () => downloadBlob(TESTLOG.toCSV(dev.swimWeeks || [], TESTLOG.SWIM_COLS), (dev.info.name || 'player').replace(/[^\w]+/g, '-') + '-swim-weeks.csv', 'text/csv');
     wireDevImport(root);
+    if (typeof TEAMS !== 'undefined') TEAMS.renderPlayerCard(root.querySelector('#dev-playercard'), { toast });
   }
 
   // team import (coach/trainer/admin only) — .xlsx or .csv, matched by player name against
