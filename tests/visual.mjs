@@ -82,10 +82,18 @@ if (mode === 'capture') {
      js/theme.js (before the theme work) skip this. */
   {
     const { ctx, page } = await session(a, DESK, null);
-    const bad = await page.evaluate(() => typeof THEME === 'undefined' ? null : THEME.look() !== 'today' ? [] : Object.entries(THEME.FALLBACK.today).filter(([k, v]) => THEME.c(k) !== v).map(([k, v]) => k + ': ' + THEME.c(k) + ' ≠ ' + v));
+    const bad = await page.evaluate(() => {
+      if (typeof THEME === 'undefined') return null;
+      // expected = the token text as written in the stylesheet: the bare :root, overridden by the active look's block
+      const look = THEME.look(), exp = {};
+      for (const sh of document.styleSheets) { let rules; try { rules = sh.cssRules; } catch (e) { continue; }
+        for (const r of rules) if (r.selectorText === ':root' || r.selectorText === ':root[data-look="' + look + '"]')
+          for (let i = 0; i < r.style.length; i++) { const n = r.style[i]; if (r.selectorText === ':root' ? !(n in exp) : true) exp[n] = r.style.getPropertyValue(n).trim(); } }
+      return Object.keys(THEME.FALLBACK.today).filter(k => THEME.c(k) !== exp[k]).map(k => look + ' ' + k + ': ' + THEME.c(k) + ' ≠ ' + exp[k]);
+    });
     await ctx.close();
     if (bad && bad.length) { console.log('  ✗ computed token values differ from the CSS text:\n    ' + bad.join('\n    ')); await browser.close(); process.exit(1); }
-    console.log(bad ? '  ✓ every drawn-by-code token computes to exactly its CSS text' : '  – no js/theme.js in this build (token check skipped)');
+    console.log(bad ? '  ✓ every drawn-by-code token computes to exactly its CSS text in this look' : '  – no js/theme.js in this build (token check skipped)');
   }
   for (const [name, vp, persona, go, lang] of SCREENS) {
     const { ctx, page } = await session(a, vp, persona, lang);

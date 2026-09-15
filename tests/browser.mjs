@@ -70,6 +70,33 @@ ok('coach dashboard', await page.locator('.invite-card').count()===1);
 await page.screenshot({ path:OUT+'/qa_02_coach_dash.png' });
 await page.click('.nav-btn[data-view="playbook"]'); await page.waitForTimeout(400);
 ok('play auto-opened', (await page.locator('#pool .disc').count())>=6);
+// theme Phase 2 — drawn surfaces follow the look: the switch redraws the open board, and a video-reel frame is painted
+// in whichever look is active (downloads and the print booklet's diagrams use the same drawing code)
+{
+  const water = () => page.evaluate(() => { const s = document.querySelector('#pool [id="waterGrad"] stop'); return s && s.getAttribute('stop-color'); });
+  const before = await water();
+  await page.click('#look-toggle'); await page.waitForTimeout(500);
+  const after = await water(), expected = await page.evaluate(() => THEME.c('--pool-water-top'));
+  const discsAfter = await page.locator('#pool .disc').count();
+  await page.click('#look-toggle'); await page.waitForTimeout(500);
+  ok('switching the look redraws the open board in that look (water ' + before + ' → ' + after + ') and back', !!before && after !== before && after === expected && discsAfter >= 6 && (await water()) === before);
+  const reel = await page.evaluate(() => {
+    const start = THEME.look(), out = {};
+    const hex = h => { h = h.replace('#', ''); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); };
+    for (const look of ['today', 'silver']) {
+      THEME.setLook(look);
+      const cv = document.createElement('canvas'); cv.width = 320; cv.height = 180; const g = cv.getContext('2d');
+      VIDEOGEN.drawScene(g, { frames: [] }, 0, 320, 180, {});
+      const px = [...g.getImageData(54, 72, 1, 1).data].slice(0, 3), t = 72 / 180;
+      const top = hex(THEME.c('--reel-water-top')), bot = hex(THEME.c('--reel-water-bottom'));
+      const want = top.map((v, i) => Math.round(v + (bot[i] - v) * t));
+      out[look] = { px, want, ok: px.every((v, i) => Math.abs(v - want[i]) <= 12) };
+    }
+    THEME.setLook(start);
+    return out;
+  });
+  ok('a video-reel frame is painted in the active look (today ' + reel.today.px + ', silver ' + reel.silver.px + ')', reel.today.ok && reel.silver.ok && reel.today.px.join() !== reel.silver.px.join());
+}
 await page.click('#play-btn'); await page.waitForTimeout(900);
 await page.screenshot({ path:OUT+'/qa_03_playbook_anim.png' });
 // Steps 👁 toggle — hides the notes bar + the arrows so only the movement shows

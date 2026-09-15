@@ -79,6 +79,25 @@
   --teal-rgb:201,206,213; --teal-d-rgb:91,96,104; --accent-rgb:227,230,234; --navy-04-rgb:4,5,5;
   --navy-07b-rgb:8,8,9; --navy-08c-rgb:10,11,11; --sky-68-rgb:154,169,191; --cyan-40-rgb:155,161,170;
   --cyan-48-rgb:177,182,188;
+
+  /* ---- drawn surfaces (theme Phase 2): board, animation, Film Room marks, 3D, keeper view, exports, reels, confetti.
+     Rule colours stay as they are in every look: 2 m red, 5 m yellow, 6 m green, the ball, the keeper's red cap,
+     the green/yellow shot zones and the shot-for/against marks carry meaning, not decoration. ---- */
+  --pool-deck:#0b0c0e; --pool-water-top:#136373; --pool-water-bottom:#0a2e36; --pool-water-edge:#0f3d47; --pool-mark:#d9dee5;
+  --pool-field-edge:#9aa0a8; --pool-table:#e6e9ed; --pool-table-ink:#0b0c0e; --pool-label:#8b9199; --pool-goal-line:#eceef1; --pool-half:#eceef1;
+  --pool-net:#c9ced5; --pool-goal-post:#eceef1; --pool-sub-zone:rgba(20,22,26,0.65); --pool-sub-edge:#7b818a; --pool-sub-label:#a7adb6;
+  --pool-disc-shadow:#000000; --pool-arrow:#f2f4f6; --pool-trail-def:#9aa0a8;
+  --cap-white:#f2f4f6; --cap-white-edge:#0b0c0e; --cap-white-ink:#101214; --cap-dark:#15171b; --cap-dark-edge:#aeb4bc; --cap-dark-ink:#eceef1;
+  --zone-label:#d9dee5;
+  --scene3d-air:#050506; --scene3d-water-top:rgba(19,99,115,.85); --scene3d-water-bottom:rgba(10,46,54,.92); --scene3d-line:#d9dee5; --scene3d-lane:rgba(217,222,229,.35);
+  --cap3d-dark:#15171b; --cap3d-dark-edge:#aeb4bc; --cap3d-white-edge:#0b0c0e; --cap3d-light-ink:#101214;
+  --gkv-goal:#0b0c0e; --gkv-frame:#d9dee5; --gkv-blocker:#15171b; --gkv-blocker-edge:#aeb4bc; --gkv-waterline:#6fa9b3; --gkv-text:#b9bfc7;
+  --film-corner:#c9ced5; --film-corner-edge:#050506; --film-heat:#c9ced5; --film-shot-other:#c9ced5; --film-shot-edge:#050506;
+  --export-bg:#0b0c0e; --export-title:#eceef1; --export-caption:#a7adb6;
+  --reel-bg:#050506; --reel-water-top:#136373; --reel-water-bottom:#0a2e36; --reel-line:rgba(217,222,229,0.5); --reel-white:#f2f4f6; --reel-dark:#15171b;
+  --reel-ink:#eceef1; --reel-caption:rgba(5,5,6,0.82); --reel-watermark:rgba(236,238,241,0.55); --reel-title-top:#1a1b1e; --reel-title-bottom:#050506;
+  --reel-title:#eceef1; --reel-subtitle:#a7adb6; --reel-brand:rgba(236,238,241,.55);
+  --fx-confetti-2:#c9ced5; --fx-confetti-3:#eceef1; --mascot-ink:#101214;
 }
 
 *{box-sizing:border-box}
@@ -1282,7 +1301,7 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 :root[data-look="silver"] .nav-btn.active{box-shadow:inset 0 1px 0 rgba(var(--white-rgb),.12)}
 :root[data-look="silver"] .icon-btn{color:var(--ink)}
 /* the contrast audit (tests/visual.mjs audit) found these below WCAG AA in this look */
-:root[data-look="silver"] .assign-badge.gk,:root[data-look="silver"] #gk-toggle.active{background:var(--danger-strong);border-color:var(--danger-strong)}
+:root[data-look="silver"] .assign-badge.gk{background:var(--danger-strong);border-color:var(--danger-strong)}
 :root[data-look="silver"] .dev-table th small{opacity:1}
 :root[data-look="silver"] a:not([class]){color:var(--teal)}
-:root[data-look="silver"] #scene3d-toggle.active{background:var(--metal);color:var(--metal-ink);border-color:var(--line)}   /* an active control is metal in this look */
+:root[data-look="silver"] #scene3d-toggle.active,:root[data-look="silver"] #zones-toggle.active,:root[data-look="silver"] #gk-toggle.active{background:var(--metal);color:var(--metal-ink);border-color:var(--line)}   /* an active board toggle is metal in this look; its icon (🟩 🧤 🎥) still says which */

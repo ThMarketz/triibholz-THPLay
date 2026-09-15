@@ -3313,7 +3313,7 @@
     $('reveal-btn').onclick = ()=>{ setMode('solution', true); onStudied(); };
     $('look-toggle').onclick = ()=>{
       const next = THEME.look() === 'silver' ? 'today' : 'silver';
-      THEME.setLook(next); updateLookToggle();
+      THEME.setLook(next); updateLookToggle(); redrawForLook();
       toast(T(next === 'silver' ? 'ui.lookNowSilver' : 'ui.lookNowToday'));
     };
     $('sound-toggle').onclick = (e)=>{
@@ -3390,6 +3390,14 @@
     });
   }
   function refreshLangSwitches(){ buildLangSwitch('lang-switch-auth'); buildLangSwitch('lang-switch-top'); }
+  /* After a look change, everything drawn with colour VALUES (the board and its layers, the 3D replay, the keeper's
+     view, dashboards with the mascot) is redrawn — CSS alone follows the look, drawn SVG and canvas do not. */
+  function redrawForLook(){
+    if (!$('app-screen').classList.contains('active')) return;
+    switchView(state.view);
+    if (state.view === 'playbook' && state.selectedId) openScenario(state.selectedId);
+    applyZones(); updateGkView(); draw3dNow();
+  }
   /* the look switch says what pressing it will do, in the current language */
   function updateLookToggle(){
     const b = $('look-toggle'); if (!b || typeof THEME==='undefined') return;

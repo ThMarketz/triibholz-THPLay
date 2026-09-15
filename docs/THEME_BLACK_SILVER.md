@@ -38,7 +38,7 @@ Playbook screen in today's navy look and in Black & Silver, with glass controls 
 |-------|------|------|--------|
 | 0 | Foundation: every colour becomes a token, a theme switch exists, today's look unchanged | L | ☑ done |
 | 1 | Black & Silver chrome: palette, bars, panels, buttons, forms, menus, toasts | M | ☑ done |
-| 2 | The pool and everything drawn: board, animation, Film Room board, 3D, celebrations | M | ☐ |
+| 2 | The pool and everything drawn: board, animation, Film Room board, 3D, celebrations | M | ☑ done |
 | 3 | Glass on floating controls, with a solid fallback | S | ☐ |
 | 4 | Every screen, both looks, phone widths; sign-off and release | M | ☐ |
 
@@ -51,6 +51,8 @@ Playbook screen in today's navy look and in Black & Silver, with glass controls 
    in the look the coach is using, so export code reads the same tokens as the screen (Phase 2).
    Open detail: a *printed* PDF booklet in Black & Silver uses a lot of ink. If that matters on paper,
    print could keep a light page while downloads follow the theme; raise it in Phase 2.
+   **Decided 2026‑09‑15: white page, diagrams in the look.** The printed booklet keeps its white paper page
+   (dark text, normal ink); the play diagrams on it are drawn in whichever look the coach uses.
 4. **Glass:** on by default, with a switch.
 
 ---
@@ -218,6 +220,48 @@ both looks. This is the sunlight guard.
 
 **Tests.** Visual check of the board, 3D and a reel frame in both looks. Existing smoke/browser
 checks for the board, cue overlay and 3D stay green.
+
+**Done 2026‑09‑15.** Every drawn surface follows the look. Today's look is pixel-identical to Phase 1.
+
+- **Silver drawn tokens.** Added to `:root[data-look="silver"]`, from the approved sample:
+  - **Board:** obsidian deck `#0b0c0e`, steel-teal water `#136373 → #0a2e36`, silver ripples, goal lines
+    and nets, a platinum official table, silver dashed substitution zone.
+  - **Caps:** dark caps `#15171b` with a silver ring `#aeb4bc` so they read on dark water; white caps
+    `#f2f4f6`.
+  - **3D replay:** the same steel-teal water on black, dark caps with silver edges.
+  - **Keeper's view:** black goal, silver frame and blockers.
+  - **Film Room:** silver corners, heat map and neutral shot marks.
+  - **PNG sheet and video reels:** graphite and steel-teal; silver title cards.
+  - **Confetti and mascot:** silver and platinum confetti; mascot ink.
+  - **Never changes in any look:** the 2 m red, 5 m yellow and 6 m green lines, the ball, the keeper's red
+    cap, the green/yellow shot zones and the shot-for/against marks. They carry rules and meaning.
+- **Redraw on switch.** SVG and canvas colours are applied when drawn, so `redrawForLook()` (`js/app.js`)
+  rebuilds the current view, re-opens the open play, and repaints zones, the keeper's view and the 3D
+  replay. Reels, the PNG sheet, SVG downloads and the print booklet's diagrams read the tokens when
+  they're made, so they follow the look automatically. The booklet page itself stays paper
+  (`theme:fixed`), per the decision above.
+- **Consistency fix.** In this look the active **Zones** and **Keeper view** toggles are metal like **3D**,
+  instead of green and red; their icons still say which is which.
+- **Tests.**
+  - `tests/visual.mjs`'s computed-token check is now look-aware: the expected text is read from the
+    stylesheet (bare `:root`, overridden by the active look's block), so silver values are verified in
+    real Firefox too.
+  - Browser +2: the switch redraws the open board in that look (water `#1aa3b0 → #136373`) and back; a
+    video-reel frame is painted in whichever look is active (a water pixel within 12 of the gradient).
+- **Verified** on c5d0d86 plus exactly these files:
+  - today 18/18 pixel-identical to Phase 1;
+  - silver differs only on drawn screens (board, zones and keeper's view, 3D, Film Room, phone playbook)
+    plus ~100 px of mascot ink on dashboards;
+  - contrast audit silver 0;
+  - browser 199/199 in **today** and 199/199 in **silver**, zero console errors;
+  - smoke 674/674, i18n scan 0, host server 84 + 17 skipped, image server 101/101;
+  - identity 79, auth 153, clubs 127.
+- **Fault-injected** 3 ways, each caught:
+  1. `THEME.c` serving today's values in silver (the capture refuses to continue);
+  2. the switch not redrawing (the board water stays `#1aa3b0`);
+  3. reel water without silver values (today and silver pixels identical).
+- **Design check** (captures reviewed): the playbook board, zones and keeper's view, and the 3D replay read
+  as Black & Silver, and the rule lines stay legible on the darker water.
 
 ## Phase 3 — Glass
 
