@@ -378,7 +378,9 @@ const FILM = (() => {
     const det = FIELD.detect(data, Wc, Hc, { step: 2 });
     if (!det.found) {
       vHomography = null; vFieldMode = 'none'; setFieldStatus();
-      out.innerHTML = `<div class="muted">${TX('film.fieldNotFound', { why: esc(det.why || TX('film.noPoolEdges')), pct: Math.round(det.coverage * 100) })}</div>`;
+      // the detector's why is English data; the coach reads it translated, by code
+      const whyKey = { 'low-water': 'film.fieldWhyLowWater', 'not-filled': 'film.fieldWhyNotFilled' }[det.code] || 'film.noPoolEdges';
+      out.innerHTML = `<div class="muted">${TX('film.fieldNotFound', { why: esc(TX(whyKey)), pct: Math.round(det.coverage * 100) })}</div>`;
       return;
     }
     vCorners = det.corners.map(c => ({ x: c.x, y: c.y })); vHomography = det.H; vFieldConf = det.confidence; vFieldMode = 'auto';

@@ -125,7 +125,10 @@ goals, patterns with an example, ball heat, tactics %, formation, defence met) a
 
 `js/field.js` (pure, browser + server): water mask (HSV blue) → trimmed least‑squares lines on
 the mask's left / right / top / bottom boundaries → corner intersections → homography, scored
-0..1 (straightness, size, support). `FIELD.timeline()` turns per‑second detections into a
+0..1 (straightness, size, support). The outline must also be mostly water (fill ≥ 0.55): the edge
+fit only sees each row's outermost water, so separate blue areas (colour bars, two banners) used to
+pass as one pool. Measured pools 0.68–1.00, test patterns 0.35–0.42. A frame that fails says why by
+`code` (`low-water`, `no-edges`, `not-filled`, `degenerate`), translated in the Film Room. `FIELD.timeline()` turns per‑second detections into a
 camera track: small moves are smoothed, cuts jump, weak seconds hold the last good field with
 decaying confidence, and below 0.4 the frames are **unread** (counted in the report).
 

@@ -688,6 +688,11 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('the reason never repeats the raw code, in any language', ['scout-no-frames', 'scout-field-not-found', 'upload-500', 'clip-404', 'timed-out'].every(m => langs.every(l => said(m, l).length > 20 && !said(m, l).includes(m) && !/\{\w+\}/.test(said(m, l)))));
     ok('HTTP statuses are woven in: upload-502 → "error 502"', said('upload-502', 'en').includes('error 502') && reason('job-404').key === 'film.whyServerRefused');
     ok('an empty clip (clip-422: nothing at that moment) says so — not "the server turned the request down"', reason('clip-422').key === 'film.whyClipEmpty' && inAll('film.whyClipEmpty') && reason('upload-422').key === 'film.whyServerRefused');
+    // a coach is not the server's operator: no failure reason tells them to run commands or change server settings
+    const opsWords = { test: t => /docker|MAX_UPLOAD|localhost|nginx/i.test(t) || /\bLAN\b/.test(t) };   // LAN case-sensitive: French "plan large" is not a network
+    const failureKeys = Object.keys(I18N.DICT.en).filter(k => /^film\.why/.test(k) || k === 'ui.couldNotPublishToBase');
+    const opsTalk = langs.flatMap(l => failureKeys.filter(k => opsWords.test(I18N.DICT[l][k] || '')).map(k => l + ':' + k));
+    ok('no failure reason tells a coach to run commands or change server settings (docker, MAX_UPLOAD, localhost…)' + (opsTalk.length ? ' — found: ' + opsTalk.join(', ') : ''), failureKeys.length >= 20 && opsTalk.length === 0);
     ok('an unknown server code or a stray message falls back to a plain sentence, never the code', reason('scout-something-new').key === 'film.whyServerUnknown' && reason('scout-constructor').key === 'film.whyServerUnknown' && reason('Cannot read properties of undefined').key === 'film.whyUnknown' && inAll('film.whyUnknown') && inAll('film.whyServerUnknown'));
   }
 
@@ -827,6 +832,30 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('finds a noisy trapezoid pool: corners within 4 px, confidence ≥ 0.8', det.found && err<4 && det.confidence>=0.8 && Array.isArray(det.H) && det.H.length===9);
     const none = FIELD.detect(new Uint8ClampedArray(W*H*4).fill(90), W, H, {});
     ok('no water → not found with a reason (never guesses)', !none.found && /water/.test(none.why));
+    // separate blue areas must not pass as one pool: the edge fit sees only each row's outermost water
+    { const d=new Uint8ClampedArray(W*H*4); for(let i=0;i<d.length;i+=4){ d[i]=120;d[i+1]=118;d[i+2]=110;d[i+3]=255; }
+      for(let y=0;y<H;y++) for(const [x0,x1] of [[50,90],[230,270]]) for(let x=x0;x<x1;x++){ const i=(y*W+x)*4; d[i]=40;d[i+1]=90;d[i+2]=170; }
+      const bands = FIELD.detect(d, W, H, {});
+      ok('two separate blue bands (a test pattern\'s colour bars) → not a pool: code not-filled, the fill ratio said why', !bands.found && bands.code==='not-filled' && bands.fill < 0.55); }
+    // the detector's why is English data: every code it can return must reach the coach as a translated reason
+    { const fieldSrc = readFileSync(join(APP, 'js/field.js'), 'utf8'), filmSrc = readFileSync(join(APP, 'js/film.js'), 'utf8');
+      const codes = [...new Set([...fieldSrc.matchAll(/code: '([a-z-]+)'/g)].map(m => m[1]))];
+      const mapLine = (filmSrc.match(/const whyKey = \{([^}]*)\}/) || [])[1] || '';
+      const mapped = Object.fromEntries([...mapLine.matchAll(/'([a-z-]+)': '([\w.]+)'/g)].map(m => [m[1], m[2]]));
+      const edgeWords = ['no-edges', 'degenerate'];   // honestly covered by the fallback "no pool edges"
+      const I = window.__T.I18N, langs = I.SUPPORTED.map(l => l.code);
+      const unmapped = codes.filter(c => !edgeWords.includes(c) && !(mapped[c] && langs.every(l => I.DICT[l][mapped[c]])));
+      ok('every field-detector code reaches the coach as a translated reason' + (unmapped.length ? ' — unmapped: ' + unmapped.join(', ') : ''), codes.length >= 4 && codes.includes('not-filled') && unmapped.length === 0); }
+    // …while a hard real-looking pool still is: ripples, 5 lane ropes, 14 players with arms, glare over ~45 % of the water, deck people
+    { let seed=7; const rnd=()=> (seed=(seed*1103515245+12345)>>>0)/4294967296;
+      const inQ=(x,y)=>{ let s=0; for(let k=0;k<4;k++){ const a=trap[k],b=trap[(k+1)%4]; const cr=(b.x-a.x)*(y-a.y)-(b.y-a.y)*(x-a.x); if(cr){ if(!s) s=Math.sign(cr); else if(Math.sign(cr)!==s) return false; } } return true; };
+      const d=new Uint8ClampedArray(W*H*4); const px=(x,y,r,g,b)=>{ if(x<0||y<0||x>=W||y>=H) return; const i=(y*W+x)*4; d[i]=r;d[i+1]=g;d[i+2]=b; };
+      for(let y=0;y<H;y++) for(let x=0;x<W;x++){ d[(y*W+x)*4+3]=255; if(inQ(x,y)){ const k=Math.sin(x*0.7+y*0.3)*12+rnd()*16; px(x,y,30+k*0.3,95+k,150+k); } else px(x,y,120,118,110); }
+      for(let r=1;r<=5;r++){ const y=30+r*23; for(let x=30;x<300;x++) for(let t=0;t<2;t++) px(x,y+t, (x>>1)%2?240:220, (x>>1)%2?240:40, (x>>1)%2?240:40); }
+      for(let p=0;p<14;p++){ const x=60+rnd()*200|0, y=45+rnd()*110|0; for(let yy=0;yy<7;yy++) for(let xx=0;xx<7;xx++) px(x+xx,y+yy, p%2?245:22, p%2?248:26, p%2?250:30); for(let yy=6;yy<10;yy++) for(let xx=-4;xx<11;xx++) px(x+xx,y+yy,200,150,120); }
+      const rx=110*Math.sqrt(0.45), ry=55*Math.sqrt(0.45); for(let y=0;y<H;y++) for(let x=0;x<W;x++) if(((x-170)/rx)**2+((y-90)/ry)**2<1 && inQ(x,y)) px(x,y,210,225,235);
+      const hard = FIELD.detect(d, W, H, {});
+      ok('a hard pool (lane ropes, 14 players, glare over ~45 % of the water) is still found, its fill well above the bar', hard.found && hard.confidence >= 0.8 && hard.fill >= 0.6); }
     const tl = FIELD.timeline([{t:0,det},{t:1,det},{t:2,det:none},{t:3,det:none},{t:4,det:none},{t:5,det:none},{t:6,det:none},{t:7,det:none},{t:8,det}],{});
     ok('moving camera: weak seconds hold the last field with decaying confidence, then go unread', tl[2].held && tl[2].H && tl[2].confidence<det.confidence && tl[7].H===null && tl[8].H && !tl[8].held);
     ok('track stats + lookup by time', FIELD.stats(tl).readPct===Math.round(100*8/9) && FIELD.at(tl, 3.5).t===3);
@@ -1424,6 +1453,15 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     const unknown = [...new Set(named)].filter(k => I.DICT.en[k] === undefined);
     ok(`all ${new Set(named).size} keys named in index.html exist in the dictionary` +
        (unknown.length ? ` — missing: ${unknown.slice(0, 5).join(', ')}` : ''), unknown.length === 0);
+
+    /* The guard must see markup in a quoted string that holds the OTHER quote character — i.e. any
+       attribute: '<span class="muted">…</span>'. Its quote pattern used to forbid both quote kinds
+       inside a string, so exactly that idiom was invisible ("Cutting the clip… ⏳" shipped past it). */
+    {
+      const seen = scanFile('tests/fixtures/i18n-scan-quotes.js').map(x => x.text);
+      ok('the guard sees markup and textContent inside strings that contain the other quote kind, and not translated markup',
+        seen.includes('Cutting the clip now') && seen.includes('Season tools unavailable') && seen.includes('He said "hold the ball" twice') && seen.length === 3);
+    }
 
     // the ratchet: this number may only ever go DOWN
     let regressed = [];

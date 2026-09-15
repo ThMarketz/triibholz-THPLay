@@ -61,20 +61,34 @@ const FIELD = (() => {
     return { corners: corners.map(c => ({ x: +c.x.toFixed(1), y: +c.y.toFixed(1) })), straight, support: Math.min(L.length / gh, T.length / gw) };
   }
   const area = c => Math.abs((c[0].x * c[1].y - c[1].x * c[0].y) + (c[1].x * c[2].y - c[2].x * c[1].y) + (c[2].x * c[3].y - c[3].x * c[2].y) + (c[3].x * c[0].y - c[0].x * c[3].y)) / 2;
+  /* share of the outline that is water, on the mask's own grid (convex quad test) */
+  function fillRatio(m, c) {
+    const inQuad = (x, y) => { let s = 0; for (let k = 0; k < 4; k++) { const a = c[k], b = c[(k + 1) % 4]; const cr = (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x); if (cr) { if (!s) s = Math.sign(cr); else if (Math.sign(cr) !== s) return false; } } return true; };
+    let n = 0, w = 0;
+    for (let gy = 0; gy < m.gh; gy++) for (let gx = 0; gx < m.gw; gx++) if (inQuad(gx * m.step, gy * m.step)) { n++; w += m.mask[gy * m.gw + gx]; }
+    return n ? w / n : 0;
+  }
   const sane = (c, W, H) => c.every(p => isFinite(p.x) && isFinite(p.y) && p.x > -W * 0.5 && p.x < W * 1.5 && p.y > -H * 0.5 && p.y < H * 1.5) && c[1].x > c[0].x + W * 0.2 && c[2].x > c[3].x + W * 0.2 && c[3].y > c[0].y + H * 0.2 && c[2].y > c[1].y + H * 0.2;
 
   /* detect(rgba, W, H, opts) → { found, corners, H, confidence, coverage, why } */
   function detect(data, W, H, opts) {
     opts = opts || {};
     const m = waterMask(data, W, H, opts);
-    if (m.coverage < (opts.minCoverage || 0.12)) return { found: false, confidence: 0, coverage: +m.coverage.toFixed(2), why: 'not enough water in view' };
+    if (m.coverage < (opts.minCoverage || 0.12)) return { found: false, confidence: 0, coverage: +m.coverage.toFixed(2), code: 'low-water', why: 'not enough water in view' };
     const q = quadFromMask(m);
-    if (!q || !sane(q.corners, W, H)) return { found: false, confidence: 0, coverage: +m.coverage.toFixed(2), why: 'pool edges not clear' };
+    if (!q || !sane(q.corners, W, H)) return { found: false, confidence: 0, coverage: +m.coverage.toFixed(2), code: 'no-edges', why: 'pool edges not clear' };
+    /* A pool is ONE body of water, so its outline must be mostly water. The edge fit only sees each row's and column's
+       OUTERMOST water, so separate blue areas (a test pattern's colour bars, two banners) otherwise pass as one big pool.
+       Measured at 320×180: pools 0.68–1.00 (0.68 with glare over 45 % of the water, lane ropes and 14 players);
+       ffmpeg testsrc / SMPTE HD bars 0.35–0.42. 0.55 sits between. It does NOT catch everything blue with straight
+       edges (a sky band fills its outline completely) — that needs real footage to tune. */
+    const fill = fillRatio(m, q.corners);
+    if (fill < (opts.minFill || 0.55)) return { found: false, confidence: 0, coverage: +m.coverage.toFixed(2), fill: +fill.toFixed(2), code: 'not-filled', why: 'the water does not fill the outline' };
     const sizeScore = Math.min(1, area(q.corners) / (W * H) / 0.35);
     const confidence = +Math.max(0, Math.min(1, 0.45 * q.straight + 0.35 * sizeScore + 0.2 * Math.min(1, q.support / 0.6))).toFixed(2);
     const Hm = V().solveHomography(q.corners, V().boardCorners());
-    if (!Hm) return { found: false, confidence: 0, coverage: +m.coverage.toFixed(2), why: 'degenerate corners' };
-    return { found: true, corners: q.corners, H: Hm, confidence, coverage: +m.coverage.toFixed(2), why: null };
+    if (!Hm) return { found: false, confidence: 0, coverage: +m.coverage.toFixed(2), code: 'degenerate', why: 'degenerate corners' };
+    return { found: true, corners: q.corners, H: Hm, confidence, coverage: +m.coverage.toFixed(2), fill: +fill.toFixed(2), why: null };
   }
   /* seam: lane-line anchors (red 2 m / yellow 5 m lines) would refine the corners here */
   function refineWithLines(det) { return det; }
@@ -104,7 +118,7 @@ const FIELD = (() => {
   const at = (track, t) => { let best = null; for (const s of track) { if (s.t <= t + 1e-6) best = s; else break; } return best || track[0] || null; };
   function stats(track) { const n = track.length || 1, read = track.filter(s => s.H).length; return { samples: track.length, readPct: Math.round(100 * read / n), avgConfidence: +(track.reduce((s, x) => s + (x.H ? x.confidence : 0), 0) / n).toFixed(2), held: track.filter(s => s.held && s.H).length }; }
 
-  return { detect, waterMask, quadFromMask, fitLine, refineWithLines, timeline, at, stats, isWater };
+  return { detect, waterMask, quadFromMask, fillRatio, fitLine, refineWithLines, timeline, at, stats, isWater };
 })();
 
 // Node/CommonJS interop (no-op in the browser)

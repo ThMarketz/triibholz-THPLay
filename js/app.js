@@ -1789,7 +1789,7 @@
 
   function renderSeason() {
     const c = $('view-season');
-    if (typeof PLANNER==='undefined' || typeof CALENDAR==='undefined') { c.innerHTML='<div class="muted">Season tools unavailable.</div>'; return; }
+    if (typeof PLANNER==='undefined' || typeof CALENDAR==='undefined') { c.innerHTML='<div class="muted">'+T('ui.seasonToolsUnavailable')+'</div>'; return; }
     const today = new Date(); const target = new Date(today.getTime()+70*86400000);
     const myTests = (typeof TESTLOG!=='undefined' && state.user) ? (loadDev(state.user.email).tests || []).length : 0;
     c.innerHTML = `<div class="season-wrap">

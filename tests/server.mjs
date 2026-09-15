@@ -203,7 +203,8 @@ function frame(w, h) {
         'a clip past the end of the video → 422 clip-empty, and the empty file is neither kept nor served',
         'a clip inside the missing half of a cut-off file → 422 clip-empty (was 200 with a 262-byte file)',
         'auto mode on a real video with a pool → done, field found where it was drawn (±4 px)',
-        'auto mode on a real video with no pool → field-not-found, never a guessed field'];
+        'auto mode on a real video with no pool → field-not-found, never a guessed field',
+        'auto mode on ffmpeg\'s colour-bar test pattern (blue bars, no pool) → field-not-found (was "found", 84 % readable, 17 possessions)'];
       if (!h.ffmpeg) names.forEach(n => skip(n, 'no ffmpeg on this host — the image run covers it'));
       else {
         const { readFileSync, writeFileSync } = await import('node:fs');
@@ -278,6 +279,10 @@ function frame(w, h) {
         ok(names[14], poolJob.status === 'done' && fc.mode === 'auto' && fc.readPct >= 90 && cornersOk);
         const dryJob = await scoutJob(readFileSync(dryPath), {}, autoCal);
         ok(names[15], dryJob.status === 'error' && dryJob.error === 'field-not-found');
+        const barsPath = join(process.env.DATA_DIR, 'fixture-testsrc.mp4');
+        spawnSync(ff, ['-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=d=45:s=320x180:r=25', '-c:v', 'mpeg4', '-b:v', '150k', barsPath]);
+        const barsJob = await scoutJob(readFileSync(barsPath), {}, autoCal);
+        ok(names[16], barsJob.status === 'error' && barsJob.error === 'field-not-found');
       }
     }
 

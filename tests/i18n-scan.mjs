@@ -204,7 +204,7 @@ export function scanFile(relPath) {
   // 2) markup inside ordinary quotes — the `cond ? '<span>No clip</span>' : ''` idiom is
   //    everywhere in this codebase and is exactly as visible as a template literal.
   const code = codeOnly(src, lits);
-  const quoted = /(['"])((?:[^'"\\\n]|\\.)*?)\1/g;
+  const quoted = /(['"])((?:(?!\1)[^\\\n]|\\.)*?)\1/g;
   while ((m = quoted.exec(code))) {
     const body = m[2];
     if (!/<[a-z/]/i.test(body)) continue;                // needs a real tag, not just a `<` in prose
@@ -224,7 +224,7 @@ export function scanFile(relPath) {
      passes 1 and 2 are blind to it. By definition textContent IS what the user reads, which
      makes this the rare pattern with no false positives worth speaking of. This is how
      "Signing in…" and the pool's GOAL JUDGE label stayed English through three tranches. */
-  const textContent = /\.textContent\s*=\s*(['"])((?:[^'"\\\n]|\\.)*?)\1/g;
+  const textContent = /\.textContent\s*=\s*(['"])((?:(?!\1)[^\\\n]|\\.)*?)\1/g;
   while ((m = textContent.exec(src))) push(m.index, m[2], 'textContent');
 
   /* …and the same assignment written as a template literal. The "no markup, don't scan"

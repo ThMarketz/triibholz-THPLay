@@ -408,7 +408,7 @@ await page.screenshot({ path:OUT+'/qa_25_autoscout.png' });
   ok('an unknown server code → a plain fallback sentence, the code never shown', /club server couldn’t finish the analysis/.test(failTxt) && !/some-code-nobody-knows|scout-/.test(failTxt));
   jobState = { status:'done', error:null }; health = Object.assign({}, health, { ffmpeg:false });
   failTxt = await failScout();
-  ok('a club server without ffmpeg says so before uploading (health ffmpeg:false)', /no ffmpeg/.test(failTxt) && !/backend-no-ffmpeg/.test(failTxt));
+  ok('a club server without ffmpeg says so before uploading (health ffmpeg:false)', /can’t read videos/.test(failTxt) && !/backend-no-ffmpeg/.test(failTxt));
   for (const [pat, fn] of Object.entries(mocks)) await page.unroute(pat, fn);
 }
 // 🎯 Game plan chips + 📣 Team debriefs panel

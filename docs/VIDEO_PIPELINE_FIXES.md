@@ -312,6 +312,11 @@ a bug fix.
   mode "finds" a field (84 % readable, average confidence 0.4, which is exactly the app's
   `minConf`) and reports 17 possessions. That's detection accuracy (`js/field.js`), outside this
   plan. Real footage with other blue areas (banners, seats) may do the same.
+  **Partly fixed afterwards:** `js/field.js` now requires the outline to be mostly water (fill ≥ 0.55),
+  which ends that case (the test pattern → `field-not-found`, checked in the image). It does not
+  catch every blue area with straight edges: `testsrc2` (fill 0.61–0.66), two banners (0.71) and a
+  blue sky band (1.00) overlap real pools with heavy glare (0.68). Tuning further needs real match
+  footage.
 - **`clip-empty` UI.** Its sentence is covered by smoke, not by a browser check. The clip buttons
   only appear on a report with real plays, and the rendering path is the same `whyText()` the
   browser checks already exercise for auto-scout.
