@@ -4,12 +4,17 @@ import { firefox } from 'playwright';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const OUT = join(dirname(fileURLToPath(import.meta.url)), 'shots');
-import { mkdirSync } from 'node:fs'; mkdirSync(OUT, { recursive: true });
+import { mkdirSync, mkdtempSync } from 'node:fs'; mkdirSync(OUT, { recursive: true });
+import { tmpdir } from 'node:os';
 const URL = 'http://localhost:8088/';
 let pass=0, fail=0; const errs=[];
 const ok=(n,c)=>{ c?pass++:fail++; console.log((c?'  ✓ ':'  ✗ FAIL: ')+n); };
 
-const browser = await firefox.launch();
+// Give the test Firefox its own empty home. With the user's everyday Firefox (155+) installed, the shared
+// ~/Library/Application Support/Firefox makes Playwright's Firefox hang at launch (151) or refuse to start
+// with "Could not find profile folder." (155). CFFIXED_USER_HOME is the home macOS APIs use; HOME covers the rest.
+const ffHome = mkdtempSync(join(tmpdir(), 'thplay-ffhome-'));
+const browser = await firefox.launch({ env: { ...process.env, HOME: ffHome, CFFIXED_USER_HOME: ffHome } });
 
 function hook(page, tag){
   const thirdParty = t => /youtube\.com|googlevideo|doubleclick|SameSite|__Secure-/.test(t||'');
@@ -300,7 +305,7 @@ ok('☁️ Cloud analysis panel present', await page.locator('#film-cloud').coun
 ok('status starts on-device (offline)', /on-device/i.test(await page.locator('#cloud-status').innerText()));
 ok('no field to type a server address', await page.locator('#cloud-endpoint').count()===0);
 await page.check('#cloud-use'); await page.waitForTimeout(150);
-ok('ticking “club server” switches status to cloud on this origin', /cloud/i.test(await page.locator('#cloud-status').innerText()) && (await page.locator('#cloud-status').innerText()).includes(new URL(page.url()).host));
+ok('ticking “club server” switches status to cloud on this origin', /cloud/i.test(await page.locator('#cloud-status').innerText()) && (await page.locator('#cloud-status').innerText()).includes(new globalThis.URL(page.url()).host));
 await page.uncheck('#cloud-use'); await page.waitForTimeout(150);
 ok('unticking returns to on-device', /on-device/i.test(await page.locator('#cloud-status').innerText()));
 await page.click('#cloud-run'); await page.waitForTimeout(800);
