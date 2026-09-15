@@ -182,8 +182,8 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
     const p = url.pathname;
-    // passkey sign-in: its own request rules and no CORS, so it is handled before everything else
-    if (p === '/api/auth' || p.startsWith('/api/auth/')) {
+    // accounts, clubs and joining: their own request rules and no CORS, so handled before everything else
+    if (/^\/api\/(auth|clubs|join)(\/|$)/.test(p)) {
       if (!auth) { res.writeHead(404, { 'content-type': 'application/json', 'cache-control': 'no-store' }); return res.end(JSON.stringify({ error: 'accounts-off' })); }
       return auth.handle(req, res, p);
     }

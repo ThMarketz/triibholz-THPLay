@@ -38,7 +38,8 @@ const { tx } = require('./db.js');
 const ID = require('./identity.js');
 const W = require('./webauthn.js');
 
-const MIN = 60e3, DAY = 24 * 3600e3;
+const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
+const STEPUP_WINDOW = 5 * MIN;
 const CHALLENGE_TTL = 5 * MIN;
 const SESSION = { staffIdle: 14 * DAY, playerIdle: 30 * DAY, absolute: 180 * DAY, touchEvery: 5 * MIN };
 const MAX_BODY = 64 * 1024;
@@ -47,14 +48,18 @@ const LIMITS = {
   options: { max: 60, windowMs: MIN },          // per client address
   verify: { max: 60, windowMs: MIN },           // per client address
   failureAlert: { max: 10, windowMs: 15 * MIN },   // failed sign-ins on one passkey → audited (never a lock-out)
+  accountsFromCodes: { max: 30, windowMs: HOUR },  // accounts made with join codes or staff invites, per address
   openRegistrations: 5000,                      // open registration challenges, everyone together
+  openRegistrationsPerClub: 50,                 // … per club, not counting operator club-admin codes
+  openStepUpsPerSession: 3,
 };
 const STAFF_ROLES = ['admin', 'coach', 'trainer'];
-const REGISTER_KINDS = ['club-admin'];
+const REGISTER_KINDS = ['club-admin', 'staff-invite', 'join'];
 
 const sha256hex = s => crypto.createHash('sha256').update(s).digest('hex');
 const b64u = b => Buffer.from(b).toString('base64url');
-const httpError = (status, error, extra) => Object.assign(new Error(error), { status, error, extra });
+const httpError = (status, error, extra, headers) => Object.assign(new Error(error), { status, error, extra, headers });
+const tooMany = (windowMs = MIN, error = 'too-many-requests') => httpError(429, error, undefined, { 'retry-after': String(Math.ceil(windowMs / 1000)) });
 const CLIENT_GONE = 499;
 
 /* The address rate limits are keyed on. X-Real-IP is believed only from a private or loopback peer
@@ -105,10 +110,10 @@ function createAuth({ db, cfg, now = Date.now }) {
     return Buffer.from(db.prepare('SELECT secret FROM server_keys WHERE name = ?').get('login-challenge').secret);
   });
 
-  const purge = () => { try { ID.purgeExpired(db, now()); } catch (e) { console.error('[auth] purge', e.message); } };
+  const purge = () => ID.housekeeping(db, now());
   const timer = setInterval(purge, MIN); if (timer.unref) timer.unref();
 
-  function send(res, status, body, cookie) {
+  function send(res, status, body, cookie, extraHeaders) {
     const headers = {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'no-store',
@@ -117,6 +122,7 @@ function createAuth({ db, cfg, now = Date.now }) {
     };
     if (cfg.cookieSecure) headers['strict-transport-security'] = 'max-age=31536000';
     if (cookie) headers['set-cookie'] = cookie;
+    Object.assign(headers, extraHeaders || {});
     res.writeHead(status, headers);
     res.end(JSON.stringify(body));
   }
@@ -170,6 +176,8 @@ function createAuth({ db, cfg, now = Date.now }) {
     return tx(db, () => {
       const open = db.prepare("SELECT count(*) AS n FROM challenges WHERE kind = 'register' AND used_at IS NULL AND expires_at > ?").get(t).n;
       if (open >= LIMITS.openRegistrations) throw httpError(503, 'busy');
+      // a leaked join link cannot crowd out other clubs: registrations open per club are capped too
+      if (payload.kind !== 'club-admin' && db.prepare("SELECT count(*) AS n FROM challenges WHERE kind = 'register' AND club_id = ? AND used_at IS NULL AND expires_at > ? AND json_extract(payload, '$.kind') <> 'club-admin'").get(clubId, t).n >= LIMITS.openRegistrationsPerClub) throw tooMany(CHALLENGE_TTL);
       const id = ID.newId('ch'), challenge = b64u(crypto.randomBytes(32));
       db.prepare(`INSERT INTO challenges (id, kind, challenge, club_id, link_code_hash, payload, created_at, expires_at)
                   VALUES (?, 'register', ?, ?, ?, ?, ?, ?)`).run(id, challenge, clubId, linkCodeHash, JSON.stringify(payload), t, t + CHALLENGE_TTL);
@@ -235,30 +243,41 @@ function createAuth({ db, cfg, now = Date.now }) {
       s.expires_at = Math.min(t + (isStaff(s.user_id) ? SESSION.staffIdle : SESSION.playerIdle), s.absolute_expires_at);
       db.prepare('UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ?').run(t, s.expires_at, hash);
     }
-    return { tokenHash: hash, userId: s.user_id, credentialId: s.credential_id, uv: !!s.uv, createdAt: s.created_at, expiresAt: s.expires_at };
+    return { tokenHash: hash, userId: s.user_id, credentialId: s.credential_id, uv: !!s.uv, stepupAt: s.stepup_at, createdAt: s.created_at, expiresAt: s.expires_at };
   }
 
   function whoami(userId, session) {
     const user = ID.getUser(db, userId);
-    const clubs = db.prepare(`SELECT c.id, c.name, m.role, m.status FROM club_members m JOIN clubs c ON c.id = m.club_id
+    const clubs = db.prepare(`SELECT c.id, c.name, m.role, m.status, m.member_ref, m.request_no, m.requested_at FROM club_members m JOIN clubs c ON c.id = m.club_id
                               WHERE m.user_id = ? AND m.status IN ('approved', 'pending') ORDER BY c.name`).all(userId)
-      .map(c => ({ id: c.id, name: c.name, role: c.role, status: c.status }));
+      .map(c => Object.assign({ id: c.id, name: c.name, role: c.role, status: c.status, memberRef: c.member_ref },
+        c.status === 'pending' ? { requestNo: c.request_no, expiresAt: c.requested_at + ID.MEMBERSHIP.pendingTtl } : {}));
     return { user: { id: user.id, displayName: user.display_name }, clubs, session: session ? { uv: session.uv, expiresAt: session.expiresAt } : undefined };
   }
 
   /* ---- routes: each reads its body first, then the clock ---- */
+  function storeCredential(userId, v, t, clubId) {
+    if (db.prepare('SELECT 1 FROM credentials WHERE id = ?').get(v.credentialId)) throw httpError(409, 'credential-exists');
+    db.prepare(`INSERT INTO credentials (id, user_id, public_key_jwk, alg, sign_count, uv, backup_eligible, backed_up, transports, status, created_at, last_used_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
+      .run(v.credentialId, userId, JSON.stringify(v.jwk), v.alg, v.signCount, v.uv ? 1 : 0, v.backupEligible ? 1 : 0, v.backedUp ? 1 : 0, JSON.stringify(v.transports), t, t);
+    ID.audit(db, { actor: userId, action: 'credential.register', subject: userId, clubId, detail: { credential: v.credentialId.slice(0, 12), alg: v.alg, uv: v.uv } }, t);
+  }
+
+  /* Registration accepts an operator club-admin code (approved admin), a staff invite (a pending
+     request for that role) or a club's join code (a pending player request). */
   async function registerOptions(req, res) {
     const body = await readJson(req);
     const t = now();
     if (sessionFrom(req)) throw httpError(409, 'already-signed-in');
-    if (overLimit('options:' + clientAddress(req), LIMITS.options, t)) throw httpError(429, 'too-many-requests');
+    if (overLimit('options:' + clientAddress(req), LIMITS.options, t)) throw tooMany();
     const displayName = ID.cleanName(body.displayName);
     if (!displayName || displayName.length > 80) throw httpError(400, 'bad-name');
-    const code = ID.peekCode(db, { code: body.code, kinds: REGISTER_KINDS }, t);
+    const code = ID.findCode(db, body.code, t);
     if (!code) throw httpError(400, 'invalid-code');
     const handle = crypto.randomBytes(32);
-    const ch = newRegistrationChallenge({ clubId: code.club_id, linkCodeHash: code.code_hash, payload: { displayName, handle: b64u(handle) } }, t);
-    const club = ID.getClub(db, code.club_id);
+    const ch = newRegistrationChallenge({ clubId: code.clubId, linkCodeHash: code.hash, payload: { displayName, handle: b64u(handle), kind: code.kind, ref: code.ref } }, t);
+    const club = ID.getClub(db, code.clubId);
     send(res, 200, {
       challengeId: ch.id,
       club: club ? { name: club.name, role: code.role } : null,
@@ -278,31 +297,40 @@ function createAuth({ db, cfg, now = Date.now }) {
   async function registerVerify(req, res) {
     const body = await readJson(req);
     const t = now();
-    if (overLimit('verify:' + clientAddress(req), LIMITS.verify, t)) throw httpError(429, 'too-many-requests');
+    const address = clientAddress(req);
+    if (overLimit('verify:' + address, LIMITS.verify, t)) throw tooMany();
     const ch = consumeRegistrationChallenge(body.challengeId, t);
     if (!ch || !ch.link_code_hash || !ch.payload) throw httpError(400, 'challenge-invalid');
     const payload = JSON.parse(ch.payload);
-    const code = db.prepare('SELECT kind, role FROM link_codes WHERE code_hash = ?').get(ch.link_code_hash);
-    if (!code || !REGISTER_KINDS.includes(code.kind)) throw httpError(400, 'invalid-code');
-    const staff = STAFF_ROLES.includes(code.role);
+    if (!REGISTER_KINDS.includes(payload.kind)) throw httpError(400, 'invalid-code');
+    const role = payload.kind === 'join' ? 'player' : (db.prepare('SELECT role FROM link_codes WHERE code_hash = ?').get(ch.link_code_hash) || {}).role;
+    if (!role) throw httpError(400, 'invalid-code');
     let v;
     try {
-      v = W.verifyRegistration({ credential: body.credential, challenge: ch.challenge, origins: cfg.origins, rpId: cfg.rpId, requireUV: staff });
+      v = W.verifyRegistration({ credential: body.credential, challenge: ch.challenge, origins: cfg.origins, rpId: cfg.rpId, requireUV: STAFF_ROLES.includes(role) });
     } catch (e) {
       if (e instanceof W.VerifyError) throw httpError(400, 'registration-failed', { reason: e.reason });
       throw e;
     }
+    // accounts made from codes anyone in a group chat may hold: a looser per-address hourly cap (a
+    // parents' evening shares one address), counted only for a verified passkey
+    if (payload.kind !== 'club-admin' && overLimit('accounts:' + address, LIMITS.accountsFromCodes, t)) throw tooMany(LIMITS.accountsFromCodes.windowMs);
     const previous = sessionFrom(req);
     const out = tx(db, () => {
       const user = ID.createUser(db, { displayName: payload.displayName, handle: Buffer.from(payload.handle, 'base64url') }, t);
-      const granted = ID.consumeCodeHash(db, { hash: ch.link_code_hash, kind: code.kind, usedBy: user.id }, t);
-      if (!granted) throw httpError(400, 'invalid-code');   // used or revoked since the options were issued
-      if (db.prepare('SELECT 1 FROM credentials WHERE id = ?').get(v.credentialId)) throw httpError(409, 'credential-exists');
-      db.prepare(`INSERT INTO credentials (id, user_id, public_key_jwk, alg, sign_count, uv, backup_eligible, backed_up, transports, status, created_at, last_used_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`)
-        .run(v.credentialId, user.id, JSON.stringify(v.jwk), v.alg, v.signCount, v.uv ? 1 : 0, v.backupEligible ? 1 : 0, v.backedUp ? 1 : 0, JSON.stringify(v.transports), t, t);
-      ID.addMember(db, { clubId: granted.club_id, userId: user.id, role: granted.role, status: 'approved', actor: user.id }, t);
-      ID.audit(db, { actor: user.id, action: 'credential.register', subject: user.id, clubId: granted.club_id, detail: { credential: v.credentialId.slice(0, 12), alg: v.alg, uv: v.uv } }, t);
+      let membership;
+      if (payload.kind === 'join') {
+        const code = db.prepare('SELECT max_pending FROM club_join_codes WHERE code_hash = ?').get(ch.link_code_hash);
+        if (!code || !ID.claimJoinCodeHash(db, { hash: ch.link_code_hash }, t)) throw httpError(400, 'invalid-code');
+        membership = ID.requestMembership(db, { clubId: ch.club_id, userId: user.id, role: 'player', via: 'join:' + payload.ref, maxPendingVia: code.max_pending }, t);
+      } else {
+        const granted = ID.consumeCodeHash(db, { hash: ch.link_code_hash, kind: payload.kind, usedBy: user.id }, t);
+        if (!granted) throw httpError(400, 'invalid-code');   // used or revoked since the options were issued
+        membership = payload.kind === 'club-admin'
+          ? ID.addMember(db, { clubId: granted.club_id, userId: user.id, role: granted.role, status: 'approved', actor: user.id, via: 'operator' }, t)
+          : ID.requestMembership(db, { clubId: granted.club_id, userId: user.id, role: granted.role, via: 'staff-invite:' + payload.ref }, t);
+      }
+      storeCredential(user.id, v, t, ch.club_id);
       if (previous) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(previous.tokenHash);   // this browser is someone new now
       return { userId: user.id, cookie: createSession(user.id, v.credentialId, v.uv, t) };
     });
@@ -312,7 +340,7 @@ function createAuth({ db, cfg, now = Date.now }) {
   async function loginOptions(req, res) {
     await readJson(req);
     const t = now();
-    if (overLimit('options:' + clientAddress(req), LIMITS.options, t)) throw httpError(429, 'too-many-requests');
+    if (overLimit('options:' + clientAddress(req), LIMITS.options, t)) throw tooMany();
     const challenge = newLoginChallenge(t);
     send(res, 200, { challengeId: challenge, publicKey: { challenge, rpId: cfg.rpId, timeout: CHALLENGE_TTL, userVerification: 'preferred', allowCredentials: [] } });
   }
@@ -320,7 +348,7 @@ function createAuth({ db, cfg, now = Date.now }) {
   async function loginVerify(req, res) {
     const body = await readJson(req);
     const t = now();
-    if (overLimit('verify:' + clientAddress(req), LIMITS.verify, t)) throw httpError(429, 'too-many-requests');
+    if (overLimit('verify:' + clientAddress(req), LIMITS.verify, t)) throw tooMany();
     const ch = checkLoginChallenge(body.challengeId, t);
     // a replayed response must be refused as a replay before its old counter can look like a clone
     if (!ch || loginChallengeUsed(ch)) throw httpError(400, 'challenge-invalid');
@@ -378,41 +406,139 @@ function createAuth({ db, cfg, now = Date.now }) {
     send(res, 200, { ok: true }, clearCookie());
   }
 
-  const ROUTES = {
-    'POST /api/auth/register/options': registerOptions,
-    'POST /api/auth/register/verify': registerVerify,
-    'POST /api/auth/login/options': loginOptions,
-    'POST /api/auth/login/verify': loginVerify,
-    'POST /api/auth/logout': logout,
+  function requireSession(req) {
+    const s = sessionFrom(req);
+    if (!s) throw httpError(401, 'signed-out');
+    return s;
+  }
+  /* inside a transaction: the session's step-up and UV as they are now (a demotion clears step-up) */
+  function freshSession(session) {
+    const row = db.prepare('SELECT uv, stepup_at FROM sessions WHERE token_hash = ?').get(session.tokenHash);
+    if (!row) throw httpError(401, 'signed-out');
+    return { uv: !!row.uv, stepupAt: row.stepup_at };
+  }
+  const steppedUp = (session, t) => { const f = freshSession(session); return !!f.stepupAt && t - f.stepupAt <= STEPUP_WINDOW; };
+
+  /* ---- step-up: a fresh verified passkey assertion for sensitive actions, bound to this session ---- */
+  async function stepUpOptions(req, res) {
+    await readJson(req);
+    const t = now();
+    const session = requireSession(req);
+    if (overLimit('options:' + clientAddress(req), LIMITS.options, t)) throw tooMany();
+    const ch = tx(db, () => {
+      const open = db.prepare("SELECT count(*) AS n FROM challenges WHERE kind = 'stepup' AND user_id = ? AND used_at IS NULL AND expires_at > ? AND json_extract(payload, '$.session') = ?").get(session.userId, t, session.tokenHash).n;
+      if (open >= LIMITS.openStepUpsPerSession) throw tooMany(CHALLENGE_TTL);
+      const id = ID.newId('ch'), challenge = b64u(crypto.randomBytes(32));
+      db.prepare(`INSERT INTO challenges (id, kind, challenge, user_id, payload, created_at, expires_at) VALUES (?, 'stepup', ?, ?, ?, ?, ?)`)
+        .run(id, challenge, session.userId, JSON.stringify({ session: session.tokenHash }), t, t + CHALLENGE_TTL);
+      return { id, challenge };
+    });
+    const creds = db.prepare("SELECT id, transports FROM credentials WHERE user_id = ? AND status = 'active'").all(session.userId);
+    send(res, 200, { challengeId: ch.id, publicKey: { challenge: ch.challenge, rpId: cfg.rpId, timeout: CHALLENGE_TTL, userVerification: 'required',
+      allowCredentials: creds.map(c => ({ type: 'public-key', id: c.id, transports: JSON.parse(c.transports || '[]') })) } });
+  }
+
+  async function stepUpVerify(req, res) {
+    const body = await readJson(req);
+    const t = now();
+    const session = requireSession(req);
+    if (overLimit('verify:' + clientAddress(req), LIMITS.verify, t)) throw tooMany();
+    const id = body.challengeId;
+    const ch = typeof id === 'string' && /^ch_[A-Za-z0-9_-]{22}$/.test(id) && tx(db, () => {
+      const r = db.prepare("UPDATE challenges SET used_at = ? WHERE id = ? AND kind = 'stepup' AND user_id = ? AND json_extract(payload, '$.session') = ? AND used_at IS NULL AND expires_at > ?").run(t, id, session.userId, session.tokenHash, t);
+      return r.changes === 1 ? db.prepare('SELECT * FROM challenges WHERE id = ?').get(id) : null;
+    });
+    if (!ch) throw httpError(400, 'challenge-invalid');
+    const rawId = body.credential && typeof body.credential.rawId === 'string' && /^[A-Za-z0-9_-]{1,1400}$/.test(body.credential.rawId) ? body.credential.rawId : null;
+    const cred = rawId && db.prepare("SELECT c.*, u.webauthn_user_handle FROM credentials c JOIN users u ON u.id = c.user_id WHERE c.id = ? AND c.user_id = ? AND c.status = 'active'").get(b64u(Buffer.from(rawId, 'base64url')), session.userId);
+    if (!cred) throw httpError(401, 'step-up-failed');
+    let v;
+    try {
+      v = W.verifyAssertion({ credential: body.credential, challenge: ch.challenge, origins: cfg.origins, rpId: cfg.rpId,
+        stored: { alg: cred.alg, jwk: JSON.parse(cred.public_key_jwk), signCount: cred.sign_count, userHandle: Buffer.from(cred.webauthn_user_handle) },
+        requireUV: true, requireUserHandle: true });
+    } catch (e) {
+      if (!(e instanceof W.VerifyError)) throw e;
+      throw httpError(401, 'step-up-failed', e.reason === 'user-not-verified' ? { reason: 'user-verification-required' } : undefined);
+    }
+    if (v.counterRegressed) {
+      tx(db, () => {
+        db.prepare("UPDATE credentials SET status = 'suspect' WHERE id = ?").run(cred.id);
+        db.prepare('DELETE FROM sessions WHERE credential_id = ?').run(cred.id);
+        ID.audit(db, { actor: cred.user_id, action: 'credential.suspect', subject: cred.user_id, detail: { credential: cred.id.slice(0, 12), stored: cred.sign_count, received: v.signCount } }, t);
+      });
+      return send(res, 401, { error: 'step-up-failed' }, clearCookie());
+    }
+    tx(db, () => {
+      const r = db.prepare(`UPDATE credentials SET sign_count = ?, last_used_at = ?, uv = 1 WHERE id = ? AND status = 'active' AND (sign_count < ? OR (? = 0 AND sign_count = 0))`)
+        .run(v.signCount, t, cred.id, v.signCount, v.signCount);
+      if (r.changes !== 1) throw httpError(401, 'step-up-failed');
+      if (db.prepare('UPDATE sessions SET stepup_at = ?, uv = 1 WHERE token_hash = ?').run(t, session.tokenHash).changes !== 1) throw httpError(401, 'signed-out');
+      ID.audit(db, { actor: session.userId, action: 'session.stepup', subject: session.userId, detail: { credential: cred.id.slice(0, 12) } }, t);
+    });
+    send(res, 200, { ok: true, stepUpUntil: t + STEPUP_WINDOW });
+  }
+
+  async function me(req, res) {
+    const s = requireSession(req);
+    send(res, 200, whoami(s.userId, s));
+  }
+
+  const core = { db, cfg, now, send, readJson, httpError, tooMany, sessionFrom, requireSession, freshSession, steppedUp, overLimit, clientAddress, clearCookie, whoami, LIMITS, STEPUP_WINDOW };
+
+  /* [method, path pattern, handler]. POST routes get the Origin/JSON/size/time rules; GETs only no-store. */
+  const ROUTES = [
+    ['GET', /^\/api\/auth\/me$/, me],
+    ['POST', /^\/api\/auth\/register\/options$/, registerOptions],
+    ['POST', /^\/api\/auth\/register\/verify$/, registerVerify],
+    ['POST', /^\/api\/auth\/login\/options$/, loginOptions],
+    ['POST', /^\/api\/auth\/login\/verify$/, loginVerify],
+    ['POST', /^\/api\/auth\/logout$/, logout],
+    ['POST', /^\/api\/auth\/stepup\/options$/, stepUpOptions],
+    ['POST', /^\/api\/auth\/stepup\/verify$/, stepUpVerify],
+    ...require('./clubs.js').routes(core),
+  ];
+
+  /* identity errors → HTTP; a thing that does not exist, or that this person may not see, is one 404 */
+  const IDENTITY_ERRORS = {
+    'no-member': [404, 'not-found'], 'no-code': [404, 'not-found'], 'no-club': [404, 'not-found'],
+    'request-changed': [409], 'last-admin': [409], 'needs-verified-passkey': [409], 'ask-your-admin': [409], 'too-many-join-codes': [409],
+    'too-many-pending': [429], 'too-many-requests-for-club': [429], 'bad-name': [400], 'bad-label': [400], 'bad-days': [400], 'bad-max-pending': [400], 'bad-role': [400], busy: [503],
   };
 
   async function handle(req, res, pathname) {
     try {
-      if (pathname === '/api/auth/me') {
-        if (req.method !== 'GET') throw httpError(405, 'method-not-allowed');
-        const s = sessionFrom(req);
-        if (!s) return send(res, 401, { error: 'signed-out' });
-        return send(res, 200, whoami(s.userId, s));
+      let params = null, route = null, otherMethod = false;
+      for (const [method, re, fn] of ROUTES) {
+        const m = re.exec(pathname);
+        if (!m) continue;
+        if (method !== req.method) { otherMethod = true; continue; }
+        route = fn; params = m.slice(1); break;
       }
-      const route = ROUTES[req.method + ' ' + pathname];
-      if (!route) throw httpError(Object.keys(ROUTES).some(k => k.endsWith(' ' + pathname)) ? 405 : 404, 'no-route');
-      const origin = req.headers.origin;
-      if (typeof origin !== 'string' || !cfg.origins.includes(origin)) throw httpError(403, 'bad-origin');
-      const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
-      if (type !== 'application/json') throw httpError(415, 'json-only');
-      await route(req, res);
+      if (!route) throw httpError(otherMethod ? 405 : 404, otherMethod ? 'method-not-allowed' : 'no-route');
+      if (req.method !== 'GET') {
+        const origin = req.headers.origin;
+        if (typeof origin !== 'string' || !cfg.origins.includes(origin)) throw httpError(403, 'bad-origin');
+        const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+        if (type !== 'application/json') throw httpError(415, 'json-only');
+      }
+      await route(req, res, ...params);
     } catch (e) {
       if (e.status === CLIENT_GONE || res.headersSent || res.destroyed) return;
+      if (!e.status && e.code && IDENTITY_ERRORS[e.code]) {
+        const [status, error] = IDENTITY_ERRORS[e.code];
+        Object.assign(e, { status, error: error || e.code, headers: status === 429 ? { 'retry-after': '600' } : undefined });
+      }
       if (e.status) {
         if (e.status === 413 || e.status === 408) res.setHeader('connection', 'close');
-        return send(res, e.status, Object.assign({ error: e.error }, e.extra || {}));
+        return send(res, e.status, Object.assign({ error: e.error }, e.extra || {}), undefined, e.headers);
       }
       console.error('[auth]', e && e.stack || e);
       send(res, 500, { error: 'server-error' });
     }
   }
 
-  return { handle, sessionFrom, stop: () => clearInterval(timer) };
+  return { handle, sessionFrom, housekeeping: purge, stop: () => clearInterval(timer) };
 }
 
-module.exports = { createAuth, cookieHeader, readSessionToken, clientAddress, addressKey, isPrivateAddress, SESSION, LIMITS, CHALLENGE_TTL };
+module.exports = { createAuth, cookieHeader, readSessionToken, clientAddress, addressKey, isPrivateAddress, SESSION, LIMITS, CHALLENGE_TTL, STEPUP_WINDOW };

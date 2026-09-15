@@ -36,6 +36,7 @@ Then in the app: **Film Room → ☁️ Cloud analysis → endpoint** = `http://
     node tests/server.mjs     # frames-mode API gate (no ffmpeg needed)
     node tests/identity.mjs   # accounts foundation: config, migrations, codes, CLI
     node tests/auth.mjs       # passkey sign-in: CBOR, real browser captures, every ceremony over HTTP
+    node tests/clubs.mjs      # clubs and memberships: codes, requests, roles, removal, step-up, audit
 
 ## Scope
 

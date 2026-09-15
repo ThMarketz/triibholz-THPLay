@@ -161,6 +161,55 @@ const MIGRATIONS = [
       );
     `,
   },
+  {
+    id: 4, name: 'club-membership',
+    sql: `
+      -- Multi-use join codes: a club's link for a team's parents group. Player role only.
+      CREATE TABLE club_join_codes (
+        code_hash   TEXT PRIMARY KEY,
+        club_id     TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+        label       TEXT CHECK (label IS NULL OR length(label) <= 60),
+        max_pending INTEGER NOT NULL DEFAULT 60 CHECK (max_pending BETWEEN 1 AND 200),
+        uses        INTEGER NOT NULL DEFAULT 0,
+        created_by  TEXT NOT NULL,
+        created_at  INTEGER NOT NULL,
+        expires_at  INTEGER NOT NULL,
+        revoked_at  INTEGER
+      );
+      CREATE INDEX club_join_codes_club ON club_join_codes(club_id);
+
+      -- an admin's own note on an invite ("Anna – U14 coach"); shown only to the club's admins
+      ALTER TABLE link_codes ADD COLUMN label TEXT CHECK (label IS NULL OR length(label) <= 60);
+
+      -- member_ref: the id a club sees for a person (never the global user id, so two clubs cannot
+      -- match their lists). request_no: 4 digits the admin compares in person before approving.
+      ALTER TABLE club_members ADD COLUMN member_ref TEXT;
+      ALTER TABLE club_members ADD COLUMN request_no TEXT;
+      ALTER TABLE club_members ADD COLUMN via TEXT;
+      ALTER TABLE club_members ADD COLUMN prev_status TEXT;
+      ALTER TABLE club_members ADD COLUMN prev_decided_at INTEGER;
+      ALTER TABLE club_members ADD COLUMN prev_decided_by TEXT;
+
+      ALTER TABLE users ADD COLUMN ever_approved INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE users ADD COLUMN last_request_at INTEGER;
+      UPDATE users SET ever_approved = 1 WHERE id IN (SELECT user_id FROM club_members WHERE status = 'approved');
+    `,
+    // rows from before this migration get their member_ref here; new rows must bring one
+    run(db) {
+      const { randomBytes } = require('node:crypto');
+      const set = db.prepare('UPDATE club_members SET member_ref = ? WHERE club_id = ? AND user_id = ?');
+      for (const r of db.prepare('SELECT club_id, user_id FROM club_members WHERE member_ref IS NULL').all()) {
+        set.run('m_' + randomBytes(16).toString('base64url'), r.club_id, r.user_id);
+      }
+      db.exec(`
+        CREATE UNIQUE INDEX club_members_ref ON club_members(member_ref);
+        CREATE UNIQUE INDEX club_members_pending_no ON club_members(club_id, request_no) WHERE status = 'pending' AND request_no IS NOT NULL;
+        CREATE INDEX club_members_via ON club_members(club_id, via) WHERE status = 'pending';
+        CREATE TRIGGER club_members_need_ref BEFORE INSERT ON club_members WHEN NEW.member_ref IS NULL
+        BEGIN SELECT RAISE(ABORT, 'member-ref-required'); END;
+      `);
+    },
+  },
 ];
 
 function tx(db, fn) {
@@ -194,7 +243,8 @@ function migrate(db, migrations = MIGRATIONS, now = Date.now()) {
   for (const m of migrations) {
     tx(db, () => {
       if (db.prepare('SELECT 1 FROM schema_migrations WHERE id = ?').get(m.id)) return;
-      db.exec(m.sql);
+      if (m.sql) db.exec(m.sql);
+      if (m.run) m.run(db);
       db.prepare('INSERT INTO schema_migrations (id, name, applied_at) VALUES (?, ?, ?)').run(m.id, m.name, now);
       applied.push(m.id);
     });

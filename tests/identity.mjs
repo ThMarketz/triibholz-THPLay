@@ -76,6 +76,22 @@ section('[2] Migrations — once, atomically, and never under an older build', (
   ok('a database from a newer build is refused by this one', throwsCode(() => DB.open(file), 'db-newer'));
 });
 
+section('[2b] Migration 4 on a database that already has slice-2 members', () => {
+  const file = join(tmp(), 'old.db');
+  const old = DB.open(file, { migrations: DB.MIGRATIONS.filter(m => m.id <= 3) });
+  const u = ID.newId('u'), c = ID.newId('c');
+  old.prepare('INSERT INTO users (id, display_name, webauthn_user_handle, created_at) VALUES (?, ?, ?, ?)').run(u, 'Early Admin', Buffer.alloc(32, 1), T0);
+  old.prepare("INSERT INTO clubs (id, name, created_by, created_at) VALUES (?, 'Early WPC', 'operator', ?)").run(c, T0);
+  old.prepare("INSERT INTO club_members (club_id, user_id, role, status, requested_at, decided_at, decided_by) VALUES (?, ?, 'admin', 'approved', ?, ?, 'operator')").run(c, u, T0, T0);
+  old.close();
+  const db = DB.open(file);
+  const m = db.prepare('SELECT member_ref FROM club_members WHERE user_id = ?').get(u);
+  ok('existing members get a random member_ref', /^m_[A-Za-z0-9_-]{22}$/.test(m.member_ref));
+  ok('existing approved people are marked ever_approved (so account cleanup can never take them)', db.prepare('SELECT ever_approved FROM users WHERE id = ?').get(u).ever_approved === 1 && ID.purgeAbandonedAccounts(db, T0 + 400 * 24 * H) === 0);
+  ok('a new membership row without a member_ref is refused by the database', throwsCode(() => db.prepare("INSERT INTO club_members (club_id, user_id, role, status, requested_at) VALUES (?, ?, 'player', 'pending', ?)").run(c, ID.createUser(db, { displayName: 'X' }, T0).id, T0), 'member-ref-required'));
+  db.close();
+});
+
 section('[3] tx() — all or nothing, synchronous only', () => {
   const db = DB.open(':memory:');
   let rolled = false;
@@ -102,7 +118,7 @@ section('[4] Users and clubs — random ids, handles, and the schema’s own che
   const c = ID.createClub(db, { name: 'Test WPC', actor: 'operator' }, T0);
   ok('a club is created with a random id and audited', /^c_/.test(c) && db.prepare("SELECT count(*) AS n FROM audit WHERE action = 'club.create' AND subject = ?").get(c).n === 1);
   ok('an unknown role is refused in code', throwsCode(() => ID.addMember(db, { clubId: c, userId: a.id, role: 'owner', status: 'approved', actor: 'operator' }, T0), 'bad-role'));
-  ok('…and by the database', throwsCode(() => db.prepare("INSERT INTO club_members VALUES (?, ?, 'owner', 'approved', ?, NULL, NULL)").run(c, a.id, T0), 'CHECK'));
+  ok('…and by the database', throwsCode(() => db.prepare("INSERT INTO club_members (club_id, user_id, role, status, requested_at, member_ref) VALUES (?, ?, 'owner', 'approved', ?, 'm_x')").run(c, a.id, T0), 'CHECK'));
   ok('a membership needs a real club and user', throwsCode(() => ID.addMember(db, { clubId: 'c_nope', userId: a.id, role: 'player', status: 'pending', actor: 'operator' }, T0), 'no-club'));
   ID.addMember(db, { clubId: c, userId: a.id, role: 'coach', status: 'approved', actor: 'operator' }, T0);
   const c2 = ID.createClub(db, { name: 'Other WPC', actor: 'operator' }, T0);

@@ -28,7 +28,7 @@ const HELP = `Triibholz operator commands
   revoke-codes <user-id|club-id>   cancel every unused code for a person or a club
   clubs                            list clubs with member and admin counts
   members <club-id>                list a club's members (id, role, status)
-  purge                            delete expired challenges, sessions and old codes
+  purge                            expire old requests; delete expired challenges, sessions, old codes and abandoned accounts
 
   Database: $DATA_DIR/triibholz.db (DATA_DIR=${process.env.DATA_DIR || '(unset → server/data)'})`;
 
@@ -92,7 +92,7 @@ function main(argv, { now = Date.now(), out = console.log, err = console.error, 
         return 0;
       }
       case 'purge': {
-        out(JSON.stringify(ID.purgeExpired(db, now)));
+        out(JSON.stringify(ID.housekeeping(db, now)));
         return 0;
       }
       default:

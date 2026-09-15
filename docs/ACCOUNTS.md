@@ -21,7 +21,7 @@ the rules below, not a footnote.
 | 0 | API on the app's own origin (`/api` via nginx), service worker never caches `/api`, `no-store` everywhere, port 4200 loopback-only | **done** (9d96100) |
 | 1 | Database, migrations, `tx()`, configuration checks, operator CLI, last-admin rule | **done** (02d9042) |
 | 2 | Passkey registration and sign-in, sessions, behind `ACCOUNTS=1`; nothing depends on it yet | **done** — server only; the app still signs in the simulated way |
-| 3 | Clubs and memberships: invites, join codes, approvals, roles, removal, step-up, UV for staff | |
+| 3 | Clubs and memberships: invites, join codes, approvals, roles, removal, step-up, UV for staff | **done** — server only |
 | 4 | The switch, in one release: the app signs in for real; every existing endpoint authorized | |
 | 5 | Teams, rosters, sheets, templates on the server; read-only offline copy for staff | |
 | 6 | Devices: QR pairing with approval on the old device, devices page, revocation | |
@@ -207,8 +207,8 @@ trust exactly that address, and publish `:8088` on `127.0.0.1` only. Never trust
 `scripts/test-nginx-realip.sh` proves the behaviour with the real nginx image.
 
 A cloned passkey — a signature counter that did not move forward — is marked `suspect`, its
-sessions end, it can no longer sign in, and the event is audited. (Alerting the club's admins
-comes with slice 3.) The trade-off, accepted: if two sign-ins from one *counting* security key
+sessions end, it can no longer sign in, and the event is audited; the admins of every club where
+the person is approved see the alarm on the club page and in the staff log (slice 3). The trade-off, accepted: if two sign-ins from one *counting* security key
 (not a synced passkey, which reports 0) reach the server out of order, the key is treated as
 cloned; the operator's `recover` or `club-admin-invite` restores access. Allowing a tolerance
 window instead would let a clone that signs in first keep its session while the owner is refused.
@@ -262,20 +262,126 @@ authenticator against the real page (needs a Playwright browser download).
 
 ## Clubs and membership (slice 3)
 
-- **Club join code** (QR for a team's parents group): hashed, rotatable, expiring, in `#join=`,
-  and it can only ever request the **player** role — the server ignores any higher role asked for.
-- **Coach, trainer, admin** only through a single-use per-person invite from an admin (72 h).
-- Pending requests show a request number the admin checks in person; they expire after 14 days,
-  are capped per club, and a pending member sees nothing of the club.
-- Joining first offers "Sign in with passkey" and adds the membership to an existing account; a
-  new account is created only when the person says they have none (no duplicate accounts).
-- **One authorization path:** every handler loads the resource and checks it through one helper
-  that joins an **approved** membership in the resource's club. Refusals are `404`. Team staff
-  rows are valid only for approved members of that club.
-- **Removal is one transaction:** team staff rows deleted, uploads/clips/templates/announcements
-  reassigned to the club, the person's open codes revoked, sessions ended if no approved
-  membership remains.
-- The hard-coded join code fallback `TRII-2026` is removed.
+Before a line was written, the draft spec was attacked from three sides (an attacker and a careless
+insider, authorization, and real club life with volunteer admins and parents of minors) and
+merged into 18 decisions. The code was then reviewed again (4 lenses, each finding reproduced or
+refuted): 17 confirmed issues, all fixed, below.
+
+### Who is what
+
+- **`player` is the ordinary member level.** Parents of young players hold it too, until guardian
+  links arrive (slice 7). There is no separate parent role.
+- **Two ways to become coach, trainer or admin**, both an admin's deliberate act:
+  1. someone **new to the club** gets a single-use **staff invite** (72 h). Using it creates a
+     *pending* request for that role — not the role. An admin approves it with a fresh step-up,
+     after comparing the request number, and the person must own a passkey with user verification;
+  2. someone **already approved** gets their role changed (`…/members/:m/role`, step-up, same
+     passkey rule). The same route lowers a role.
+- **Approving grants exactly what was asked for** — a role in the request body is ignored — so a
+  join link can only ever produce a player.
+- An operator's club-admin code used by a person who already has an account makes them admin at
+  once, but only from a verified session with a fresh step-up (a child tapping a link on a parent's
+  tablet makes nobody admin).
+- **Acting as staff needs a verified session.** A session made without user verification (a
+  player, promoted since) gets `403 user-verification-required` until a step-up upgrades it.
+
+### Codes
+
+- **Join links** (for a team's parents group): multi-use, player only, 128-bit, hashed, in
+  `#join=`, 1–90 days (30 by default), at most 10 active per club, and each with its own cap on
+  open requests (`maxPending`, 60 by default, 1–200). Revoking one can also deny, in the same step,
+  every open request that came through it (`denyPending`, step-up) — also after it was revoked
+  plainly or has run out.
+- **Staff invites**: single-use, role coach/trainer/admin, 72 h, with an admin's label ("Anna – U14
+  coach") shown only to admins. The invite list shows *who used* an invite whose request is still
+  open — the tripwire when the real invitee says "my link doesn't work".
+- A code's short ref (8 hex of its hash) is unique within its club.
+- `POST /api/join/peek` (no session) says only the club name, the role, and — when signed in — the
+  name of the person joining. Unknown, used, revoked, expired: one identical `400 invalid-code`.
+
+### Requests
+
+- A request gets a **4-digit request number**, unique among the club's open requests. Approve and
+  deny must give it: the row changes only if it is still that request (`409 request-changed`
+  otherwise — a stale screen, a racing admin, an expiry).
+- Asking again after a refusal or removal **reuses the same row** (same member ref) and keeps what
+  happened last time; the admin sees "previously denied/removed". One immediate retry is free; after
+  a second refusal in a row, one request per 30 days (`409 ask-your-admin`).
+- A pending person may **take their request back**. That never counts as a refusal — and never
+  erases one: a request made after a refusal puts the refusal back. The same for a request that
+  expires (14 days).
+- Using the same join link while already pending or approved changes nothing (`already: true`).
+- Limits: 5 requests per person per club per day; 200 open requests per club; the link's own
+  `maxPending`; 50 open registrations per club (not counting operator codes); 30 accounts made from
+  codes per client address per hour (a parents' evening shares one address). `429` comes with
+  `Retry-After`.
+
+### Privacy between clubs
+
+- A club sees a person by **`member_ref`**, a random id per club — never the account id — so two
+  clubs comparing lists cannot match people.
+- Every refusal for something a person may not see is the **same 404 body**, whether the club, the
+  person or the right is missing, and whatever the target's state.
+- The member list (admins only, verified session) marks requests whose names read the same
+  (NFKC, case and accents folded) and names mixing Latin with Cyrillic or Greek letters. Denied and
+  removed people are not listed.
+- The audit log names people only while they are pending or approved *here*. Anyone else is a
+  "former member" with a ref derived from a keyed hash of the ids — so it does not change when a
+  row or an account is deleted (a vanishing ref would tell the club about that person's activity
+  elsewhere). Details never carry passkey id fragments. Cloned-passkey alarms appear for people
+  approved in the club, without detail.
+- Coaches do not see the member list before teams exist (slice 5): with no teams it would be every
+  family in every age group.
+
+### Losing a role
+
+- **Removal and leaving** are one transaction: the membership ends; the staff invites that person
+  issued are revoked and open requests that came through any of them are denied; their step-up no
+  longer counts; if they have no approved membership left anywhere, all their sessions end. The
+  answer and the club's log say nothing about sessions or other clubs. A removal may also revoke
+  the join links they created (`revokeJoinCodes`); otherwise links belong to the club and stay.
+- **Losing admin by a role change** runs the same invite cascade.
+- The last approved admin can neither leave, be removed, nor be demoted (`409 last-admin`,
+  enforced by the database).
+- Team staff rows (slice 5) and pair/recover codes (slices 6, 7) join the cascade in those slices.
+
+### Step-up
+
+A fresh assertion with user verification from the same session, valid 5 minutes, needed for:
+creating join links and staff invites, bulk deny, approving staff requests, role changes, removal,
+staff leaving, renaming the club, and redeeming an operator code into an existing account. The
+step-up challenge is bound to the session that asked for it (another session of the same person
+cannot finish it), at most 3 open per session. A success also marks that session and that passkey
+as verified.
+
+### Housekeeping (every minute, and `admin.js purge`)
+
+Requests unanswered for 14 days expire (audited). Accounts that were **never approved anywhere**,
+have nothing pending, and have asked for nothing for **45 days** are deleted with their passkeys
+and sessions — the leftovers of a flood, or someone who never came back. An account that was
+approved once is never collected here (retention: slice 8).
+
+### Routes
+
+| Route | Who |
+| --- | --- |
+| `GET /api/clubs/:club` | any approved member; admins also get adminCount, pendingCount, alerts |
+| `POST /api/clubs/:club/name` | admin, step-up |
+| `GET /api/clubs/:club/members` | admin |
+| `POST /api/clubs/:club/members/:m/approve` `{requestNo}` · `…/deny` `{requestNo}` | admin; staff approvals step-up |
+| `POST /api/clubs/:club/members/:m/role` `{role}` · `…/remove` `{revokeJoinCodes?}` | admin, step-up |
+| `POST /api/clubs/:club/leave` | the member (staff: step-up); pending: takes the request back |
+| `GET/POST /api/clubs/:club/join-codes` · `POST …/join-codes/:ref/revoke` `{denyPending?}` | admin; create and bulk deny: step-up |
+| `GET/POST /api/clubs/:club/invites` · `POST …/invites/:ref/revoke` | admin; create: step-up |
+| `GET /api/clubs/:club/audit?category=staff\|requests&before=` | admin; 100 per page |
+| `POST /api/join/peek` `{code}` | anyone |
+| `POST /api/join` `{code}` | a signed-in person |
+| `POST /api/auth/stepup/options` · `…/verify` | a signed-in person |
+| registration | also accepts join links (pending player) and staff invites (pending role) |
+
+Slice 4 still has to: make joining offer "Sign in with passkey" first and create an account only
+when the person says they have none; never submit a join straight from a `#join=` link without a
+tap; remove the hard-coded `TRII-2026` fallback.
 
 ## The switch (slice 4)
 
@@ -395,6 +501,13 @@ None blocks local development. All are needed before real people sign in.
 The design was reviewed a second time after slice 2 was written: 4 lenses (WebAuthn conformance,
 HTTP and sessions, transactions, hostile input), each finding reproduced with a script or refuted.
 9 confirmed, all fixed; 5 refuted, with the reasoning kept where it changed a rule.
+- `tests/clubs.mjs` — slice 3 over real HTTP (127): join links, staff invites, request numbers,
+  approvals and refusals, the 30-day wait, taking a request back, roles, removal and leaving with
+  their cascades, floods and every cap, step-up bound to its session, operator codes for existing
+  accounts, housekeeping through the real timer and the CLI, the audit (names, stable former-member
+  refs, alarms, categories, paging), identical 404s, an admin demoted while their approval is in
+  flight, and a denial or expiry committed on another connection. 30 protections fault-injected;
+  each fails a check.
 - `tests/identity.mjs` — configuration refusals (15 cases), migrations (idempotent, atomic, newer
   database refused), `tx()` (rollback, async refused, nested), users and clubs (random ids,
   handles carry nothing of the id, CHECKs), codes (format, hash-only on disk, forgiving input,
