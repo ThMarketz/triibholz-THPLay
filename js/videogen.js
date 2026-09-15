@@ -16,12 +16,14 @@
    are unit-tested; drawScene/record need a browser canvas.
    ============================================================ */
 const VIDEOGEN = (() => {
+  const C = name => THEME.c(name);   // colour tokens as values (js/theme.js, css/styles.css)
   const SEC_PER_STEP = 1.6, END_HOLD = 1.0;
   // play region in board coords (matches the tactics board)
   const BX0 = 18, BY0 = 22, BX1 = 302, BY1 = 200;
-  const COL = { water1: '#0f5f74', water2: '#0a4152', line: 'rgba(210,240,245,0.5)',
-    red: '#e23b3b', yellow: '#f2c14e', green: '#3fae6b', white: '#f4f8fb', dark: '#1b2531',
-    ball: '#ff8a2a', ink: '#eaf4fb', caption: 'rgba(6,16,22,0.82)' };
+  const COL = {   // getters: read when a frame is drawn, so reels follow the look
+    get water1() { return C('--reel-water-top'); }, get water2() { return C('--reel-water-bottom'); }, get line() { return C('--reel-line'); },
+    get red() { return C('--reel-2m'); }, get yellow() { return C('--reel-5m'); }, get green() { return C('--reel-6m'); }, get white() { return C('--reel-white'); }, get dark() { return C('--reel-dark'); },
+    get ball() { return C('--reel-ball'); }, get ink() { return C('--reel-ink'); }, get caption() { return C('--reel-caption'); } };
 
   const clamp01 = v => Math.max(0, Math.min(1, v));
   const ease = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
@@ -70,7 +72,7 @@ const VIDEOGEN = (() => {
     const M = mapper(W, H), sc = sceneAt(play, t);
     // water
     const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, COL.water1); g.addColorStop(1, COL.water2);
-    ctx.fillStyle = '#06121a'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = C('--reel-bg'); ctx.fillRect(0, 0, W, H);
     const tl = M({ x: BX0, y: BY0 }), br = M({ x: BX1, y: BY1 });
     ctx.fillStyle = g; roundRect(ctx, tl.x, tl.y, br.x - tl.x, br.y - tl.y, 14); ctx.fill();
     // lines: 2m red, 5m yellow, 6m green, half dotted, goal right
@@ -82,7 +84,7 @@ const VIDEOGEN = (() => {
     line(ctx, gp1, gp2, COL.white, 4);
     // movement arrows for the current segment
     if (sc.from && sc.to) {
-      Object.keys(sc.to.att || {}).forEach(k => { const a = sc.from.att && sc.from.att[k], b = sc.to.att[k]; if (a && b && dist(a, b) > 8) arrow(ctx, M(a), M(b), 'rgba(244,248,251,0.5)'); });
+      Object.keys(sc.to.att || {}).forEach(k => { const a = sc.from.att && sc.from.att[k], b = sc.to.att[k]; if (a && b && dist(a, b) > 8) arrow(ctx, M(a), M(b), C('--reel-arrow')); });
     }
     // discs
     const R = Math.max(11, Math.round(W * 0.018));
@@ -91,7 +93,7 @@ const VIDEOGEN = (() => {
     if (sc.gk) disc(ctx, M(sc.gk), R, COL.red, COL.white, 'GK');
     // ball
     const bp = M(sc.ball); ctx.beginPath(); ctx.arc(bp.x, bp.y, Math.round(R * 0.5), 0, 7); ctx.fillStyle = COL.ball; ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.strokeStyle = C('--reel-disc-edge'); ctx.lineWidth = 1; ctx.stroke();
     // caption
     const cap = (opts.caption || (play && (play.title || play.description)) || '').toString();
     if (cap) {
@@ -99,7 +101,7 @@ const VIDEOGEN = (() => {
       ctx.fillStyle = COL.ink; ctx.font = `${Math.round(H * 0.036)}px -apple-system,system-ui,sans-serif`;
       ctx.textBaseline = 'middle'; ctx.fillText(clip(cap, 78), 14, H - 15);
     }
-    ctx.fillStyle = 'rgba(234,244,251,0.55)'; ctx.font = `${Math.round(H * 0.03)}px -apple-system,system-ui,sans-serif`;
+    ctx.fillStyle = C('--reel-watermark'); ctx.font = `${Math.round(H * 0.03)}px -apple-system,system-ui,sans-serif`;
     ctx.textBaseline = 'top'; ctx.fillText('Triibholz · THPLAY', 12, 10);
   }
   // helpers
@@ -110,7 +112,7 @@ const VIDEOGEN = (() => {
   function arrow(c, a, b, col) { line(c, a, b, col, 3); const ang = Math.atan2(b.y - a.y, b.x - a.x), s = 8; c.fillStyle = col; c.beginPath(); c.moveTo(b.x, b.y); c.lineTo(b.x - s * Math.cos(ang - 0.4), b.y - s * Math.sin(ang - 0.4)); c.lineTo(b.x - s * Math.cos(ang + 0.4), b.y - s * Math.sin(ang + 0.4)); c.closePath(); c.fill(); }
   function disc(c, p, r, fill, ink, label) {
     c.beginPath(); c.arc(p.x, p.y, r, 0, 7); c.fillStyle = fill; c.fill();
-    c.strokeStyle = 'rgba(0,0,0,0.35)'; c.lineWidth = 1.5; c.stroke();
+    c.strokeStyle = C('--reel-disc-edge'); c.lineWidth = 1.5; c.stroke();
     c.fillStyle = ink; c.font = `bold ${Math.round(r * 1.05)}px -apple-system,system-ui,sans-serif`;
     c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(label), p.x, p.y + 0.5); c.textAlign = 'left';
   }
@@ -123,14 +125,14 @@ const VIDEOGEN = (() => {
   }
   /* a title card between plays of a reel */
   function drawCard(ctx, W, H, card, t) {
-    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#0b2a3a'); g.addColorStop(1, '#06151f');
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, C('--reel-title-top')); g.addColorStop(1, C('--reel-title-bottom'));
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     const a = Math.min(1, t / 0.35);                       // quick fade-in
-    ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.fillStyle = '#e8f6f8';
+    ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.fillStyle = C('--reel-title');
     ctx.font = `700 ${Math.round(H * 0.085)}px system-ui, -apple-system, Segoe UI, sans-serif`;
     ctx.fillText(String(card.title || '').slice(0, 48), W / 2, H * 0.47);
-    if (card.sub) { ctx.fillStyle = '#7fd4de'; ctx.font = `500 ${Math.round(H * 0.045)}px system-ui, -apple-system, Segoe UI, sans-serif`; ctx.fillText(String(card.sub).slice(0, 80), W / 2, H * 0.58); }
-    ctx.fillStyle = 'rgba(232,246,248,.55)'; ctx.font = `600 ${Math.round(H * 0.032)}px system-ui, sans-serif`; ctx.fillText('Triibholz · THPLAY', W / 2, H * 0.92);
+    if (card.sub) { ctx.fillStyle = C('--reel-subtitle'); ctx.font = `500 ${Math.round(H * 0.045)}px system-ui, -apple-system, Segoe UI, sans-serif`; ctx.fillText(String(card.sub).slice(0, 80), W / 2, H * 0.58); }
+    ctx.fillStyle = C('--reel-brand'); ctx.font = `600 ${Math.round(H * 0.032)}px system-ui, sans-serif`; ctx.fillText('Triibholz · THPLAY', W / 2, H * 0.92);
     ctx.globalAlpha = 1; ctx.textAlign = 'left';
   }
   const segDur = seg => seg.card ? (seg.dur || 1.5) : duration(seg.play);

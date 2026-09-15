@@ -8,6 +8,7 @@
    tags; automatic video tracking is a future server-side feature.
    ============================================================ */
 const FILM = (() => {
+  const C = name => THEME.c(name);   // colour tokens as values (js/theme.js, css/styles.css)
   const KEY = 'thplay.film.v1';
 
   /* ---------------- storage ---------------- */
@@ -388,7 +389,7 @@ const FILM = (() => {
     out.innerHTML = `<div class="cal-wrap"><canvas id="cal-canvas" width="${Wc}" height="${Hc}"></canvas>
       <div class="cal-hint" id="cal-hint">${TX('film.fieldFoundHint', { sure: Math.round(det.confidence * 100), water: Math.round(det.coverage * 100) })}</div></div>`;
     const cv = out.querySelector('#cal-canvas'), g = cv.getContext('2d');
-    const draw = () => { try { g.drawImage(v, 0, 0, Wc, Hc); g.strokeStyle = '#1fc0d4'; g.lineWidth = 2; g.beginPath(); vCorners.forEach((c, i) => i ? g.lineTo(c.x, c.y) : g.moveTo(c.x, c.y)); g.closePath(); g.stroke(); vCorners.forEach(c => { g.fillStyle = '#1fc0d4'; g.strokeStyle = '#08131b'; g.beginPath(); g.arc(c.x, c.y, 5, 0, 7); g.fill(); g.stroke(); }); } catch (e) {} };
+    const draw = () => { try { g.drawImage(v, 0, 0, Wc, Hc); g.strokeStyle = C('--film-corner'); g.lineWidth = 2; g.beginPath(); vCorners.forEach((c, i) => i ? g.lineTo(c.x, c.y) : g.moveTo(c.x, c.y)); g.closePath(); g.stroke(); vCorners.forEach(c => { g.fillStyle = C('--film-corner'); g.strokeStyle = C('--film-corner-edge'); g.beginPath(); g.arc(c.x, c.y, 5, 0, 7); g.fill(); g.stroke(); }); } catch (e) {} };
     draw();
     let dragI = -1;
     const toLocal = ev => { const r = cv.getBoundingClientRect(); return { x: (ev.clientX - r.left) * (Wc / r.width), y: (ev.clientY - r.top) * (Hc / r.height) }; };
@@ -413,7 +414,7 @@ const FILM = (() => {
       const x = r.width ? (ev.clientX - r.left) * (Wc / r.width) : ev.offsetX;
       const y = r.height ? (ev.clientY - r.top) * (Hc / r.height) : ev.offsetY;
       vCorners.push({ x, y });
-      try { g.fillStyle = '#1fc0d4'; g.strokeStyle = '#08131b'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 4.5, 0, 7); g.fill(); g.stroke(); } catch (e) {}
+      try { g.fillStyle = C('--film-corner'); g.strokeStyle = C('--film-corner-edge'); g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 4.5, 0, 7); g.fill(); g.stroke(); } catch (e) {}
       const hint = out.querySelector('#cal-hint');
       if (vCorners.length < 4) {
         hint.innerHTML = TX('film.clickCorner', { n: vCorners.length + 1, corner: labels[vCorners.length] });
@@ -878,7 +879,7 @@ const FILM = (() => {
     const B = VISION.BOARD, cw = (B.x1 - B.x0) / gx, ch = (B.y1 - B.y0) / gy;
     const max = Math.max(1, ...heat);
     heat.forEach((n, k) => { if (!n) return; const cx = k % gx, cy = Math.floor(k / gx);
-      layers.pathLayer.appendChild(POOL.svg('rect', { x: B.x0 + cx * cw, y: B.y0 + cy * ch, width: cw, height: ch, fill: '#1fc0d4', opacity: 0.06 + 0.32 * (n / max) })); });
+      layers.pathLayer.appendChild(POOL.svg('rect', { x: B.x0 + cx * cw, y: B.y0 + cy * ch, width: cw, height: ch, fill: C('--film-heat'), opacity: 0.06 + 0.32 * (n / max) })); });
     const mk = (team, label, pt, setter) => {
       const grp = POOL.disc(team, label); grp.classList.add('editable');
       grp.setAttribute('transform', `translate(${pt.x},${pt.y})`); layers.discLayer.appendChild(grp);
@@ -1075,8 +1076,8 @@ const FILM = (() => {
       const chart = main.querySelector('#film-origin-pool');
       const layers = POOL.render(chart);
       s.events.filter(e=>e.origin).forEach(e => {
-        const col = e.type==='goal-against' ? '#ff5b5b' : e.type==='goal-for' ? '#2bd07a' : '#cfd8e0';
-        layers.pathLayer.appendChild(POOL.svg('circle', { cx:e.origin.x, cy:e.origin.y, r:4, fill:col, stroke:'#08131b', 'stroke-width':1, opacity:0.92 }));
+        const col = e.type==='goal-against' ? C('--film-shot-against') : e.type==='goal-for' ? C('--film-shot-for') : C('--film-shot-other');
+        layers.pathLayer.appendChild(POOL.svg('circle', { cx:e.origin.x, cy:e.origin.y, r:4, fill:col, stroke:C('--film-shot-edge'), 'stroke-width':1, opacity:0.92 }));
       });
     } catch (e) {}
 

@@ -3,6 +3,7 @@
    between keyframes, draw movement paths, and run playback.
    ============================================================ */
 const ANIM = (() => {
+  const C = name => THEME.c(name);   // colour tokens as values (js/theme.js, css/styles.css)
 
   const BALL_OFF = { x: 5.5, y: -5.5 };   // ball offset when held
 
@@ -73,11 +74,11 @@ const ANIM = (() => {
       const from = frames[i - 1] ? ballPoint(frames[i - 1]) : ballPoint(f);
       const to = ballPoint(f);
       const lob = f.shot.kind === 'lob';
-      layers.pathLayer.appendChild(POOL.svg('line', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, stroke: '#ffd166',
+      layers.pathLayer.appendChild(POOL.svg('line', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, stroke: C('--pool-pass'),
         'stroke-width': 2.2, 'stroke-dasharray': lob ? '2 4' : '7 3', opacity: 0.95, 'stroke-linecap': 'round' }));
       [5.5, 8.5].forEach((r, k) => layers.pathLayer.appendChild(POOL.svg('circle', { cx: to.x, cy: to.y, r: r,
-        fill: 'none', stroke: '#ffd166', 'stroke-width': k ? 1 : 2, opacity: k ? 0.55 : 0.95 })));
-      const t = POOL.svg('text', { x: to.x, y: to.y - 12, 'text-anchor': 'middle', fill: '#ffd166',
+        fill: 'none', stroke: C('--pool-pass'), 'stroke-width': k ? 1 : 2, opacity: k ? 0.55 : 0.95 })));
+      const t = POOL.svg('text', { x: to.x, y: to.y - 12, 'text-anchor': 'middle', fill: C('--pool-pass'),
         'font-size': 6.4, 'font-weight': 800, 'font-family': 'Helvetica, Arial, sans-serif' });
       t.textContent = (lob ? 'LOB ' : 'SHOT ') + sh;
       layers.pathLayer.appendChild(t);
@@ -107,9 +108,9 @@ const ANIM = (() => {
         'stroke-linecap':'round','stroke-linejoin':'round' }));
     };
     Object.keys(frames[0].def || {}).forEach(pos => {
-      ctxTrail(frames.map(f=>f.def && f.def[pos]).filter(Boolean), '#9fb2c0', false);
+      ctxTrail(frames.map(f=>f.def && f.def[pos]).filter(Boolean), C('--pool-trail-def'), false);
     });
-    ctxTrail(frames.map(f=>f.gk).filter(Boolean), '#ff8a8a', focusPos==='GK');
+    ctxTrail(frames.map(f=>f.gk).filter(Boolean), C('--pool-trail-gk'), focusPos==='GK');
 
     // attacker movement: one SOLID arrow per step segment
     Object.keys(frames[0].att || {}).forEach(pos => {
@@ -121,7 +122,7 @@ const ANIM = (() => {
         const [a, b] = trim(a0, b0, 6, 7);
         layers.pathLayer.appendChild(POOL.svg('path', {
           d:`M${a.x.toFixed(1)} ${a.y.toFixed(1)} L${b.x.toFixed(1)} ${b.y.toFixed(1)}`,
-          fill:'none', stroke:'#eafdff', 'stroke-width': focused ? 2.8 : 2.2,
+          fill:'none', stroke:C('--pool-arrow'), 'stroke-width': focused ? 2.8 : 2.2,
           'marker-end':'url(#arrow)',
           opacity: dim ? 0.12 : 0.95, 'stroke-linecap':'round' }));
       }
@@ -137,15 +138,15 @@ const ANIM = (() => {
       const g = POOL.svg('g', { class:'pass-arrow' });
       g.appendChild(POOL.svg('path', {
         d:`M${a.x.toFixed(1)} ${a.y.toFixed(1)} L${b.x.toFixed(1)} ${b.y.toFixed(1)}`,
-        fill:'none', stroke:'#ffb057', 'stroke-width':1.7, 'stroke-dasharray':'4.5 3',
+        fill:'none', stroke:C('--pool-arrow-ball'), 'stroke-width':1.7, 'stroke-dasharray':'4.5 3',
         'marker-end':'url(#arrowBall)',
         opacity: focusPos ? 0.55 : 0.95, 'stroke-linecap':'round' }));
       // rectangular step badge — deliberately NOT round, so it can't read as a ball
       const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
       g.appendChild(POOL.svg('rect', { x:mx-4, y:my-3.6, width:8, height:7.2, rx:1.6,
-        fill:'#ff7a18', stroke:'#fff', 'stroke-width':0.8 }));
+        fill:C('--pool-pass-badge'), stroke:C('--pool-pass-badge-edge'), 'stroke-width':0.8 }));
       const t = POOL.svg('text', { x:mx, y:my+2.2, 'text-anchor':'middle', 'font-size':5.6,
-        'font-weight':800, fill:'#fff', 'font-family':'Helvetica, Arial, sans-serif' });
+        'font-weight':800, fill:C('--pool-pass-badge-ink'), 'font-family':'Helvetica, Arial, sans-serif' });
       t.textContent = passNo; g.appendChild(t);
       layers.pathLayer.appendChild(g);
     }
@@ -167,8 +168,8 @@ const ANIM = (() => {
       while (sl.childElementCount > 34) sl.removeChild(sl.firstChild);
       const g = POOL.svg('g', { class: 'splash', transform: `translate(${x.toFixed(1)},${y.toFixed(1)})` });
       const inner = POOL.svg('g', { class: 'splash-anim' });
-      inner.appendChild(POOL.svg('circle', { r: size, fill: 'none', stroke: '#eafcff', 'stroke-width': 1.1, opacity: 0.85 }));
-      inner.appendChild(POOL.svg('circle', { r: size * 0.45, fill: '#eafcff', opacity: 0.5 }));
+      inner.appendChild(POOL.svg('circle', { r: size, fill: 'none', stroke: C('--pool-mark'), 'stroke-width': 1.1, opacity: 0.85 }));
+      inner.appendChild(POOL.svg('circle', { r: size * 0.45, fill: C('--pool-mark'), opacity: 0.5 }));
       g.appendChild(inner);
       sl.appendChild(g);
       setTimeout(() => { if (g.parentNode) g.parentNode.removeChild(g); }, 750);

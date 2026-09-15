@@ -13,6 +13,8 @@
   <meta name="apple-mobile-web-app-title" content="Triibholz" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
   <link rel="icon" type="image/png" href="icons/icon-192.png" />
+  <!-- sets the look on <html> before the first paint; must stay before the stylesheet -->
+  <script src="js/theme.js"></script>
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
@@ -24,12 +26,12 @@
       <div class="auth-brand">
         <div class="auth-logo" aria-hidden="true">
           <svg viewBox="0 0 64 64" width="56" height="56">
-            <circle cx="32" cy="32" r="30" fill="#0e7c86"/>
-            <circle cx="32" cy="32" r="30" fill="none" stroke="#0a5860" stroke-width="2"/>
-            <path d="M6 38 Q16 30 26 38 T46 38 T66 38" fill="none" stroke="#bff0f4" stroke-width="2.5" opacity=".8"/>
-            <circle cx="32" cy="26" r="7" fill="#ff7a18"/>
-            <path d="M25.5 24.5 q6.5 -5 13 0" stroke="#fff" stroke-width="1.4" fill="none"/>
-            <path d="M25.5 27.5 q6.5 5 13 0" stroke="#fff" stroke-width="1.4" fill="none"/>
+            <circle cx="32" cy="32" r="30" style="fill:var(--logo-water)"/>
+            <circle cx="32" cy="32" r="30" fill="none" style="stroke:var(--logo-edge)" stroke-width="2"/>
+            <path d="M6 38 Q16 30 26 38 T46 38 T66 38" fill="none" style="stroke:var(--logo-wave)" stroke-width="2.5" opacity=".8"/>
+            <circle cx="32" cy="26" r="7" style="fill:var(--logo-ball)"/>
+            <path d="M25.5 24.5 q6.5 -5 13 0" style="stroke:var(--logo-seam)" stroke-width="1.4" fill="none"/>
+            <path d="M25.5 27.5 q6.5 5 13 0" style="stroke:var(--logo-seam)" stroke-width="1.4" fill="none"/>
           </svg>
         </div>
         <h1>Triibholz</h1>
@@ -45,10 +47,12 @@
           <span data-i18n="auth.apple">Sign in with Apple</span>
         </button>
 
+        <!-- theme:fixed — Google's own logo colours -->
         <button class="btn-oauth btn-google" id="signin-google">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z"/><path fill="#EA4335" d="M12 4.75c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 1.44 14.97.5 12 .5A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.3 9.14 5.36 12 4.75z"/></svg>
           <span data-i18n="auth.google">Sign in with Google</span>
         </button>
+        <!-- theme:fixed-end -->
 
         <p class="auth-note" data-i18n="auth.note">Sign-in is simulated in this preview build — real Apple &amp; Google accounts connect at deployment.</p>
 

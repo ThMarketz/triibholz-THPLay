@@ -4,6 +4,7 @@
    ============================================================ */
 (() => {
   const $ = (id) => document.getElementById(id);
+  const C = name => THEME.c(name);   // colour tokens as values (js/theme.js, css/styles.css)
   const SESSION_KEY = 'thplay.session.v1';
   const EDIT_ROLES = ['coach','trainer','super-admin'];
 
@@ -1193,7 +1194,7 @@
      SHOT-CHANCE ZONES + THE KEEPER'S VIEW
      Both read js/shot.js, which owns the geometry and the chance model.
      ====================================================== */
-  const ZONE_FILL = { green: '#2ecc71', yellow: '#ffd166' };
+  const ZONE_FILL = { get green() { return C('--zone-green'); }, get yellow() { return C('--zone-yellow'); } };
   function zonesShown() { try { return localStorage.getItem('thplay.showZones') === '1'; } catch (e) { return false; } }
   function paintZones(layers) {
     if (!layers || !layers.zoneLayer || typeof SHOT === 'undefined') return;
@@ -1210,7 +1211,7 @@
       zl.appendChild(t);
     });
     const leg = POOL.svg('text', { x: POOL.WATER.x0 + 4, y: POOL.WATER.y1 - 4, 'font-size': 5.4,
-      fill: '#cfe9f2', opacity: 0.85, 'font-family': 'Helvetica, Arial, sans-serif' });
+      fill: C('--zone-label'), opacity: 0.85, 'font-family': 'Helvetica, Arial, sans-serif' });
     leg.textContent = T('ui.shotLegend');
     zl.appendChild(leg);
   }
@@ -1263,17 +1264,17 @@
     const cv = $('scene3d'); if (!cv || cv.hidden) return;
     const ctx = cv.getContext('2d'); if (!ctx) return;
     ctx.clearRect(0, 0, cv.width, cv.height);
-    ctx.fillStyle = '#050e17'; ctx.fillRect(0, 0, cv.width, cv.height);   // above the water — deck / air
+    ctx.fillStyle = C('--scene3d-air'); ctx.fillRect(0, 0, cv.width, cv.height);   // above the water — deck / air
     const pool = MANIKIN.worldPool();
     const corners = [{ x: -pool.halfLen, y: 0, z: -pool.halfWid }, { x: pool.halfLen, y: 0, z: -pool.halfWid }, { x: pool.halfLen, y: 0, z: pool.halfWid }, { x: -pool.halfLen, y: 0, z: pool.halfWid }].map(proj3);
     // the water itself — a filled, gently gradient surface, not a dry floor
     if (!corners.some(p => !p)) {
       const g = ctx.createLinearGradient(0, Math.min(...corners.map(p => p.y)), 0, Math.max(...corners.map(p => p.y)));
-      g.addColorStop(0, 'rgba(24,110,140,.85)'); g.addColorStop(1, 'rgba(10,50,68,.92)');
+      g.addColorStop(0, C('--scene3d-water-top')); g.addColorStop(1, C('--scene3d-water-bottom'));
       ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(corners[0].x, corners[0].y); corners.slice(1).forEach(p => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.fill();
     }
     // lane markings on the water surface (not a court grid)
-    ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = Math.max(1, cv.height / 480);
+    ctx.strokeStyle = C('--scene3d-ripple'); ctx.lineWidth = Math.max(1, cv.height / 480);
     for (let x = -Math.floor(pool.halfLen); x <= pool.halfLen; x += 5) { const a = proj3({ x, y: 0, z: -pool.halfWid }), b = proj3({ x, y: 0, z: pool.halfWid }); if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); } }
     // the same shot-chance zones as the 2D board, only when Zones is on
     if (zonesShown()) MANIKIN.zoneFloorQuads().forEach(q => {
@@ -1282,11 +1283,11 @@
       ctx.fillStyle = q.color + '40'; ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y); c.slice(1).forEach(p => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.fill();
     });
     // goals (both ends, for context and depth)
-    ctx.strokeStyle = '#e6f6fb'; ctx.lineWidth = Math.max(1.4, cv.height / 260);
+    ctx.strokeStyle = C('--scene3d-line'); ctx.lineWidth = Math.max(1.4, cv.height / 260);
     MANIKIN.goalPosts().forEach(g => g.segs.forEach(seg => { const a = proj3(seg[0]), b = proj3(seg[1]); if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); } }));
     // a small ripple under each player — everyone is at the surface, nothing stands on a floor
     scene.mannequins.forEach(m => { const rp = proj3({ x: m.pos.x, y: 0, z: m.pos.z }); if (!rp) return;
-      ctx.strokeStyle = 'rgba(230,250,255,.35)'; ctx.lineWidth = 1;
+      ctx.strokeStyle = C('--scene3d-lane'); ctx.lineWidth = 1;
       ctx.beginPath(); ctx.ellipse(rp.x, rp.y, rp.scale * 0.22, rp.scale * 0.22 * 0.35, 0, 0, TAU_LOCAL); ctx.stroke();
     });
     // mannequins — upper body only, farthest first (painter's algorithm)
@@ -1298,8 +1299,8 @@
       if (!any) return;
       const px = pts.neck ? pts.neck.scale : 50;   // pixels per metre at this mannequin's depth
       // a neutral, sculpted mannequin body — no gender, no skin tone; the cap alone carries the team
-      const skinLine = '#5a6469';
-      const skinGrad = (x0, y0, x1, y1) => { const g = ctx.createLinearGradient(x0, y0, x1, y1); g.addColorStop(0, '#e3e9ec'); g.addColorStop(1, '#a7b2b8'); return g; };
+      const skinLine = C('--scene3d-skin-line');
+      const skinGrad = (x0, y0, x1, y1) => { const g = ctx.createLinearGradient(x0, y0, x1, y1); g.addColorStop(0, C('--scene3d-skin-light')); g.addColorStop(1, C('--scene3d-skin-dark')); return g; };
       // torso: a filled, tapered panel — shoulders wide, waist narrower, lightly shaded like a sculpted figure
       if (pts.lShoulder && pts.rShoulder && pts.hip) {
         const hipHalfW = Math.abs(pts.rShoulder.x - pts.lShoulder.x) * 0.5 * 0.55;
@@ -1310,7 +1311,7 @@
         ctx.closePath(); ctx.fill(); ctx.stroke();
       }
       // arms: rounded, body-toned capsules — no legs, ever
-      ctx.strokeStyle = '#c3cdd2'; ctx.lineWidth = Math.max(2.2, px * 0.075); ctx.lineCap = 'round';
+      ctx.strokeStyle = C('--scene3d-arm'); ctx.lineWidth = Math.max(2.2, px * 0.075); ctx.lineCap = 'round';
       MANIKIN.BONES.forEach(([a, b]) => { if (pts[a] && pts[b]) { ctx.beginPath(); ctx.moveTo(pts[a].x, pts[a].y); ctx.lineTo(pts[b].x, pts[b].y); ctx.stroke(); } });
       // the cap: crown + two prominent ear guards + a chin strap with tied-off ends, all in the team colour
       if (pts.head) {
@@ -1324,11 +1325,11 @@
         const capGrad = (cx, cy, rad) => { const g = ctx.createRadialGradient(cx - rad * 0.35, cy - rad * 0.4, rad * 0.1, cx, cy, rad * 1.15); g.addColorStop(0, lighten(cap.fill, 0.35)); g.addColorStop(1, cap.fill); return g; };
         [pts.lEar, pts.rEar].forEach(ep => { if (!ep) return; const er = r * 0.52; ctx.fillStyle = capGrad(ep.x, ep.y, er); ctx.beginPath(); ctx.arc(ep.x, ep.y, er, 0, TAU_LOCAL); ctx.fill(); ctx.strokeStyle = cap.stroke; ctx.lineWidth = 1; ctx.stroke(); });
         ctx.fillStyle = capGrad(pts.head.x, pts.head.y, r); ctx.beginPath(); ctx.arc(pts.head.x, pts.head.y, r, 0, TAU_LOCAL); ctx.fill(); ctx.strokeStyle = cap.stroke; ctx.lineWidth = 1; ctx.stroke();
-        if (m.key !== 'GK') { ctx.fillStyle = cap.stroke === '#000' ? '#fff' : '#0b1f2c'; const fs = Math.max(7, pts.head.scale * 0.19); ctx.font = '700 ' + fs + 'px Helvetica, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(m.key.replace(/^[AD]/, ''), pts.head.x, pts.head.y + fs * 0.32); }
+        if (m.key !== 'GK') { ctx.fillStyle = m.team === 'D' ? C('--cap3d-dark-ink') : C('--cap3d-light-ink'); /* by team, never by comparing a colour a look can change */ const fs = Math.max(7, pts.head.scale * 0.19); ctx.font = '700 ' + fs + 'px Helvetica, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(m.key.replace(/^[AD]/, ''), pts.head.x, pts.head.y + fs * 0.32); }
       }
     });
     // the ball
-    if (scene.ball) { const bp = proj3(scene.ball); if (bp) { ctx.fillStyle = '#ff7a18'; ctx.beginPath(); ctx.arc(bp.x, bp.y, Math.max(2, bp.scale * 0.10), 0, TAU_LOCAL); ctx.fill(); } }
+    if (scene.ball) { const bp = proj3(scene.ball); if (bp) { ctx.fillStyle = C('--ball'); ctx.beginPath(); ctx.arc(bp.x, bp.y, Math.max(2, bp.scale * 0.10), 0, TAU_LOCAL); ctx.fill(); } }
   }
   const TAU_LOCAL = Math.PI * 2;
   function scene3dCurrentScenario() { return state.scenarios.find(x => x.id === state.selectedId); }
@@ -1389,20 +1390,20 @@
     while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
     const X0 = 6, X1 = 114, Y0 = 6, Y1 = 38, W = X1 - X0, H = Y1 - Y0;
     const add = (tag, at) => { const e = POOL.svg(tag, at); svgEl.appendChild(e); return e; };
-    add('rect', { x: X0, y: Y0, width: W, height: H, rx: 1.5, fill: '#06131c', stroke: '#e6f6fb', 'stroke-width': 1.6 });
-    for (let i = 1; i < 6; i++) add('line', { x1: X0 + W * i / 6, y1: Y0, x2: X0 + W * i / 6, y2: Y1, stroke: '#e6f6fb', 'stroke-width': 0.3, opacity: 0.25 });
+    add('rect', { x: X0, y: Y0, width: W, height: H, rx: 1.5, fill: C('--gkv-goal'), stroke: C('--gkv-frame'), 'stroke-width': 1.6 });
+    for (let i = 1; i < 6; i++) add('line', { x1: X0 + W * i / 6, y1: Y0, x2: X0 + W * i / 6, y2: Y1, stroke: C('--gkv-frame'), 'stroke-width': 0.3, opacity: 0.25 });
     if (view.bestGap && view.bestGap.size > 0.06)
       add('rect', { x: X0 + view.bestGap.a * W, y: Y0, width: (view.bestGap.b - view.bestGap.a) * W, height: H,
-        fill: '#2ecc71', 'fill-opacity': 0.28, stroke: '#2ecc71', 'stroke-width': 1, 'stroke-dasharray': '3 2' });
+        fill: C('--gkv-gap'), 'fill-opacity': 0.28, stroke: C('--gkv-gap'), 'stroke-width': 1, 'stroke-dasharray': '3 2' });
     (view.blockers || []).forEach(b => add('rect', { x: X0 + b.a * W, y: Y0 + H * 0.28, width: Math.max(1.5, (b.b - b.a) * W), height: H * 0.72,
-      fill: '#0b1b25', 'fill-opacity': 0.9, stroke: '#8fb8ff', 'stroke-width': 0.8 }));
+      fill: C('--gkv-blocker'), 'fill-opacity': 0.9, stroke: C('--gkv-blocker-edge'), 'stroke-width': 0.8 }));
     if (view.keeper) {
       // the keeper reaches roughly two-thirds of the 0.9 m cage height — never floor to crossbar
       const kx = X0 + view.keeper.a * W, kw = Math.max(3, (view.keeper.b - view.keeper.a) * W);
-      add('rect', { x: kx, y: Y0 + H * 0.34, width: kw, height: H * 0.66, rx: 2, fill: '#e2413a', 'fill-opacity': 0.85, stroke: '#ffdede', 'stroke-width': 0.8 });
+      add('rect', { x: kx, y: Y0 + H * 0.34, width: kw, height: H * 0.66, rx: 2, fill: C('--gkv-keeper'), 'fill-opacity': 0.85, stroke: C('--gkv-keeper-edge'), 'stroke-width': 0.8 });
     }
-    add('line', { x1: X0, y1: Y1, x2: X1, y2: Y1, stroke: '#3fd0e0', 'stroke-width': 2 });      // water line
-    const t = add('text', { x: X0 + W / 2, y: 46, 'text-anchor': 'middle', 'font-size': 5.4, fill: '#9fd7e4', 'font-family': 'Helvetica, Arial, sans-serif' });
+    add('line', { x1: X0, y1: Y1, x2: X1, y2: Y1, stroke: C('--gkv-waterline'), 'stroke-width': 2 });      // water line
+    const t = add('text', { x: X0 + W / 2, y: 46, 'text-anchor': 'middle', 'font-size': 5.4, fill: C('--gkv-text'), 'font-family': 'Helvetica, Arial, sans-serif' });
     t.textContent = view.keeperMissing
       ? T('ui.gkNoKeeperInStep')
       : T('ui.gkCoverage', { pct: Math.round(view.coverPct * 10) * 10 });
@@ -2679,9 +2680,9 @@
     const W = (opts && opts.w) || 640, H = Math.round(W * 9 / 16), pad = 16, head = 64;
     const sheet = document.createElement('canvas'); sheet.width = cols * W + (cols + 1) * pad; sheet.height = head + rows * H + (rows + 1) * pad;
     const g = sheet.getContext('2d'); if (!g) return null;
-    g.fillStyle = '#0b1b25'; g.fillRect(0, 0, sheet.width, sheet.height);
-    g.fillStyle = '#e8f6f8'; g.font = '700 26px system-ui, -apple-system, Segoe UI, sans-serif'; g.fillText(String(sc.title || 'Play').slice(0, 60), pad, 34);
-    g.fillStyle = '#7fd4de'; g.font = '500 15px system-ui, sans-serif'; g.fillText(T('ui.sheetCaption', { situation: DATA.sit(sc.situation).label, phase: T('phase.' + sc.phase), n: n }), pad, 56);
+    g.fillStyle = C('--export-bg'); g.fillRect(0, 0, sheet.width, sheet.height);
+    g.fillStyle = C('--export-title'); g.font = '700 26px system-ui, -apple-system, Segoe UI, sans-serif'; g.fillText(String(sc.title || 'Play').slice(0, 60), pad, 34);
+    g.fillStyle = C('--export-caption'); g.font = '500 15px system-ui, sans-serif'; g.fillText(T('ui.sheetCaption', { situation: DATA.sit(sc.situation).label, phase: T('phase.' + sc.phase), n: n }), pad, 56);
     for (let i = 0; i < n; i++) { const c = stepCanvas(play, i, W, H); if (!c) return null; g.drawImage(c, pad + (i % cols) * (W + pad), head + pad + Math.floor(i / cols) * (H + pad)); }
     return sheet;
   }
@@ -2702,7 +2703,7 @@
       const notes = Object.keys(sc.notes || {}).filter(k => (sc.notes[k] || '').trim()).map(k => `<li><b>${esc(k)}</b> ${esc(sc.notes[k])}</li>`).join('');
       return `<section class="play"><h1>${esc(sc.title || 'Play')}</h1><p class="sub">${T('ui.printPlaySub', { situation: esc(DATA.sit(sc.situation).label), phase: T('phase.' + sc.phase), n: sc.frames.length })}${sc.author ? ' · ' + esc(sc.author) : ''}</p>${sc.description ? `<p>${esc(sc.description)}</p>` : ''}${img}${notes ? `<h2>${T('assign.hint')}</h2><ul>${notes}</ul>` : ''}</section>`; };
     return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(scns.length === 1 ? (scns[0].title || 'Play') : T('ui.nPlaysTitle', { n: scns.length }))} — Triibholz</title>
-      <style>body{font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;color:#111;margin:0;padding:18mm 16mm}.play{page-break-after:always}.play:last-child{page-break-after:auto}h1{margin:0 0 2px;font-size:22px}h2{font-size:14px;margin:14px 0 4px}.sub{color:#555;margin:0 0 8px}img{width:100%;max-width:720px;display:block;border-radius:6px;margin:8px 0}ul{padding-left:18px}li{margin:2px 0}@media print{body{padding:0}}</style></head>
+      <style>/* theme:fixed — the print booklet is paper for now; whether printing follows the look is decided in theme Phase 2 */body{font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;color:#111;margin:0;padding:18mm 16mm}.play{page-break-after:always}.play:last-child{page-break-after:auto}h1{margin:0 0 2px;font-size:22px}h2{font-size:14px;margin:14px 0 4px}.sub{color:#555;margin:0 0 8px}img{width:100%;max-width:720px;display:block;border-radius:6px;margin:8px 0}ul{padding-left:18px}li{margin:2px 0}@media print{body{padding:0}}</style></head>
       <body>${scns.map(page).join('')}<script>setTimeout(function(){window.print();},350);<\/script></body></html>`;
   }
   function openPrint(scns) {

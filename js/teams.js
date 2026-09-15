@@ -654,6 +654,7 @@ const TEAMS = (() => {
   }
 
   // printing opens a bare window, so it carries its own copy of the sheet styles
+  /* theme:fixed — the official team sheet is a paper form: black on white in every look */
   const PRINT_CSS = `body{font:10pt Verdana,Geneva,sans-serif;color:#000;margin:18mm 16mm}.ts-title{font:700 14pt Arial,Helvetica,sans-serif;margin:0 0 14pt}
     .ts-t{width:100%;border-collapse:collapse;margin:0 0 16pt}.ts-t td,.ts-t th{border:1px solid #000;padding:3pt 5pt;text-align:left;vertical-align:top;font-weight:400}
     .ts-roster td{height:14pt}.ts-sign td{height:30pt}.ts-2nd{color:#555}.ts-note p{margin:2pt 0;font-weight:700}.ts-lead{color:#e4002b}.ts-i{font-style:italic}`;

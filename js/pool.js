@@ -8,6 +8,7 @@
    Red goal box = 2 m deep (goal line → 2 m) and 1 m beyond each post.
    ============================================================ */
 const POOL = (() => {
+  const C = name => THEME.c(name);   // colour tokens as values (js/theme.js, css/styles.css)
   /* The pool's own markings are text a player reads, so they follow the app language.
      They are drawn onto the SVG rather than written as markup, which is why the i18n
      scanner never saw them — it now watches textContent assignments too. */
@@ -62,45 +63,45 @@ const POOL = (() => {
 
     const defs = svg('defs', {});
     const grad = svg('linearGradient', { id: 'waterGrad', x1: '0', y1: '0', x2: '0', y2: '1' });
-    grad.appendChild(svg('stop', { offset: '0', 'stop-color': '#1aa3b0' }));
-    grad.appendChild(svg('stop', { offset: '1', 'stop-color': '#0c7f8c' }));
+    grad.appendChild(svg('stop', { offset: '0', 'stop-color': C('--pool-water-top') }));
+    grad.appendChild(svg('stop', { offset: '1', 'stop-color': C('--pool-water-bottom') }));
     defs.appendChild(grad);
-    [['arrow','#eafdff'],['arrowBall','#ffb057'],['arrowCtx','#ff8a8a']].forEach(([id,fill])=>{
+    [['arrow',C('--pool-arrow')],['arrowBall',C('--pool-arrow-ball')],['arrowCtx',C('--pool-arrow-context')]].forEach(([id,fill])=>{
       const mk = svg('marker', { id, viewBox: '0 0 10 10', refX: '7.5', refY: '5', markerWidth: '5.5', markerHeight: '5.5', orient: 'auto-start-reverse' });
       mk.appendChild(svg('path', { d: 'M0 0 L10 5 L0 10 z', fill }));
       defs.appendChild(mk);
     });
     const fl = svg('filter', { id: 'discShadow', x: '-40%', y: '-40%', width: '180%', height: '180%' });
-    fl.appendChild(svg('feDropShadow', { dx: '0', dy: '1.2', stdDeviation: '1.4', 'flood-color': '#00131a', 'flood-opacity': '0.45' }));
+    fl.appendChild(svg('feDropShadow', { dx: '0', dy: '1.2', stdDeviation: '1.4', 'flood-color': C('--pool-disc-shadow'), 'flood-opacity': '0.45' }));
     defs.appendChild(fl);
     // clip for the animated water layers + a soft light sheen
     const clip = svg('clipPath', { id: 'waterClip' });
     clip.appendChild(svg('rect', { x: WATER.x0, y: WATER.y0, width: WATER.w, height: WATER.h }));
     defs.appendChild(clip);
     const sheen = svg('radialGradient', { id: 'waterSheen', cx: '0.3', cy: '0.18', r: '0.9' });
-    sheen.appendChild(svg('stop', { offset: '0', 'stop-color': '#ffffff', 'stop-opacity': '0.16' }));
-    sheen.appendChild(svg('stop', { offset: '0.55', 'stop-color': '#ffffff', 'stop-opacity': '0.04' }));
-    sheen.appendChild(svg('stop', { offset: '1', 'stop-color': '#ffffff', 'stop-opacity': '0' }));
+    sheen.appendChild(svg('stop', { offset: '0', 'stop-color': C('--pool-sheen'), 'stop-opacity': '0.16' }));
+    sheen.appendChild(svg('stop', { offset: '0.55', 'stop-color': C('--pool-sheen'), 'stop-opacity': '0.04' }));
+    sheen.appendChild(svg('stop', { offset: '1', 'stop-color': C('--pool-sheen'), 'stop-opacity': '0' }));
     defs.appendChild(sheen);
     svgEl.appendChild(defs);
 
     // deck
-    svgEl.appendChild(svg('rect', { x: 0, y: 0, width: VB.w, height: VB.h, fill: '#0c2030' }));
+    svgEl.appendChild(svg('rect', { x: 0, y: 0, width: VB.w, height: VB.h, fill: C('--pool-deck') }));
 
     // top strip: OFFICIAL TABLE + goal judges
     const tableW = 120, tableX = (VB.w - tableW) / 2;
-    svgEl.appendChild(svg('rect', { x: tableX, y: 6, width: tableW, height: 14, rx: 2, fill: '#ffffff' }));
-    label(svgEl, VB.w / 2, 16, T('pool.officialTable'), '#0b2030');
-    label(svgEl, WATER.x0 + 6, 14, T('pool.goalJudge'), '#8fb0c4', 'start', 5.5);
-    label(svgEl, WATER.x1 - 6, 14, T('pool.goalJudge'), '#8fb0c4', 'end', 5.5);
+    svgEl.appendChild(svg('rect', { x: tableX, y: 6, width: tableW, height: 14, rx: 2, fill: C('--pool-table') }));
+    label(svgEl, VB.w / 2, 16, T('pool.officialTable'), C('--pool-table-ink'));
+    label(svgEl, WATER.x0 + 6, 14, T('pool.goalJudge'), C('--pool-label'), 'start', 5.5);
+    label(svgEl, WATER.x1 - 6, 14, T('pool.goalJudge'), C('--pool-label'), 'end', 5.5);
 
     // water
-    svgEl.appendChild(svg('rect', { x: WATER.x0, y: WATER.y0, width: WATER.w, height: WATER.h, fill: 'url(#waterGrad)', stroke: '#0a5860', 'stroke-width': 1.5 }));
+    svgEl.appendChild(svg('rect', { x: WATER.x0, y: WATER.y0, width: WATER.w, height: WATER.h, fill: 'url(#waterGrad)', stroke: C('--pool-water-edge'), 'stroke-width': 1.5 }));
     // living water: two ripple layers drift in opposite directions (CSS keyframes),
     // drawn wider than the pool and clipped so the loop is seamless
     const wavePath = (yy) => `M${WATER.x0 - 72} ${yy} q 18 -6 36 0` + ' t 36 0'.repeat(11);
     const mkRipples = (cls, ys, w, op) => {
-      const g = svg('g', { class: cls, stroke: '#eafcff', 'stroke-width': w, fill: 'none',
+      const g = svg('g', { class: cls, stroke: C('--pool-mark'), 'stroke-width': w, fill: 'none',
         opacity: op, 'clip-path': 'url(#waterClip)' });
       ys.forEach(yy => g.appendChild(svg('path', { d: wavePath(yy) })));
       svgEl.appendChild(g);
@@ -109,7 +110,7 @@ const POOL = (() => {
     mkRipples('ripples-b', [46, 80, 116, 152, 186].map(y=>y-32+WATER.y0-30+32), 0.8, 0.07);
     svgEl.appendChild(svg('rect', { x: WATER.x0, y: WATER.y0, width: WATER.w, height: WATER.h,
       fill: 'url(#waterSheen)', 'pointer-events': 'none' }));
-    svgEl.appendChild(svg('rect', { x: WATER.x0, y: WATER.y0, width: WATER.w, height: WATER.h, fill: 'none', stroke: '#2bd07a', 'stroke-width': 1.5, opacity: 0.85 }));
+    svgEl.appendChild(svg('rect', { x: WATER.x0, y: WATER.y0, width: WATER.w, height: WATER.h, fill: 'none', stroke: C('--pool-field-edge'), 'stroke-width': 1.5, opacity: 0.85 }));
 
     const lineG = svg('g', { 'stroke-width': 1.6 });
     const vline = (x, color, w = 1.6, dash = null) => {
@@ -119,13 +120,13 @@ const POOL = (() => {
     };
     [ 'L', 'R' ].forEach(end => {
       const f = end === 'L' ? fromLeft : fromRight;
-      vline(f(0.3), '#ffffff', 1.6);      // goal line
-      vline(f(2), '#ff3b3b', 1.8);        // 2 m red
-      vline(f(5), '#ffd400', 1.8, '4 3'); // 5 m yellow
-      vline(f(6), '#39e08a', 1.6, '2 3'); // 6 m green
+      vline(f(0.3), C('--pool-goal-line'), 1.6);      // goal line
+      vline(f(2), C('--pool-2m'), 1.8);        // 2 m red
+      vline(f(5), C('--pool-5m'), 1.8, '4 3'); // 5 m yellow
+      vline(f(6), C('--pool-6m'), 1.6, '2 3'); // 6 m green
     });
-    vline(WATER.x0 + WATER.w / 2, '#ffffff', 1.8, '3 3');  // half / centre (dotted)
-    lineG.appendChild(svg('circle', { cx: WATER.x0 + WATER.w / 2, cy: CY, r: 2, fill: '#ffffff' }));
+    vline(WATER.x0 + WATER.w / 2, C('--pool-half'), 1.8, '3 3');  // half / centre (dotted)
+    lineG.appendChild(svg('circle', { cx: WATER.x0 + WATER.w / 2, cy: CY, r: 2, fill: C('--pool-half') }));
     svgEl.appendChild(lineG);
 
     // side rail colour markers
@@ -134,9 +135,9 @@ const POOL = (() => {
       const bot = yRail < WATER.y0 ? yRail : yRail + 4;
       [ 'L', 'R' ].forEach(end => {
         const f = end === 'L' ? fromLeft : fromRight;
-        sideMarker(svgEl, f(2), top, bot, '#ff3b3b');
-        sideMarker(svgEl, f(5), top, bot, '#ffd400');
-        sideMarker(svgEl, f(6), top, bot, '#39e08a');
+        sideMarker(svgEl, f(2), top, bot, C('--pool-2m'));
+        sideMarker(svgEl, f(5), top, bot, C('--pool-5m'));
+        sideMarker(svgEl, f(6), top, bot, C('--pool-6m'));
       });
     });
 
@@ -148,16 +149,16 @@ const POOL = (() => {
       const x2 = f(2);
       const bx = Math.min(gx, x2), bw = Math.abs(x2 - gx);
       svgEl.appendChild(svg('rect', { x: bx, y: CY - redHalf, width: bw, height: redHalf * 2,
-        fill: 'rgba(226,59,59,0.10)', stroke: '#ff3b3b', 'stroke-width': 1.4 }));
+        fill: C('--pool-2m-zone'), stroke: C('--pool-2m'), 'stroke-width': 1.4 }));
     });
 
     // ---- goals ----
     [ WATER.x0, WATER.x1 ].forEach((gx, idx) => {
       const dir = idx === 0 ? -1 : 1;
-      const net = svg('g', { stroke: '#cfeff3', 'stroke-width': 0.5, opacity: 0.6 });
+      const net = svg('g', { stroke: C('--pool-net'), 'stroke-width': 0.5, opacity: 0.6 });
       for (let i = 1; i < 5; i++) net.appendChild(svg('line', { x1: gx + dir * (i * 1.2), y1: CY - GHALF, x2: gx + dir * (i * 1.2), y2: CY + GHALF }));
       svgEl.appendChild(net);
-      const post = svg('g', { stroke: '#ffffff', 'stroke-width': 2.4, fill: 'none' });
+      const post = svg('g', { stroke: C('--pool-goal-post'), 'stroke-width': 2.4, fill: 'none' });
       post.appendChild(svg('line', { x1: gx, y1: CY - GHALF, x2: gx + dir * 6, y2: CY - GHALF }));
       post.appendChild(svg('line', { x1: gx, y1: CY + GHALF, x2: gx + dir * 6, y2: CY + GHALF }));
       post.appendChild(svg('line', { x1: gx + dir * 6, y1: CY - GHALF, x2: gx + dir * 6, y2: CY + GHALF }));
@@ -166,7 +167,7 @@ const POOL = (() => {
 
     // ---- goal-judge marks (top corners only) ----
     [[WATER.x0, WATER.y0], [WATER.x1, WATER.y0]].forEach(([cx, cy]) => {
-      svgEl.appendChild(svg('rect', { x: cx - 3, y: cy - 3, width: 6, height: 6, fill: '#e23b3b', stroke: '#fff', 'stroke-width': 0.6 }));
+      svgEl.appendChild(svg('rect', { x: cx - 3, y: cy - 3, width: 6, height: 6, fill: C('--pool-judge-mark'), stroke: C('--pool-judge-mark-edge'), 'stroke-width': 0.6 }));
     });
 
     // ---- flying substitution: central strip on the bottom side ----
@@ -174,15 +175,15 @@ const POOL = (() => {
       svgEl.appendChild(svg('rect', { x: zone.x0, y: zone.y0, width: zone.x1 - zone.x0, height: zone.y1 - zone.y0,
         rx: 3, fill, stroke, 'stroke-width': 1, 'stroke-dasharray': '4 3' }));
     }
-    [SUB_L, SUBZONE].forEach(z => box(z, 'rgba(15,58,47,0.65)', '#3fd08a'));
-    label(svgEl, (WATER.x0 + WATER.x1) / 2, SUBZONE.y1 + 9, T('pool.flyingSub'), '#8fe0bc', 'middle', 5);
+    [SUB_L, SUBZONE].forEach(z => box(z, C('--pool-sub-zone'), C('--pool-sub-edge')));
+    label(svgEl, (WATER.x0 + WATER.x1) / 2, SUBZONE.y1 + 9, T('pool.flyingSub'), C('--pool-sub-label'), 'middle', 5);
 
     // ---- exclusion / re-entry: red right-angle bracket in each corner ----
     const bracket = (cx, cy, sx, sy) => {
       const ix = 3, gl = 16, sl = 14;                 // inset + arm lengths
       const x = cx + ix * sx, y = cy + ix * sy;
       svgEl.appendChild(svg('path', { d: `M ${x} ${y + gl * sy} L ${x} ${y} L ${x + sl * sx} ${y}`,
-        fill: 'none', stroke: '#ff3b3b', 'stroke-width': 2.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
+        fill: 'none', stroke: C('--pool-exclusion'), 'stroke-width': 2.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
     };
     bracket(WATER.x0, WATER.y0, +1, +1);  // top-left
     bracket(WATER.x1, WATER.y0, -1, +1);  // top-right
@@ -206,9 +207,9 @@ const POOL = (() => {
   function disc(team, labelTxt, small) {
     const g = svg('g', { class: 'disc' + (small ? ' wait' : ''), 'data-team': team, 'data-label': labelTxt });
     const r = small ? 4.2 : 5.2;   // small discs — the tactics own the board
-    let fill = '#ffffff', stroke = '#0b1f2c', txt = '#0b1f2c';
-    if (team === 'D') { fill = '#11151c'; stroke = '#000'; txt = '#ffffff'; }
-    if (team === 'GK') { fill = '#e23b3b'; stroke = '#7a0f0f'; txt = '#ffffff'; }
+    let fill = C('--cap-white'), stroke = C('--cap-white-edge'), txt = C('--cap-white-ink');
+    if (team === 'D') { fill = C('--cap-dark'); stroke = C('--cap-dark-edge'); txt = C('--cap-dark-ink'); }
+    if (team === 'GK') { fill = C('--cap-gk'); stroke = C('--cap-gk-edge'); txt = C('--cap-gk-ink'); }
     g.appendChild(svg('circle', { r, fill, stroke, 'stroke-width': 1.3, filter: 'url(#discShadow)' }));
     const t = svg('text', { 'text-anchor': 'middle', y: small ? 1.7 : 2.1, fill: txt,
       'font-size': small ? 4.8 : 5.9, 'font-weight': 800, 'font-family': 'Helvetica, Arial, sans-serif' });
@@ -219,8 +220,8 @@ const POOL = (() => {
 
   function ball() {
     const g = svg('g', { class: 'ball' });
-    g.appendChild(svg('circle', { r: 3.0, fill: '#ff7a18', stroke: '#9c3d00', 'stroke-width': 0.9, filter: 'url(#discShadow)' }));
-    g.appendChild(svg('path', { d: 'M-2.4 -0.9 q2.4 -1.8 4.8 0 M-2.4 0.9 q2.4 1.8 4.8 0', stroke: '#fff', 'stroke-width': 0.55, fill: 'none', opacity: .85 }));
+    g.appendChild(svg('circle', { r: 3.0, fill: C('--ball'), stroke: C('--ball-edge'), 'stroke-width': 0.9, filter: 'url(#discShadow)' }));
+    g.appendChild(svg('path', { d: 'M-2.4 -0.9 q2.4 -1.8 4.8 0 M-2.4 0.9 q2.4 1.8 4.8 0', stroke: C('--ball-seam'), 'stroke-width': 0.55, fill: 'none', opacity: .85 }));
     return g;
   }
 

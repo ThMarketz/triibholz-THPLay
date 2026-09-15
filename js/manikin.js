@@ -25,6 +25,7 @@
    SHOT are not loaded.
    ============================================================ */
 const MANIKIN = (() => {
+  const C = name => THEME.c(name);   // colour tokens as values (js/theme.js, css/styles.css)
   const TAU = Math.PI * 2;
   const lerp = (a, b, t) => a + (b - a) * t;
   const ease = (t) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;   // matches ANIM's easeInOutQuad
@@ -76,7 +77,10 @@ const MANIKIN = (() => {
   const TORSO = ['lShoulder', 'rShoulder', 'hip'];
   // the cap: crown + two ear guards + a chin strap, all in the team colour
   const CAP_PARTS = { crown: 'head', lEar: 'lEar', rEar: 'rEar', chin: 'chin' };
-  const CAP = { A: { fill: '#f5f8fa', stroke: '#0b1f2c' }, D: { fill: '#11151c', stroke: '#000' }, GK: { fill: '#e23b3b', stroke: '#7a0f0f' } };
+  const CAP = {   // getters: read when drawn, so a look change needs no reload
+    get A() { return { fill: C('--cap3d-white'), stroke: C('--cap3d-white-edge') }; },
+    get D() { return { fill: C('--cap3d-dark'), stroke: C('--cap3d-dark-edge') }; },
+    get GK() { return { fill: C('--cap3d-gk'), stroke: C('--cap3d-gk-edge') }; } };
 
   /* rotate a pose's local joints by facingYaw (around the vertical axis) and place it at a world origin */
   function jointsWorld(poseId, facingYaw, origin) {
@@ -153,7 +157,7 @@ const MANIKIN = (() => {
   /* the same green/yellow bands the 2D "Zones" toggle draws, as floor quads (attacked goal only) */
   function zoneFloorQuads() {
     if (typeof SHOT === 'undefined') return [];
-    const COLOR = { green: '#2ecc71', yellow: '#ffd166' };
+    const COLOR = { green: C('--zone-green'), yellow: C('--zone-yellow') };
     return SHOT.bands().map(b => {
       const c1 = toWorld({ x: b.x, y: b.y }), c2 = toWorld({ x: b.x + b.w, y: b.y + b.h });
       return { color: COLOR[b.id], x0: Math.min(c1.x, c2.x), x1: Math.max(c1.x, c2.x), z0: Math.min(c1.z, c2.z), z1: Math.max(c1.z, c2.z) };

@@ -4,6 +4,7 @@
    All effects are safe no-ops when unsupported.
    ============================================================ */
 const FX = (() => {
+  const C = name => THEME.c(name);   // colour tokens as values (js/theme.js, css/styles.css)
   const SKEY = 'thplay.sound';
   let soundOn = false;
   try { soundOn = localStorage.getItem(SKEY) === '1'; } catch(e){}
@@ -43,7 +44,7 @@ const FX = (() => {
     count = count || 90;
     const wrap = document.createElement('div'); wrap.className='fx-confetti';
     document.body.appendChild(wrap);
-    const cols = ['#ff7a18','#16b3c4','#2bd07a','#ffd400','#ffffff','#e23b3b'];
+    const cols = ['--fx-confetti-1','--fx-confetti-2','--fx-confetti-3','--fx-confetti-4','--fx-confetti-5','--fx-confetti-6'].map(C);
     const W = window.innerWidth || 360;
     for (let i=0;i<count;i++){
       const s = document.createElement('span');
@@ -83,12 +84,12 @@ const FX = (() => {
     const eyesClosed = mood === 'neglected';
     return `<svg class="mascot mascot-${mood}" width="${size}" height="${size}" viewBox="0 0 48 48" aria-hidden="true">
       <g transform="rotate(${tilt} 24 25)">
-      <circle cx="24" cy="25" r="20" fill="#ff7a18" stroke="#9c3d00" stroke-width="2"/>
-      <path d="M6 22 q18 -12 36 0 M6 30 q18 12 36 0 M24 5 v40" stroke="#fff" stroke-width="1.4" fill="none" opacity=".85"/>
+      <circle cx="24" cy="25" r="20" fill="${C('--mascot-body')}" stroke="${C('--mascot-edge')}" stroke-width="2"/>
+      <path d="M6 22 q18 -12 36 0 M6 30 q18 12 36 0 M24 5 v40" stroke="${C('--mascot-seam')}" stroke-width="1.4" fill="none" opacity=".85"/>
       ${eyesClosed
-        ? '<path d="M13 21 q4 3 8 0 M27 21 q4 3 8 0" stroke="#0b1f2c" stroke-width="2" fill="none" stroke-linecap="round"/>'
-        : '<circle cx="17" cy="21" r="4.4" fill="#fff"/><circle cx="31" cy="21" r="4.4" fill="#fff"/><circle cx="18" cy="22" r="2.1" fill="#0b1f2c"/><circle cx="32" cy="22" r="2.1" fill="#0b1f2c"/>'}
-      <path d="${MASCOT_MOUTH[mood]}" stroke="#0b1f2c" stroke-width="2" fill="none" stroke-linecap="round"/>
+        ? '<path d="M13 21 q4 3 8 0 M27 21 q4 3 8 0" stroke="' + C('--mascot-ink') + '" stroke-width="2" fill="none" stroke-linecap="round"/>'
+        : '<circle cx="17" cy="21" r="4.4" fill="' + C('--mascot-eye') + '"/><circle cx="31" cy="21" r="4.4" fill="' + C('--mascot-eye') + '"/><circle cx="18" cy="22" r="2.1" fill="' + C('--mascot-ink') + '"/><circle cx="32" cy="22" r="2.1" fill="' + C('--mascot-ink') + '"/>'}
+      <path d="${MASCOT_MOUTH[mood]}" stroke="${C('--mascot-ink')}" stroke-width="2" fill="none" stroke-linecap="round"/>
       </g>
     </svg>`;
   }

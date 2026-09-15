@@ -1,7 +1,7 @@
 /* Headless regression suite (jsdom) — full app flow without a browser.
    Run:  node tests/smoke.mjs   (deps: npm i inside tests/) */
 import { JSDOM } from 'jsdom';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TextEncoder as TE, TextDecoder as TD } from 'node:util';
@@ -15,9 +15,9 @@ window.TextDecoder = window.TextDecoder || TD;   // TESTLOG's XLSX reader needs 
 window.DecompressionStream = window.DecompressionStream || globalThis.DecompressionStream;   // jsdom has neither; Node does
 window.Response = window.Response || globalThis.Response;
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/sheetdoc.js','js/eligibility.js','js/teamsheet.js','js/teams.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/api.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/theme.js','js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/sheetdoc.js','js/eligibility.js','js/teamsheet.js','js/teams.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/api.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { API, POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET , TEAMS };';
+  + '\n;\nwindow.__T = { THEME, API, POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET , TEAMS };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -1472,6 +1472,38 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
       if (n < cap) console.log(`      ↓ ${f} improved to ${n} — lower BASELINE in tests/i18n-scan.mjs to lock it in`);
     });
     ok('no new hard-coded UI string was added', regressed.length === 0);
+  }
+
+  console.log('\n[6i2] Theme foundation — every colour is a token, and code that draws reads the same values');
+  {
+    const { THEME } = window.__T;
+    const css = readFileSync(join(APP, 'css/styles.css'), 'utf8');
+    const rs = css.indexOf(':root{'), re = css.indexOf('}', rs), root = css.slice(rs, re);
+    const cssTok = Object.fromEntries([...root.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map(m => [m[1], m[2].trim()]));
+    const fb = THEME.FALLBACK.today;
+    const drift = Object.keys(fb).filter(k => cssTok[k] !== fb[k]);
+    ok('js/theme.js fallback = the CSS token values, one for one' + (drift.length ? ' — differs: ' + drift.slice(0, 6).join(', ') : ''), Object.keys(fb).length >= 100 && drift.length === 0);
+    const jsFiles = ['js/pool.js', 'js/animate.js', 'js/film.js', 'js/app.js', 'js/videogen.js', 'js/fx.js', 'js/manikin.js'];
+    const asked = [...new Set(jsFiles.flatMap(fl => [...readFileSync(join(APP, fl), 'utf8').matchAll(/\bC\('(--[\w-]+)'\)|THEME\.c\('(--[\w-]+)'\)/g)].map(m => m[1] || m[2])))];
+    const missing = asked.filter(n => !(n in fb) || !(n in cssTok));
+    ok('every colour token code asks for exists in the CSS and the fallback (' + asked.length + ' names)' + (missing.length ? ' — missing: ' + missing.join(', ') : ''), asked.length >= 90 && missing.length === 0);
+    ok('THEME.c returns the value, and the look is set on <html> before anything draws', THEME.c('--pool-deck') === '#0c2030' && document.documentElement.getAttribute('data-look') === 'today' && THEME.look() === 'today');
+    /* the ratchet: a colour written straight into a file is a colour a look cannot change. Allowed only in the token
+       block (:root), in regions marked theme:fixed (paper, third-party logos, the print booklet until Phase 2),
+       in js/theme.js (the fallback copy) and js/qr.js (a QR code must stay dark on light to scan). */
+    const HEX = /#[0-9a-fA-F]{6}(?![\w-])|#[0-9a-fA-F]{3}(?![\w-])|rgba?\(\s*\d/g;
+    const cssBody = (css.slice(0, rs) + css.slice(re + 1)).replace(/\/\* theme:fixed[\s\S]*?\/\* theme:fixed-end \*\//g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    const cssLeft = [];
+    cssBody.replace(/\{([^{}]*)\}/g, (w, d) => { (d.match(HEX) || []).forEach(x => cssLeft.push(x)); return w; });
+    const htmlSrc = readFileSync(join(APP, 'index.html'), 'utf8').replace(/<!-- theme:fixed[\s\S]*?<!-- theme:fixed-end -->/g, '').replace(/<meta name="theme-color"[^>]*>/, '');
+    const htmlLeft = htmlSrc.match(HEX) || [];
+    const jsLeft = [];
+    readdirSync(join(APP, 'js')).filter(n => n.endsWith('.js') && !['theme.js', 'qr.js'].includes(n)).forEach(n => {
+      let src = readFileSync(join(APP, 'js', n), 'utf8');
+      src = src.replace(/theme:fixed[\s\S]*?(<\/style>|`;)/g, '');   // a fixed region runs to the end of its style block
+      (src.match(HEX) || []).forEach(x => jsLeft.push(n + ' ' + x));
+    });
+    ok('no colour is hard-coded outside the tokens (CSS ' + cssLeft.length + ', index.html ' + htmlLeft.length + ', JS ' + jsLeft.length + ')' + (jsLeft.length ? ' — ' + jsLeft.slice(0, 5).join(', ') : ''), cssLeft.length === 0 && htmlLeft.length === 0 && jsLeft.length === 0);
   }
 
   console.log('\n[7] Basics + i18n');
