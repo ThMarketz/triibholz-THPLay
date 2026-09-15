@@ -161,7 +161,23 @@
         </span>
         <button class="icon-btn" id="help-btn" title="How to use this page" data-i18n-title="ui.howToUseThis">？</button>
         <button class="icon-btn" id="sound-toggle" title="Sound effects" data-i18n-title="ui.soundEffects">🔇</button>
-        <button class="icon-btn" id="look-toggle" aria-pressed="false">◐</button>
+        <span class="dl-wrap" id="look-wrap">
+          <button class="icon-btn" id="look-toggle" aria-haspopup="true" aria-expanded="false">◐</button>
+          <div class="dl-menu look-menu" id="look-menu" hidden>
+            <div class="look-row">
+              <span class="look-h" data-i18n="ui.lookLabel">Look</span>
+              <span class="look-seg" role="group">
+                <button type="button" class="look-opt" data-look="today" aria-pressed="false" data-i18n="ui.lookNavy">Navy</button>
+                <button type="button" class="look-opt" data-look="silver" aria-pressed="false" data-i18n="ui.lookSilver">Black &amp; Silver</button>
+              </span>
+            </div>
+            <div class="look-row">
+              <span class="look-h" data-i18n="ui.glassLabel">Glass</span>
+              <button type="button" class="look-opt" id="glass-toggle" aria-pressed="false"></button>
+            </div>
+            <p class="look-note" id="look-note"></p>
+          </div>
+        </span>
         <div class="lang-switch" id="lang-switch-top"></div>
         <div class="user-pill" id="user-pill" title="Account" data-i18n-title="ui.account">
           <span class="user-avatar" id="user-avatar">C</span>

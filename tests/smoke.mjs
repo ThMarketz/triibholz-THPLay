@@ -1492,7 +1492,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
        block (:root), in regions marked theme:fixed (paper, third-party logos, the print booklet until Phase 2),
        in js/theme.js (the fallback copy) and js/qr.js (a QR code must stay dark on light to scan). */
     const HEX = /#[0-9a-fA-F]{6}(?![\w-])|#[0-9a-fA-F]{3}(?![\w-])|rgba?\(\s*\d/g;
-    const cssBody = (css.slice(0, rs) + css.slice(re + 1)).replace(/:root\[data-look="[a-z]+"\]\{[^}]*\}/g, '').replace(/\/\* theme:fixed[\s\S]*?\/\* theme:fixed-end \*\//g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    const cssBody = (css.slice(0, rs) + css.slice(re + 1)).replace(/:root\[data-look="[a-z]+"\](\[data-glass="[a-z]+"\])?\{[^}]*\}/g, '').replace(/\/\* theme:fixed[\s\S]*?\/\* theme:fixed-end \*\//g, '').replace(/\/\*[\s\S]*?\*\//g, '');
     const cssLeft = [];
     cssBody.replace(/\{([^{}]*)\}/g, (w, d) => { (d.match(HEX) || []).forEach(x => cssLeft.push(x)); return w; });
     const htmlSrc = readFileSync(join(APP, 'index.html'), 'utf8').replace(/<!-- theme:fixed[\s\S]*?<!-- theme:fixed-end -->/g, '').replace(/<meta name="theme-color"[^>]*>/, '');
@@ -1505,12 +1505,48 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     });
     // a look redefines tokens; it may not invent new ones, and an -rgb twin must be the same colour as its token
     const hexRgb = v => { let x = v.replace('#', ''); if (x.length === 3) x = x.split('').map(c => c + c).join(''); return [0, 2, 4].map(i => parseInt(x.slice(i, i + 2), 16)).join(','); };
-    const looks = [...css.matchAll(/:root\[data-look="([a-z]+)"\]\{([^}]*)\}/g)].map(m => [m[1], Object.fromEntries([...m[2].matchAll(/(--[\w-]+):\s*([^;]+);/g)].map(x => [x[1], x[2].trim()]))]);
+    const looks = [...css.matchAll(/:root\[data-look="([a-z]+)"\](\[data-glass="on"\])?\{([^}]*)\}/g)].map(m => [m[1] + (m[2] ? '+glass' : ''), Object.fromEntries([...m[3].matchAll(/(--[\w-]+):\s*([^;]+);/g)].map(x => [x[1], x[2].trim()]))]);
     ok('the CSS defines a Black & Silver look, and js/theme.js offers it', looks.some(([n]) => n === 'silver') && THEME.LOOKS.join() === 'today,silver');
     const invented = looks.flatMap(([n, t]) => Object.keys(t).filter(k => !(k in cssTok)).map(k => n + ':' + k));
     ok('a look only redefines tokens that already exist' + (invented.length ? ' — new: ' + invented.join(', ') : ''), invented.length === 0);
     const twinOff = [['today', cssTok], ...looks].flatMap(([n, t]) => Object.keys(t).filter(k => /-rgb$/.test(k)).filter(k => { const base = t[k.replace(/-rgb$/, '')] || cssTok[k.replace(/-rgb$/, '')]; return !/^#/.test(base) || hexRgb(base) !== t[k].replace(/\s/g, ''); }).map(k => n + ':' + k));
     ok('every -rgb twin is the same colour as its token, in every look' + (twinOff.length ? ' — off: ' + twinOff.join(', ') : ''), twinOff.length === 0);
+    /* Glass (theme Phase 3): text on a floating control must stay AA through the tint, against the brightest things likely
+       behind it — the silver water, a white cap spread into it by the 18 px blur (25 % cap over 75 % water), the deck and a
+       raised panel. The tint does the legibility work; blur and sheen only make it look like glass. Checked with glass on
+       and with the solid fallback. */
+    {
+      const silverT = Object.assign({}, cssTok, (looks.find(([n]) => n === 'silver') || [, {}])[1]);
+      const glassT = Object.assign({}, silverT, (looks.find(([n]) => n === 'silver+glass') || [, {}])[1]);
+      const col = v => { v = String(v).trim(); if (v[0] === '#') { const [r, g, b] = hexRgb(v).split(',').map(Number); return { r, g, b, a: 1 }; } const m = /rgba?\(([^)]+)\)/.exec(v); const p = m[1].split(',').map(Number); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };
+      const over = (t, u) => ({ r: t.r * t.a + u.r * (1 - t.a), g: t.g * t.a + u.g * (1 - t.a), b: t.b * t.a + u.b * (1 - t.a), a: 1 });
+      const lum = c => [c.r, c.g, c.b].map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }).reduce((t, v, i) => t + v * [0.2126, 0.7152, 0.0722][i], 0);
+      const ratio = (x, y) => { const [a, b] = [lum(x), lum(y)].sort((p, q) => q - p); return (a + 0.05) / (b + 0.05); };
+      const water = col(silverT['--pool-water-top']), cap = col(silverT['--cap-white']);
+      const backdrops = { 'water': water, 'deep water': col(silverT['--pool-water-bottom']), 'a white cap in the blur': over({ ...cap, a: 0.25 }, water), 'deck': col(silverT['--pool-deck']), 'raised panel': col(silverT['--panel2']) };
+      const inks = ['--ink', '--white', '--ink-dim', '--yellow-73', '--cyan-68', '--cyan-76'];
+      const fails = [];
+      for (const [mode, T] of [['glass', glassT], ['solid', silverT]]) {
+        const tint = col(T['--glass-tint']), sheen = T['--glass-sheen'] === 'none' ? null : col((T['--glass-sheen'].match(/rgba?\([^)]+\)/) || [])[0]);
+        for (const [bn, bd] of Object.entries(backdrops)) {
+          let surface = over(tint, bd); if (sheen) surface = over(sheen, surface);
+          for (const ink of inks) { const r = ratio(col(silverT[ink]), surface); if (r < 4.5) fails.push(mode + ' · ' + ink + ' over ' + bn + ' → ' + r.toFixed(2)); }
+        }
+      }
+      ok('text on glass stays AA over the brightest water, a blurred white cap, the deck and a panel (glass on and solid)' + (fails.length ? ' — ' + fails.slice(0, 4).join('; ') : ''), looks.some(([n]) => n === 'silver+glass') && fails.length === 0);
+      /* the device's "reduce transparency" wins over the glass switch: run js/theme.js in a sandbox whose media query says so */
+      {
+        const vm = await import('node:vm');
+        const attrs = {}, store = {};
+        const sandbox = { document: { documentElement: { getAttribute: k => attrs[k] || null, setAttribute: (k, v) => { attrs[k] = v; } }, addEventListener() {}, querySelector: () => null },
+          localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } },
+          matchMedia: q => ({ matches: /reduced-transparency/.test(q), addEventListener() {} }), getComputedStyle: () => ({ getPropertyValue: () => '' }) };
+        vm.runInNewContext(readFileSync(join(APP, 'js/theme.js'), 'utf8') + '\n;globalThis.__T = THEME;', sandbox);
+        const T2 = sandbox.__T; T2.setLook('silver'); T2.setGlass(true);
+        ok('when the device asks for less transparency, glass stays solid even if switched on', T2.glassWanted() === true && T2.reducedTransparency() === true && T2.glass() === false && attrs['data-glass'] === 'off' && attrs['data-look'] === 'silver');
+      }
+      ok('js/theme.js offers the glass switch and sets data-glass before anything draws', typeof THEME.setGlass === 'function' && typeof THEME.glass === 'function' && ['on', 'off'].includes(document.documentElement.getAttribute('data-glass')));
+    }
     ok('no colour is hard-coded outside the tokens (CSS ' + cssLeft.length + ', index.html ' + htmlLeft.length + ', JS ' + jsLeft.length + ')' + (jsLeft.length ? ' — ' + jsLeft.slice(0, 5).join(', ') : ''), cssLeft.length === 0 && htmlLeft.length === 0 && jsLeft.length === 0);
   }
 

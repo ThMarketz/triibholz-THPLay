@@ -73,6 +73,7 @@ const SCREENS = [
   ['16-german-dashboard', DESK, 'coach', async () => {}, 'de'],
   ['17-playbook-zones-keeper', DESK, 'coach', async p => { await view(p, 'playbook'); await p.click('#zones-toggle'); await p.click('#gk-toggle'); await p.waitForTimeout(350); }],
   ['18-playbook-3d', DESK, 'coach', async p => { await view(p, 'playbook'); await p.click('#scene3d-toggle'); await p.waitForTimeout(500); }],
+  ['19-fullscreen-bar', DESK, 'coach', async p => { await view(p, 'playbook'); await p.click('#fs-btn'); await p.waitForTimeout(300); await p.mouse.move(400, 300); await p.waitForTimeout(150); }],
 ];
 
 if (mode === 'capture') {

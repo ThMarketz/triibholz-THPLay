@@ -52,19 +52,43 @@ await page.screenshot({ path:OUT+'/qa_01_auth.png' });
 
 console.log('\n[2] Coach — dashboard & playbook');
 await page.click('.demo-btn[data-demo="coach"]'); await page.waitForTimeout(500); await skipTour(page);
-// the look switch (theme Phase 1): says what it will do, flips the whole app, survives a reload, flips back
+// the Look menu (theme Phases 1 + 3): ◐ opens it; it switches the look and glass, remembers both, closes on Escape
+const lookOf = () => page.evaluate(() => document.documentElement.getAttribute('data-look'));
+const glassOf = () => page.evaluate(() => document.documentElement.getAttribute('data-glass'));
+const chooseLook = async l => { await page.click('#look-toggle'); await page.waitForTimeout(150); await page.click('#look-menu [data-look="' + l + '"]'); await page.waitForTimeout(400); await page.keyboard.press('Escape'); await page.waitForTimeout(100); };
 {
-  const lookOf = () => page.evaluate(() => document.documentElement.getAttribute('data-look'));
   const start = await lookOf(), other = start === 'silver' ? 'today' : 'silver';
-  const label0 = await page.locator('#look-toggle').getAttribute('title');
-  await page.click('#look-toggle'); await page.waitForTimeout(250);
-  const flipped = await lookOf(), bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor + '|' + getComputedStyle(document.documentElement).getPropertyValue('--panel').trim());
-  const label1 = await page.locator('#look-toggle').getAttribute('title');
-  ok('the look switch flips the whole app (' + start + ' → ' + other + ') and its label says what the next press does', flipped === other && /Black & Silver|navy/.test(label0) && label1 !== label0 && (await page.locator('#look-toggle').getAttribute('aria-pressed')) === String(other === 'silver') && /#111214|#0f1c2b/.test(bg));
+  const label = await page.locator('#look-toggle').getAttribute('title');
+  await page.click('#look-toggle'); await page.waitForTimeout(150);
+  const opened = (await page.locator('#look-menu:not([hidden])').count()) === 1 && (await page.locator('#look-toggle').getAttribute('aria-expanded')) === 'true';
+  const pressedStart = (await page.locator('#look-menu [data-look="' + start + '"][aria-pressed="true"]').count()) === 1;
+  await page.click('#look-menu [data-look="' + other + '"]'); await page.waitForTimeout(300);
+  const flipped = await lookOf(), stillOpen = (await page.locator('#look-menu:not([hidden])').count()) === 1;
+  const panel = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--panel').trim());
+  await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+  const closed = (await page.locator('#look-menu[hidden]').count()) === 1;
+  ok('◐ opens the Look menu ("' + label + '"), shows the current look, switches ' + start + ' → ' + other + ', Escape closes it', /Look/.test(label || '') && opened && pressedStart && flipped === other && stillOpen && closed && /#111214|#0f1c2b/.test(panel));
   await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(800); await skipTour(page);
   ok('the chosen look survives a reload (saved per device)', (await lookOf()) === other);
-  await page.click('#look-toggle'); await page.waitForTimeout(250);
+  await chooseLook(start);
   ok('…and switches back', (await lookOf()) === start);
+  // glass (theme Phase 3) belongs to Black & Silver: on by default, off from the menu — and the floating menu really drops its blur
+  await chooseLook('silver');
+  await page.click('#look-toggle'); await page.waitForTimeout(150);
+  const g0 = await glassOf(), blur0 = await page.evaluate(() => getComputedStyle(document.querySelector('#look-menu')).backdropFilter);
+  await page.click('#glass-toggle'); await page.waitForTimeout(250);
+  const g1 = await glassOf(), blur1 = await page.evaluate(() => getComputedStyle(document.querySelector('#look-menu')).backdropFilter);
+  ok('glass is on by default in Black & Silver; the menu turns it off and floating controls drop the blur (' + blur0 + ' → ' + blur1 + ')', g0 === 'on' && g1 === 'off' && /blur/.test(blur0) && !/blur/.test(blur1));
+  await page.keyboard.press('Escape');
+  await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(800); await skipTour(page);
+  ok('glass off survives a reload', (await glassOf()) === 'off');
+  await page.click('#look-toggle'); await page.waitForTimeout(150); await page.click('#glass-toggle'); await page.waitForTimeout(200);
+  const g2 = await glassOf();
+  await page.click('#look-menu [data-look="today"]'); await page.waitForTimeout(400);
+  const offInNavy = (await page.locator('#glass-toggle:disabled').count()) === 1;
+  await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+  ok('…glass back on; in the navy look the glass switch is unavailable (it belongs to Black & Silver)', g2 === 'on' && offInNavy);
+  await chooseLook(start);
 }
 ok('coach dashboard', await page.locator('.invite-card').count()===1);
 await page.screenshot({ path:OUT+'/qa_02_coach_dash.png' });
@@ -75,10 +99,10 @@ ok('play auto-opened', (await page.locator('#pool .disc').count())>=6);
 {
   const water = () => page.evaluate(() => { const s = document.querySelector('#pool [id="waterGrad"] stop'); return s && s.getAttribute('stop-color'); });
   const before = await water();
-  await page.click('#look-toggle'); await page.waitForTimeout(500);
+  await chooseLook((await lookOf()) === 'silver' ? 'today' : 'silver');
   const after = await water(), expected = await page.evaluate(() => THEME.c('--pool-water-top'));
   const discsAfter = await page.locator('#pool .disc').count();
-  await page.click('#look-toggle'); await page.waitForTimeout(500);
+  await chooseLook((await lookOf()) === 'silver' ? 'today' : 'silver');
   ok('switching the look redraws the open board in that look (water ' + before + ' → ' + after + ') and back', !!before && after !== before && after === expected && discsAfter >= 6 && (await water()) === before);
   const reel = await page.evaluate(() => {
     const start = THEME.look(), out = {};
@@ -163,6 +187,18 @@ await page.hover('#pool'); await page.waitForTimeout(150);   // real hover over 
 await page.click('#fsb-restart'); await page.waitForTimeout(150);
 await page.click('#fsb-fwd'); await page.waitForTimeout(200);
 ok('⏮ then ⏩ on the bar: step 1 → step 2', /Step 2/.test(await page.locator('#fsb-label').textContent()));
+// theme Phase 3: glass must not cost smoothness — frames per second while a play animates in full screen, Black & Silver, glass on vs off
+{
+  const before = await page.evaluate(() => [THEME.look(), THEME.glassWanted()]);
+  const measure = async () => { await page.hover('#pool'); await page.click('#fsb-play'); const fps = await page.evaluate(() => new Promise(res => { let n = 0; const t0 = performance.now(); const tick = () => { n++; const dt = performance.now() - t0; if (dt < 2000) requestAnimationFrame(tick); else res(Math.round(n / (dt / 1000))); }; requestAnimationFrame(tick); })); await page.click('#fsb-play'); return fps; };
+  await page.evaluate(() => { THEME.setLook('silver'); THEME.setGlass(true); });
+  const glassOn = await measure(), blurOn = await page.evaluate(() => getComputedStyle(document.querySelector('#fs-bar')).backdropFilter);
+  await page.evaluate(() => THEME.setGlass(false));
+  const glassOff = await measure();
+  await page.evaluate(([l, g]) => { THEME.setLook(l); THEME.setGlass(g); }, before);
+  ok('glass keeps the animation smooth: ' + glassOn + ' fps with glass (' + blurOn + ') vs ' + glassOff + ' fps solid', /blur/.test(blurOn) && glassOn >= 30 && glassOn >= glassOff * 0.8);
+  await page.hover('#pool'); await page.click('#fsb-restart'); await page.waitForTimeout(150); await page.click('#fsb-fwd'); await page.waitForTimeout(200);
+}
 await page.screenshot({ path:OUT+'/qa_30_fullscreen_cue.png' });
 await page.keyboard.press('Escape'); await page.waitForTimeout(200);
 ok('Esc leaves full screen', await page.locator('#view-playbook.stage-full').count()===0);

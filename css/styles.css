@@ -59,6 +59,9 @@
   --metal:linear-gradient(180deg,#fbfcfd 0%,#d4d9df 48%,#9aa0a8 100%); --metal-soft:linear-gradient(180deg,#f3f5f7,#aeb4bc); --metal-ink:#0b0c0e; --metal-edge:rgba(255,255,255,.6);
   /* a red that still carries white text (keeper badge, active keeper view); today it is exactly --red */
   --danger-strong:#e23b3b;
+  /* glass (theme Phase 3): these are the SOLID values — used when glass is off or the device asks for less transparency.
+     The Black & Silver look with glass on redefines them below. Only Black & Silver rules use them. */
+  --glass-tint:#17181b; --glass-sheen:none; --glass-blur:none; --glass-edge:rgba(255,255,255,.10); --glass-hi:inset 0 1px 0 rgba(255,255,255,.08); --glass-bar:#0b0c0d;
 }
 /* ===== Black & Silver (theme Phase 1): the same tokens, redefined. Opt-in from the top-bar switch until Phase 4.
    Neutrals become graphite, brand cyan becomes silver; red/green/yellow/orange keep their meaning (right, warning,
@@ -98,6 +101,12 @@
   --reel-ink:#eceef1; --reel-caption:rgba(5,5,6,0.82); --reel-watermark:rgba(236,238,241,0.55); --reel-title-top:#1a1b1e; --reel-title-bottom:#050506;
   --reel-title:#eceef1; --reel-subtitle:#a7adb6; --reel-brand:rgba(236,238,241,.55);
   --fx-confetti-2:#c9ced5; --fx-confetti-3:#eceef1; --mascot-ink:#101214;
+}
+/* Black & Silver with glass on: a dark tint does the legibility work (tests/smoke.mjs checks text over the brightest
+   water through it), the sheen and 18 px blur make it read as glass. No refraction filter: it only works in Chromium. */
+:root[data-look="silver"][data-glass="on"]{
+  --glass-tint:rgba(12,13,15,.74); --glass-sheen:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.02)); --glass-blur:blur(18px) saturate(160%);
+  --glass-edge:rgba(255,255,255,.16); --glass-hi:inset 0 1px 0 rgba(255,255,255,.28); --glass-bar:rgba(10,11,12,.62);
 }
 
 *{box-sizing:border-box}
@@ -1305,3 +1314,20 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 :root[data-look="silver"] .dev-table th small{opacity:1}
 :root[data-look="silver"] a:not([class]){color:var(--teal)}
 :root[data-look="silver"] #scene3d-toggle.active,:root[data-look="silver"] #zones-toggle.active,:root[data-look="silver"] #gk-toggle.active{background:var(--metal);color:var(--metal-ink);border-color:var(--line)}   /* an active board toggle is metal in this look; its icon (🟩 🧤 🎥) still says which */
+
+/* ===== Glass (theme Phase 3): only what floats over the pool or video, only in Black & Silver. Borders keep their meaning
+   (the cue's accent, the keeper view's red); content panels stay solid for sunlight on the pool deck. ===== */
+:root[data-look="silver"] .topbar{background:var(--glass-bar);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur)}
+:root[data-look="silver"] :is(.fs-bar,.my-cue,.gk-view,.pool-drag-hint,.scene3d-hint,.dl-menu,.toast,.audible-sheet){background:var(--glass-sheen),var(--glass-tint);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);box-shadow:var(--glass-hi),0 12px 32px rgba(var(--pure-black-rgb),.5)}
+
+/* the Look menu (◐): look + glass, in both looks */
+.look-menu{min-width:290px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.look-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.look-h{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim)}
+.look-seg{display:inline-flex;gap:3px;padding:3px;border:1px solid var(--line);border-radius:10px;background:var(--bg2)}
+.look-menu .look-opt{flex-direction:row;align-items:center;background:transparent;border:1px solid transparent;color:var(--ink-dim);font-weight:600;font-size:12.5px;line-height:1;padding:7px 10px;border-radius:8px}
+.look-menu #glass-toggle{border-color:var(--line);min-width:6em;justify-content:center}
+.look-menu .look-opt[aria-pressed="true"]{background:var(--panel2);border-color:var(--line);color:var(--ink)}
+:root[data-look="silver"] .look-menu .look-opt[aria-pressed="true"]{background:var(--metal);color:var(--metal-ink);border-color:var(--line)}
+.look-menu .look-opt:disabled{opacity:.5;cursor:not-allowed}
+.look-note{margin:0;font-size:12px;line-height:1.45;color:var(--ink-dim);max-width:32ch}

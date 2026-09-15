@@ -3311,11 +3311,19 @@
 
     document.querySelectorAll('#mode-toggle .mode-btn').forEach(b=> b.onclick=()=>setMode(b.dataset.mode, false));
     $('reveal-btn').onclick = ()=>{ setMode('solution', true); onStudied(); };
-    $('look-toggle').onclick = ()=>{
-      const next = THEME.look() === 'silver' ? 'today' : 'silver';
-      THEME.setLook(next); updateLookToggle(); redrawForLook();
-      toast(T(next === 'silver' ? 'ui.lookNowSilver' : 'ui.lookNowToday'));
+    $('look-toggle').onclick = e => { e.stopPropagation(); toggleLookMenu(); };
+    $('look-menu').onclick = e => e.stopPropagation();   // choosing inside the menu keeps it open
+    document.querySelectorAll('#look-menu [data-look]').forEach(b => b.onclick = () => {
+      if (THEME.look() === b.dataset.look) return;
+      THEME.setLook(b.dataset.look); updateLookToggle(); redrawForLook();
+      toast(T(b.dataset.look === 'silver' ? 'ui.lookNowSilver' : 'ui.lookNowToday'));
+    });
+    $('glass-toggle').onclick = () => {
+      const on = !THEME.glassWanted(); THEME.setGlass(on); updateLookToggle();
+      toast(T(on ? 'ui.glassNowOn' : 'ui.glassNowOff'));
     };
+    document.addEventListener('click', () => toggleLookMenu(false));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('look-menu').hidden) { toggleLookMenu(false); $('look-toggle').focus(); } });
     $('sound-toggle').onclick = (e)=>{
       const on = !FX.isSoundOn(); FX.setSound(on);
       e.currentTarget.textContent = on ? '🔊' : '🔇';
@@ -3398,11 +3406,22 @@
     if (state.view === 'playbook' && state.selectedId) openScenario(state.selectedId);
     applyZones(); updateGkView(); draw3dNow();
   }
-  /* the look switch says what pressing it will do, in the current language */
+  function toggleLookMenu(force){
+    const m = $('look-menu'); if (!m) return;
+    m.hidden = force == null ? !m.hidden : !force;
+    $('look-toggle').setAttribute('aria-expanded', m.hidden ? 'false' : 'true');
+  }
+  /* the Look menu (◐): which look is on, whether glass is on, and why glass may be unavailable — in the current language */
   function updateLookToggle(){
     const b = $('look-toggle'); if (!b || typeof THEME==='undefined') return;
-    const silver = THEME.look() === 'silver', label = T(silver ? 'ui.lookToToday' : 'ui.lookToSilver');
-    b.title = label; b.setAttribute('aria-label', label); b.setAttribute('aria-pressed', silver ? 'true' : 'false');
+    const silver = THEME.look() === 'silver', label = T('ui.lookMenu');
+    b.title = label; b.setAttribute('aria-label', label);
+    document.querySelectorAll('#look-menu [data-look]').forEach(o => o.setAttribute('aria-pressed', o.dataset.look === THEME.look() ? 'true' : 'false'));
+    const g = $('glass-toggle'), reduced = THEME.reducedTransparency();
+    g.textContent = T(THEME.glass() ? 'ui.glassOn' : 'ui.glassOff');
+    g.setAttribute('aria-pressed', THEME.glass() ? 'true' : 'false');
+    g.disabled = !silver || reduced;
+    $('look-note').textContent = reduced ? T('ui.glassNoteReduced') : silver ? T('ui.glassNoteSilver') : T('ui.glassNoteNavy');
   }
   function updateUserPill(){
     if(!state.user) return;

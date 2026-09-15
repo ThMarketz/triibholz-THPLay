@@ -39,7 +39,7 @@ Playbook screen in today's navy look and in Black & Silver, with glass controls 
 | 0 | Foundation: every colour becomes a token, a theme switch exists, today's look unchanged | L | ☑ done |
 | 1 | Black & Silver chrome: palette, bars, panels, buttons, forms, menus, toasts | M | ☑ done |
 | 2 | The pool and everything drawn: board, animation, Film Room board, 3D, celebrations | M | ☑ done |
-| 3 | Glass on floating controls, with a solid fallback | S | ☐ |
+| 3 | Glass on floating controls, with a solid fallback | S | ☑ done |
 | 4 | Every screen, both looks, phone widths; sign-off and release | M | ☐ |
 
 ## Decisions (owner, 2026‑09‑15)
@@ -278,6 +278,61 @@ checks for the board, cue overlay and 3D stay green.
   not drop it below today's.
 - **Contrast:** text contrast over the glass stays AA against the brightest water colour.
 
+**Done 2026‑09‑15.** Glass is part of Black & Silver and on by default (owner decision). Today's look is pixel-identical to Phase 2.
+
+- **Where.** Only what floats over the pool or video, only in Black & Silver:
+  - the full-screen playback bar, the "what do I do now?" cue, the keeper's-view panel;
+  - the 3D hint, the "Paused — drag players" pill, the Audible sheet;
+  - drop-down menus (including the new Look menu) and toasts;
+  - plus a tinted top bar.
+
+  Borders keep their meaning (the cue's accent, the keeper view's red). Content panels stay solid.
+- **How.** A **dark tint does the legibility work**; the sheen and an 18 px blur make it read as glass. The tint
+  is `rgba(12,13,15,.74)`, the lowest opacity that passes (see tests). No refraction filter: it only works in
+  Chromium. The tokens (`--glass-tint/-sheen/-blur/-edge/-hi/-bar`) hold the **solid** values in the bare
+  `:root`, and `:root[data-look="silver"][data-glass="on"]` holds the glass values. So "glass off" and
+  "reduce transparency" both simply fall back to solid.
+- **The switch.** ◐ now opens a small **Look menu**: Navy / Black & Silver, Glass on/off, and a note in the
+  current language.
+  - The glass switch is unavailable in Navy, because it belongs to Black & Silver.
+  - When the device asks for less transparency, glass stays solid and the note says why.
+  - Both choices are saved per device (`thplay.look.v1`, `thplay.glass.v1`) and applied before the first
+    paint (`data-glass` on `<html>`).
+  - Escape or a click outside closes the menu.
+  - The two Phase 1 button labels were replaced by `ui.lookMenu`, with 12 new strings in EN/DE/FR/IT.
+- **Tests.**
+  - **Smoke +3.**
+    - Text on glass (`--ink`, `--white`, `--ink-dim`, the hint yellow, the cue and hint silvers) must
+      stay AA over the silver water, deep water, **a white cap spread into the water by the blur**
+      (25 % cap), the deck and a raised panel. Checked with glass on and with the solid fallback. It
+      failed at tint .66 (4.08:1 for `--ink-dim` over a blurred cap), so the tint went to .74.
+    - `theme.js` offers the glass switch and sets `data-glass`.
+    - In a sandbox whose media query reports reduced transparency, glass stays solid even when switched on.
+  - **Browser +6.**
+    - ◐ opens the menu, shows the current look, switches, and Escape closes it.
+    - The look survives a reload, and switches back.
+    - Glass is on by default in Black & Silver; switching it off really drops the floating menu's blur.
+    - Glass off survives a reload.
+    - The glass switch is unavailable in Navy.
+    - **Frame rate** while a play animates in full screen: glass on 60 fps vs solid 60 fps. Glass must stay
+      ≥ 30 fps and ≥ 80 % of solid.
+  - The Phase 1 and 2 checks now switch through the menu. `tests/visual.mjs` gained screen 19: full screen
+    with the playback bar.
+- **Verified** on a23884d plus exactly these files:
+  - today 19/19 identical to Phase 2 (HEAD captured twice first, 19/19);
+  - silver changed on every screen as intended: the glass top bar on all, glass surfaces on board screens;
+  - contrast audit silver 0 across 19 screens;
+  - browser 203/203 in **today** and 203/203 in **silver**, zero console errors;
+  - smoke 677/677, i18n scan 0, host server 84 + 17 skipped, image server 101/101;
+  - identity 79, auth 153, clubs 127.
+- **Fault-injected** 4 ways, each caught:
+  1. a tint too thin (2.70:1 over a blurred cap);
+  2. `theme.js` ignoring reduced transparency;
+  3. glass off keeping the blur;
+  4. a stutter while glass is on (22 vs 60 fps).
+- **Design check** (captures reviewed): the full-screen bar reads as smoked glass over the moving board; the
+  keeper's-view panel shows the pool faintly through it with crisp text.
+
 ## Phase 4 — Every screen, sign-off, release
 
 **What changes.** Walk every view in both looks at desktop and phone width:
@@ -298,6 +353,12 @@ checks for the board, cue overlay and 3D stay green.
   - `.cmd-info` uses `var(--muted)`, which is never defined;
   - the sound toggle's toast says "Sound on" / "Sound off" in English in every language (the i18n scanner
     can't see a toast built from a ternary).
+
+**Found while testing Phase 3 (both looks, not caused by the theme):**
+- In full screen at 1360×900, the playbook stage leaves a **white band ~130 px tall** under the control row;
+  today's look shows it too.
+- `.dl-menu button` uses `var(--text)` and `var(--muted)`, which are never defined (the same kind of
+  leftover as `.cmd-info`).
 
 **Already seen at phone width (375 px, today's look, found by the Phase 0 captures):** on the Playbook, the
 situation tabs and the Share button run off the right edge, and the "Paused — drag players…" hint is cut

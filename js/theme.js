@@ -17,7 +17,7 @@
    suite runs in the default look, and drawn surfaces only get silver values in Phase 2.
    ============================================================ */
 const THEME = (() => {
-  const KEY = 'thplay.look.v1';
+  const KEY = 'thplay.look.v1', GLASS_KEY = 'thplay.glass.v1';
   const LOOKS = ['today', 'silver'];   // silver: Black & Silver (docs/THEME_BLACK_SILVER.md Phase 1)
   const FALLBACK = { today: {
     "--status-bar":"#0e7c86", "--logo-water":"#0e7c86", "--logo-edge":"#0a5860", "--logo-wave":"#bff0f4",
@@ -84,9 +84,23 @@ const THEME = (() => {
     listeners.forEach(fn => { try { fn(l); } catch (e) {} });
   }
   const onChange = fn => { listeners.push(fn); };
+  /* Glass (theme Phase 3): frosted controls over the pool, part of Black & Silver. On unless the person turned it
+     off — and always solid when the device asks for less transparency (the browser says so via a media query;
+     Chromium does today, Safari does not yet, which is why there is also a switch). */
+  const rtq = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-transparency: reduce)') : null;
+  const glassWanted = () => { try { return localStorage.getItem(GLASS_KEY) !== 'off'; } catch (e) { return true; } };
+  const reducedTransparency = () => !!(rtq && rtq.matches);
+  const glass = () => glassWanted() && !reducedTransparency();
+  const applyGlass = () => { if (root) root.setAttribute('data-glass', glass() ? 'on' : 'off'); };
+  function setGlass(on) {
+    try { localStorage.setItem(GLASS_KEY, on ? 'on' : 'off'); } catch (e) {}
+    applyGlass(); listeners.forEach(fn => { try { fn(look()); } catch (e) {} });
+  }
+  if (rtq && rtq.addEventListener) rtq.addEventListener('change', applyGlass);
   if (root) root.setAttribute('data-look', valid(saved()));   // before the first paint
+  applyGlass();
   if (doc) doc.addEventListener('DOMContentLoaded', statusBar);
-  return { KEY, LOOKS, FALLBACK, look, c, setLook, onChange };
+  return { KEY, GLASS_KEY, LOOKS, FALLBACK, look, c, setLook, onChange, glass, glassWanted, reducedTransparency, setGlass };
 })();
 
 // Node/CommonJS interop (no-op in the browser)
