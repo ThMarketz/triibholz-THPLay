@@ -55,6 +55,18 @@ const MAX_UPLOAD = +(process.env.MAX_UPLOAD || 4 * 1024 * 1024 * 1024);   // 4 G
 [DATA_DIR, VIDEO_DIR, JOB_DIR, CAL_DIR, CLIP_DIR, DEBRIEF_DIR, ANNOUNCE_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
 const safeToken = t => String(t || '').replace(/[^\w.\-]/g, '').slice(0, 64);
 
+/* ---- accounts: off unless ACCOUNTS=1. When on, a wrong configuration or a database written by a
+   newer build stops the server here, before it listens. No route uses accounts yet (slice 1). */
+let ACCOUNTS, accountsDb = null;
+try {
+  ACCOUNTS = require('./config.js').assertConfig();
+  if (ACCOUNTS.accounts) accountsDb = require('./db.js').open(path.join(DATA_DIR, 'triibholz.db'));
+} catch (e) {
+  if (require.main !== module) throw e;
+  console.error('[triibholz-analysis] not starting — ' + e.message);
+  process.exit(1);
+}
+
 let hasFfmpeg = false;
 try { require('node:child_process').spawnSync(process.env.FFMPEG || 'ffmpeg', ['-version']); hasFfmpeg = true; } catch (e) { hasFfmpeg = false; }
 
@@ -170,7 +182,7 @@ const server = http.createServer(async (req, res) => {
     const p = url.pathname;
     if (req.method === 'OPTIONS') { cors(res); res.writeHead(204); return res.end(); }
 
-    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, engine: 'server', detector: makeDetector({ modelEndpoint: MODEL_ENDPOINT }).name, ffmpeg: hasFfmpeg, videoProvider: VIDEO_PROVIDER || null, queued: queue.length, running, maxUploadMB: Math.round(MAX_UPLOAD / 1048576) });
+    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, accounts: !!accountsDb, engine: 'server', detector: makeDetector({ modelEndpoint: MODEL_ENDPOINT }).name, ffmpeg: hasFfmpeg, videoProvider: VIDEO_PROVIDER || null, queued: queue.length, running, maxUploadMB: Math.round(MAX_UPLOAD / 1048576) });
 
     // photoreal text-to-video: submit a prompt → a normalised video URL (or an async job)
     if (req.method === 'POST' && p === '/api/videogen') {
@@ -373,4 +385,4 @@ const server = http.createServer(async (req, res) => {
 if (require.main === module) {
   server.listen(PORT, () => console.log(`[triibholz-analysis] listening on :${PORT}  ffmpeg=${hasFfmpeg}  data=${DATA_DIR}`));
 }
-module.exports = { server, runEngine };
+module.exports = { server, runEngine, accountsDb };

@@ -27,10 +27,14 @@ Then in the app: **Film Room → ☁️ Cloud analysis → endpoint** = `http://
 - **Queue**: in-process FIFO (`CONCURRENCY`, default 1). Swap for Redis at scale.
 - **Storage**: jobs + videos on disk under `DATA_DIR` (`/data` in the container).
 - **Env**: `PORT` `DATA_DIR` `CONCURRENCY` `MAX_BODY` `FFMPEG`.
+- **Accounts** (being built, off unless `ACCOUNTS=1`): `RP_ID` `APP_ORIGINS` `DEV` —
+  checked at startup; `node admin.js help` for the operator commands. See `docs/ACCOUNTS.md`.
+- **Reached at** `/api` on the app's own address through nginx; port 4200 is loopback-only.
 
 ## Tests
 
     node tests/server.mjs     # frames-mode API gate (no ffmpeg needed)
+    node tests/identity.mjs   # accounts foundation: config, migrations, codes, CLI
 
 ## Scope
 

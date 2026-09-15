@@ -1,0 +1,223 @@
+/* Accounts foundation — configuration, migrations, transactions, codes, the last-admin rule,
+   and the operator CLI. Real SQLite files in a temp dir; the CLI runs as a real child process.
+   Run:  node tests/identity.mjs */
+import { createRequire } from 'node:module';
+import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+
+const require = createRequire(import.meta.url);
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SERVER = join(HERE, '..', 'server');
+const { loadConfig, assertConfig } = require('../server/config.js');
+const DB = require('../server/db.js');
+const ID = require('../server/identity.js');
+
+let pass = 0, fail = 0;
+const ok = (n, c) => { if (c) { pass++; console.log('  ✓', n); } else { fail++; console.log('  ✗ FAIL:', n); } };
+const throwsCode = (fn, code) => { try { fn(); return false; } catch (e) { return e.code === code || new RegExp(code).test(e.message); } };
+// a section that crashes is reported as a failure and the rest still runs
+function section(title, fn) {
+  console.log('\n' + title);
+  try { fn(); } catch (e) { fail++; console.log('  ✗ FAIL: section threw —', e && e.message); }
+}
+const tmp = () => mkdtempSync(join(tmpdir(), 'thp-id-'));
+const T0 = Date.UTC(2026, 8, 15, 8, 0, 0);
+const H = 3600e3;
+
+section('[1] Configuration — refuse to start rather than weaken sign-in', () => {
+  const off = loadConfig({});
+  ok('accounts are off by default, with nothing to complain about', off.accounts === false && off.problems.length === 0);
+  const dev = assertConfig({ ACCOUNTS: '1', DEV: '1', RP_ID: 'localhost', APP_ORIGINS: 'http://localhost:8088' });
+  ok('local development: http://localhost with DEV=1 → plain "thp" cookie', dev.cookieSecure === false && dev.cookieName === 'thp' && dev.origins[0] === 'http://localhost:8088');
+  const prod = assertConfig({ ACCOUNTS: '1', RP_ID: 'triibholz.example.ch', APP_ORIGINS: 'https://triibholz.example.ch, https://app.triibholz.example.ch/' });
+  ok('production: https origins on the RP_ID → Secure __Host- cookie', prod.cookieSecure && prod.cookieName === '__Host-thp' && prod.origins.length === 2 && prod.origins[1] === 'https://app.triibholz.example.ch');
+  const bad = (env, re, name) => { const c = loadConfig({ ACCOUNTS: '1', ...env }); ok(name, c.problems.some(p => re.test(p))); };
+  bad({ APP_ORIGINS: 'https://a.example.ch' }, /RP_ID is required/, 'no RP_ID → refused');
+  bad({ RP_ID: 'example.ch' }, /APP_ORIGINS is required/, 'no APP_ORIGINS → refused');
+  bad({ RP_ID: 'localhost', APP_ORIGINS: 'http://localhost:8088' }, /DEV=1/, 'http without DEV=1 → refused');
+  bad({ RP_ID: 'example.ch', DEV: '1', APP_ORIGINS: 'https://example.ch' }, /DEV=1 is only allowed/, 'DEV=1 on a real domain → refused');
+  bad({ RP_ID: 'example.ch', APP_ORIGINS: 'http://example.ch' }, /must use https/, 'http on a real domain → refused');
+  bad({ RP_ID: 'example.ch', APP_ORIGINS: 'https://evil.ch' }, /not on RP_ID/, 'an origin outside RP_ID → refused');
+  bad({ RP_ID: 'example.ch', APP_ORIGINS: 'https://notexample.ch' }, /not on RP_ID/, 'a look-alike suffix ("notexample.ch") is not under example.ch');
+  bad({ RP_ID: 'example.ch', APP_ORIGINS: 'https://example.ch/app' }, /origin only/, 'an origin with a path → refused');
+  bad({ RP_ID: '192.168.1.4', APP_ORIGINS: 'https://192.168.1.4' }, /IP address/, 'an IP address as RP_ID → refused');
+  bad({ RP_ID: 'https://example.ch', APP_ORIGINS: 'https://example.ch' }, /not a lowercase host name/, 'RP_ID with a scheme → refused');
+  bad({ RP_ID: 'ch', APP_ORIGINS: 'https://ch' }, /full domain/, 'a bare TLD as RP_ID → refused');
+  bad({ RP_ID: 'localhost', DEV: '1', APP_ORIGINS: 'http://localhost:8088,https://localhost:8443' }, /mixes http and https/, 'http and https in one deployment → refused');
+  const many = loadConfig({ ACCOUNTS: '1', RP_ID: 'example.ch', APP_ORIGINS: 'http://example.ch/x,https://evil.ch' });
+  ok('every problem is reported at once, not one per restart', many.problems.length >= 2);
+  ok('assertConfig throws with code bad-config', throwsCode(() => assertConfig({ ACCOUNTS: '1' }), 'bad-config'));
+});
+
+section('[2] Migrations — once, atomically, and never under an older build', () => {
+  const dir = tmp(), file = join(dir, 'a.db');
+  const db1 = DB.open(file, { now: T0 });
+  const tables = db1.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map(r => r.name);
+  ok('identity tables exist', ['audit', 'challenges', 'club_members', 'clubs', 'credentials', 'link_codes', 'sessions', 'users'].every(t => tables.includes(t)));
+  ok('foreign keys are enforced', db1.prepare('PRAGMA foreign_keys').get().foreign_keys === 1);
+  ok('WAL journal on a file database', db1.prepare('PRAGMA journal_mode').get().journal_mode === 'wal');
+  db1.close();
+  const db2 = DB.open(file);
+  ok('opening again applies nothing twice', db2.prepare('SELECT count(*) AS n FROM schema_migrations').get().n === 1 && DB.migrate(db2).length === 0);
+  db2.close();
+
+  const broken = [...DB.MIGRATIONS, { id: 2, name: 'half-broken', sql: 'CREATE TABLE extra (x INT); CREATE TABLE users (dup INT);' }];
+  let threw = false; try { DB.open(file, { migrations: broken }); } catch (e) { threw = true; }
+  const db3 = DB.open(file);
+  ok('a failing migration rolls back whole: no half-made table, not recorded', threw && !db3.prepare("SELECT 1 FROM sqlite_master WHERE name = 'extra'").get() && !db3.prepare('SELECT 1 FROM schema_migrations WHERE id = 2').get());
+  db3.close();
+
+  const newer = [...DB.MIGRATIONS, { id: 2, name: 'future', sql: 'CREATE TABLE future (x INT);' }];
+  DB.open(file, { migrations: newer }).close();
+  ok('a database from a newer build is refused by this one', throwsCode(() => DB.open(file), 'db-newer'));
+});
+
+section('[3] tx() — all or nothing, synchronous only', () => {
+  const db = DB.open(':memory:');
+  let rolled = false;
+  try { DB.tx(db, () => { ID.createUser(db, { displayName: 'A' }, T0); throw new Error('boom'); }); } catch (e) { rolled = true; }
+  ok('a throw rolls every write back', rolled && db.prepare('SELECT count(*) AS n FROM users').get().n === 0 && !db.isTransaction);
+  ok('an async function is refused, and its first writes rolled back', throwsCode(() => DB.tx(db, async () => { ID.createUser(db, { displayName: 'B' }, T0); }), 'tx-async') && db.prepare('SELECT count(*) AS n FROM users').get().n === 0 && !db.isTransaction);
+  DB.tx(db, () => {
+    ID.createUser(db, { displayName: 'Outer' }, T0);
+    try { DB.tx(db, () => { ID.createUser(db, { displayName: 'Inner' }, T0); throw new Error('inner'); }); } catch (e) {}
+  });
+  const names = db.prepare('SELECT display_name FROM users').all().map(r => r.display_name);
+  ok('a failing nested tx rolls back only itself', names.length === 1 && names[0] === 'Outer');
+  db.close();
+});
+
+section('[4] Users and clubs — random ids, handles, and the schema’s own checks', () => {
+  const db = DB.open(':memory:');
+  const a = ID.createUser(db, { displayName: 'Sam Beispiel' }, T0), b = ID.createUser(db, { displayName: 'Sam Beispiel' }, T0);
+  ok('ids are 128-bit random, not clock-based', /^u_[A-Za-z0-9_-]{22}$/.test(a.id) && a.id !== b.id);
+  ok('the WebAuthn user handle is 32 random bytes, distinct per user', a.handle.length === 32 && !a.handle.equals(b.handle));
+  ok('…and carries nothing of the user id (authenticators may show or sync it)', ![a, b].some(u => u.handle.includes(Buffer.from(u.id)) || u.handle.includes(Buffer.from(u.id.slice(2, 8)))));
+  ok('a handle that is not 32 bytes is rejected by the database', throwsCode(() => db.prepare('INSERT INTO users (id, display_name, webauthn_user_handle, created_at) VALUES (?, ?, ?, ?)').run('u_x', 'X', Buffer.alloc(16), T0), 'CHECK'));
+  ok('an empty or 81-character name is refused', throwsCode(() => ID.createUser(db, { displayName: '  ' }, T0), 'bad-name') && throwsCode(() => ID.createUser(db, { displayName: 'x'.repeat(81) }, T0), 'bad-name'));
+  const c = ID.createClub(db, { name: 'Test WPC', actor: 'operator' }, T0);
+  ok('a club is created with a random id and audited', /^c_/.test(c) && db.prepare("SELECT count(*) AS n FROM audit WHERE action = 'club.create' AND subject = ?").get(c).n === 1);
+  ok('an unknown role is refused in code', throwsCode(() => ID.addMember(db, { clubId: c, userId: a.id, role: 'owner', status: 'approved', actor: 'operator' }, T0), 'bad-role'));
+  ok('…and by the database', throwsCode(() => db.prepare("INSERT INTO club_members VALUES (?, ?, 'owner', 'approved', ?, NULL, NULL)").run(c, a.id, T0), 'CHECK'));
+  ok('a membership needs a real club and user', throwsCode(() => ID.addMember(db, { clubId: 'c_nope', userId: a.id, role: 'player', status: 'pending', actor: 'operator' }, T0), 'no-club'));
+  ID.addMember(db, { clubId: c, userId: a.id, role: 'coach', status: 'approved', actor: 'operator' }, T0);
+  const c2 = ID.createClub(db, { name: 'Other WPC', actor: 'operator' }, T0);
+  ID.addMember(db, { clubId: c2, userId: a.id, role: 'player', status: 'approved', actor: 'operator' }, T0);
+  ok('one person can coach in one club and play in another', ID.getMember(db, c, a.id).role === 'coach' && ID.getMember(db, c2, a.id).role === 'player');
+  const auditText = JSON.stringify(db.prepare('SELECT * FROM audit').all());
+  ok('the audit log holds ids, never names', !/Sam Beispiel|Test WPC|Other WPC/.test(auditText));
+  db.close();
+});
+
+section('[5] Single-use codes', () => {
+  const dir = tmp(), file = join(dir, 'codes.db');
+  const db = DB.open(file);
+  const c = ID.createClub(db, { name: 'Code WPC', actor: 'operator' }, T0);
+  const inv = ID.issueCode(db, { kind: 'club-admin', clubId: c, role: 'admin', actor: 'operator' }, T0);
+  ok('26 Crockford base32 characters, grouped in fives', /^[0-9A-HJKMNP-TV-Z]{5}(-[0-9A-HJKMNP-TV-Z]{5}){4}-[0-9A-HJKMNP-TV-Z]$/.test(inv.code));
+  ok('expires after 24 h for a club-admin invite', inv.expiresAt === T0 + 24 * H);
+  const codes = new Set(Array.from({ length: 200 }, () => ID.makeCode().code));
+  ok('200 codes, 200 different', codes.size === 200);
+  const raw = inv.code.replace(/-/g, '');
+  ok('only a hash is stored — the code is nowhere in the database file', (() => { db.exec('PRAGMA wal_checkpoint(FULL)'); const bytes = readdirSync(dir).map(f => readFileSync(join(dir, f)).toString('latin1')).join(''); return !bytes.includes(raw) && !bytes.includes(inv.code); })());
+  ok('the wrong kind does not consume it', ID.consumeCode(db, { code: inv.code, kind: 'recover' }, T0 + 1) === null);
+  const typed = raw.toLowerCase().replace(/0/g, 'o').replace(/1/g, 'l').match(/.{1,4}/g).join(' ');
+  const row = ID.consumeCode(db, { code: typed, kind: 'club-admin', usedBy: 'u_someone' }, T0 + 2);
+  ok('typed in lower case, with spaces, O for 0 and l for 1 — still accepted', row && row.club_id === c && row.role === 'admin');
+  ok('a second use returns nothing', ID.consumeCode(db, { code: inv.code, kind: 'club-admin' }, T0 + 3) === null);
+  const late = ID.issueCode(db, { kind: 'pair', userId: ID.createUser(db, { displayName: 'P' }, T0).id, actor: 'operator' }, T0);
+  ok('a pairing code lives 10 minutes', late.expiresAt === T0 + 10 * 60e3);
+  ok('an expired code returns nothing', ID.consumeCode(db, { code: late.code, kind: 'pair' }, T0 + 10 * 60e3) === null);
+  const rv = ID.issueCode(db, { kind: 'club-admin', clubId: c, role: 'admin', actor: 'operator' }, T0);
+  ok('revoking a club’s codes counts them', ID.revokeCodes(db, { clubId: c, actor: 'operator' }, T0 + 5) === 1);
+  ok('a revoked code returns nothing', ID.consumeCode(db, { code: rv.code, kind: 'club-admin' }, T0 + 6) === null);
+  ok('revoking everything at once is refused', throwsCode(() => ID.revokeCodes(db, { actor: 'operator' }, T0), 'too-broad'));
+  ok('garbage and near-misses are simply not codes', ID.consumeCode(db, { code: 'hello', kind: 'club-admin' }, T0) === null && ID.consumeCode(db, { code: raw.slice(0, 25), kind: 'club-admin' }, T0) === null && ID.normalizeCode(raw.slice(0, 25) + 'U') === '');
+
+  // two connections racing for one code: exactly one wins
+  const race = ID.issueCode(db, { kind: 'club-admin', clubId: c, role: 'admin', actor: 'operator' }, T0);
+  const other = DB.open(file);
+  const wins = [ID.consumeCode(db, { code: race.code, kind: 'club-admin', usedBy: 'u_a' }, T0 + 7), ID.consumeCode(other, { code: race.code, kind: 'club-admin', usedBy: 'u_b' }, T0 + 7)].filter(Boolean);
+  ok('two connections claiming one code: exactly one wins', wins.length === 1);
+  // a claim inside a transaction that later fails gives the code back
+  const back = ID.issueCode(db, { kind: 'club-admin', clubId: c, role: 'admin', actor: 'operator' }, T0);
+  try { DB.tx(db, () => { if (!ID.consumeCode(db, { code: back.code, kind: 'club-admin' }, T0 + 8)) throw new Error('x'); throw new Error('granting failed'); }); } catch (e) {}
+  ok('if what the code grants fails, the code is not used up', !!ID.consumeCode(db, { code: back.code, kind: 'club-admin' }, T0 + 9));
+  other.close(); db.close();
+});
+
+section('[6] A club always keeps an approved admin', () => {
+  const db = DB.open(':memory:');
+  const c = ID.createClub(db, { name: 'Admin WPC', actor: 'operator' }, T0);
+  const a = ID.createUser(db, { displayName: 'A' }, T0).id, b = ID.createUser(db, { displayName: 'B' }, T0).id, p = ID.createUser(db, { displayName: 'P' }, T0).id;
+  ID.addMember(db, { clubId: c, userId: a, role: 'admin', status: 'approved', actor: 'operator' }, T0);
+  ok('the only admin cannot be demoted', throwsCode(() => ID.updateMember(db, { clubId: c, userId: a, role: 'coach', actor: a }, T0), 'last-admin'));
+  ok('…or removed', throwsCode(() => ID.updateMember(db, { clubId: c, userId: a, status: 'removed', actor: a }, T0), 'last-admin'));
+  ok('…or deleted with their account', throwsCode(() => ID.deleteUser(db, { userId: a, actor: a }, T0), 'last-admin') && !!ID.getUser(db, a));
+  ok('…not even by raw SQL', throwsCode(() => db.prepare('DELETE FROM club_members WHERE user_id = ?').run(a), 'last-admin'));
+  ID.addMember(db, { clubId: c, userId: b, role: 'admin', status: 'pending', actor: a }, T0);
+  ok('a pending admin does not count as the second one', throwsCode(() => ID.updateMember(db, { clubId: c, userId: a, role: 'coach', actor: a }, T0), 'last-admin'));
+  ID.updateMember(db, { clubId: c, userId: b, status: 'approved', actor: a }, T0);
+  ID.updateMember(db, { clubId: c, userId: a, role: 'coach', actor: b }, T0);
+  ok('with a second approved admin, the first can step down', ID.getMember(db, c, a).role === 'coach');
+  ok('…and now the second is protected in turn', throwsCode(() => ID.updateMember(db, { clubId: c, userId: b, status: 'removed', actor: b }, T0), 'last-admin'));
+  ID.addMember(db, { clubId: c, userId: p, role: 'player', status: 'approved', actor: b }, T0);
+  ID.deleteUser(db, { userId: p, actor: p }, T0);
+  ok('anyone else can delete their account; memberships go with it', !ID.getUser(db, p) && !ID.getMember(db, c, p));
+  ok('each change is audited with before and after', JSON.parse(db.prepare("SELECT detail FROM audit WHERE action = 'member.update' AND subject = ? ORDER BY id DESC").get(a).detail).from.role === 'admin');
+  db.close();
+});
+
+section('[7] Sessions and housekeeping', () => {
+  const db = DB.open(':memory:');
+  const u = ID.createUser(db, { displayName: 'S' }, T0).id;
+  const addSession = (hash, exp, abs) => db.prepare('INSERT INTO sessions (token_hash, user_id, created_at, last_seen_at, expires_at, absolute_expires_at) VALUES (?, ?, ?, ?, ?, ?)').run(hash, u, T0, T0, exp, abs);
+  addSession('h1', T0 + H, T0 + 10 * H); addSession('h2', T0 + H, T0 + 10 * H);
+  ok('end-sessions signs a person out everywhere', ID.endSessions(db, { userId: u, actor: 'operator' }, T0) === 2 && db.prepare('SELECT count(*) AS n FROM sessions').get().n === 0);
+  addSession('h3', T0 + H, T0 + 10 * H); addSession('h4', T0 + 20 * H, T0 + 5 * H);
+  db.prepare("INSERT INTO challenges (id, kind, challenge, created_at, expires_at) VALUES ('ch1', 'login', 'x', ?, ?)").run(T0, T0 + 300e3);
+  const r = ID.purgeExpired(db, T0 + 6 * H);
+  ok('purge removes expired sessions (sliding or absolute) and challenges', r.sessions === 2 && r.challenges === 1);
+  db.close();
+});
+
+section('[8] Operator CLI — a real process against a real file', () => {
+  const dir = tmp();
+  const env = { ...process.env, DATA_DIR: dir, ACCOUNTS: '1', RP_ID: 'localhost', DEV: '1', APP_ORIGINS: 'http://localhost:8088', NODE_NO_WARNINGS: '1' };
+  const cli = (...args) => { const r = spawnSync(process.execPath, [join(SERVER, 'admin.js'), ...args], { env, encoding: 'utf8' }); return { code: r.status, out: r.stdout, err: r.stderr }; };
+  const help = cli('help');
+  ok('help lists the commands', help.code === 0 && /create-club/.test(help.out) && /end-sessions/.test(help.out));
+  const created = cli('create-club', 'SC', 'Test', 'Club');
+  const clubId = (created.out.match(/club created: (c_[\w-]+)/) || [])[1];
+  ok('create-club prints the new id', created.code === 0 && !!clubId);
+  const inv = cli('club-admin-invite', clubId);
+  const code = (inv.out.match(/\b([0-9A-Z]{5}(?:-[0-9A-Z]{5}){4}-[0-9A-Z])\b/) || [])[1];
+  ok('club-admin-invite prints a code and a #fragment link (never a ?query)', inv.code === 0 && !!code && inv.out.includes('http://localhost:8088/#invite=' + code.replace(/-/g, '')));
+  ok('an invite for a club that does not exist fails with exit 1', cli('club-admin-invite', 'c_nope').code === 1);
+  ok('a missing argument shows usage with exit 2', cli('recover').code === 2);
+  ok('an unknown command exits 2', cli('drop-everything').code === 2);
+  ok('recover for an unknown person fails', cli('recover', 'u_nope').code === 1);
+  const clubs = cli('clubs');
+  ok('clubs shows the club has no admin yet', /SC Test Club/.test(clubs.out) && /no admin yet/.test(clubs.out));
+  const db = DB.open(join(dir, 'triibholz.db'));
+  const row = ID.consumeCode(db, { code, kind: 'club-admin' }, Date.now());
+  ok('the printed code is a working single-use club-admin code for that club', row && row.club_id === clubId && row.role === 'admin' && !ID.consumeCode(db, { code, kind: 'club-admin' }, Date.now()));
+  ok('every command left an operator audit row', db.prepare("SELECT count(*) AS n FROM audit WHERE actor = 'operator'").get().n >= 2);
+  db.close();
+  const bad = spawnSync(process.execPath, [join(SERVER, 'admin.js'), 'clubs'], { env: { ...env, DATA_DIR: tmp() }, encoding: 'utf8' });
+  ok('a fresh data directory is initialised, not an error', bad.status === 0 && /no clubs yet/.test(bad.stdout));
+});
+
+section('[9] Server startup', () => {
+  const run = (env) => spawnSync(process.execPath, ['-e', `require(${JSON.stringify(join(SERVER, 'index.js'))})`], { env: { ...process.env, NODE_NO_WARNINGS: '1', DATA_DIR: tmp(), ...env }, encoding: 'utf8', timeout: 20000 });
+  const off = run({ ACCOUNTS: '' });
+  ok('accounts off: the server module loads as before', off.status === 0);
+  const refused = spawnSync(process.execPath, [join(SERVER, 'index.js')], { env: { ...process.env, NODE_NO_WARNINGS: '1', DATA_DIR: tmp(), PORT: '4399', ACCOUNTS: '1', RP_ID: 'localhost', APP_ORIGINS: 'http://localhost:8088' }, encoding: 'utf8', timeout: 20000 });
+  ok('a refused configuration stops the server before it listens, saying why', refused.status === 1 && /not starting/.test(refused.stderr) && /DEV=1/.test(refused.stderr));
+});
+
+console.log(`\n==== ${pass} passed, ${fail} failed ====`);
+process.exit(fail ? 1 : 0);
