@@ -15,6 +15,9 @@ const ok=(n,c)=>{ c?pass++:fail++; console.log((c?'  ✓ ':'  ✗ FAIL: ')+n); }
 // with "Could not find profile folder." (155). CFFIXED_USER_HOME is the home macOS APIs use; HOME covers the rest.
 const ffHome = mkdtempSync(join(tmpdir(), 'thplay-ffhome-'));
 const browser = await firefox.launch({ env: { ...process.env, HOME: ffHome, CFFIXED_USER_HOME: ffHome } });
+// LOOK=silver runs the whole walkthrough in Black & Silver: every context (and every separate "device") starts in that look
+const LOOK = process.env.LOOK || '';
+if (LOOK) { const newContext = browser.newContext.bind(browser); browser.newContext = async o => { const c = await newContext(o); await c.addInitScript(l => { try { if (!localStorage.getItem('thplay.look.v1')) localStorage.setItem('thplay.look.v1', l); } catch (e) {} }, LOOK); /* the STARTING look: a choice made during the run must survive a reload */ return c; }; }
 
 function hook(page, tag){
   const thirdParty = t => /youtube\.com|googlevideo|doubleclick|SameSite|__Secure-/.test(t||'');
@@ -49,6 +52,20 @@ await page.screenshot({ path:OUT+'/qa_01_auth.png' });
 
 console.log('\n[2] Coach — dashboard & playbook');
 await page.click('.demo-btn[data-demo="coach"]'); await page.waitForTimeout(500); await skipTour(page);
+// the look switch (theme Phase 1): says what it will do, flips the whole app, survives a reload, flips back
+{
+  const lookOf = () => page.evaluate(() => document.documentElement.getAttribute('data-look'));
+  const start = await lookOf(), other = start === 'silver' ? 'today' : 'silver';
+  const label0 = await page.locator('#look-toggle').getAttribute('title');
+  await page.click('#look-toggle'); await page.waitForTimeout(250);
+  const flipped = await lookOf(), bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor + '|' + getComputedStyle(document.documentElement).getPropertyValue('--panel').trim());
+  const label1 = await page.locator('#look-toggle').getAttribute('title');
+  ok('the look switch flips the whole app (' + start + ' → ' + other + ') and its label says what the next press does', flipped === other && /Black & Silver|navy/.test(label0) && label1 !== label0 && (await page.locator('#look-toggle').getAttribute('aria-pressed')) === String(other === 'silver') && /#111214|#0f1c2b/.test(bg));
+  await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(800); await skipTour(page);
+  ok('the chosen look survives a reload (saved per device)', (await lookOf()) === other);
+  await page.click('#look-toggle'); await page.waitForTimeout(250);
+  ok('…and switches back', (await lookOf()) === start);
+}
 ok('coach dashboard', await page.locator('.invite-card').count()===1);
 await page.screenshot({ path:OUT+'/qa_02_coach_dash.png' });
 await page.click('.nav-btn[data-view="playbook"]'); await page.waitForTimeout(400);

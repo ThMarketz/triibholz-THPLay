@@ -3311,6 +3311,11 @@
 
     document.querySelectorAll('#mode-toggle .mode-btn').forEach(b=> b.onclick=()=>setMode(b.dataset.mode, false));
     $('reveal-btn').onclick = ()=>{ setMode('solution', true); onStudied(); };
+    $('look-toggle').onclick = ()=>{
+      const next = THEME.look() === 'silver' ? 'today' : 'silver';
+      THEME.setLook(next); updateLookToggle();
+      toast(T(next === 'silver' ? 'ui.lookNowSilver' : 'ui.lookNowToday'));
+    };
     $('sound-toggle').onclick = (e)=>{
       const on = !FX.isSoundOn(); FX.setSound(on);
       e.currentTarget.textContent = on ? '🔊' : '🔇';
@@ -3385,6 +3390,12 @@
     });
   }
   function refreshLangSwitches(){ buildLangSwitch('lang-switch-auth'); buildLangSwitch('lang-switch-top'); }
+  /* the look switch says what pressing it will do, in the current language */
+  function updateLookToggle(){
+    const b = $('look-toggle'); if (!b || typeof THEME==='undefined') return;
+    const silver = THEME.look() === 'silver', label = T(silver ? 'ui.lookToToday' : 'ui.lookToSilver');
+    b.title = label; b.setAttribute('aria-label', label); b.setAttribute('aria-pressed', silver ? 'true' : 'false');
+  }
   function updateUserPill(){
     if(!state.user) return;
     $('user-name').textContent = state.user.name;
@@ -3402,6 +3413,7 @@
       I18N.init();
       I18N.onChange(()=>{
         refreshLangSwitches();
+        updateLookToggle();
         updateUserPill();
         if ($('app-screen').classList.contains('active')) {
           switchView(state.view);
@@ -3418,6 +3430,7 @@
     refreshLangSwitches();
     if (typeof FX!=='undefined' && $('sound-toggle')) $('sound-toggle').textContent = FX.isSoundOn() ? '🔊' : '🔇';
     if (typeof I18N!=='undefined') I18N.apply(document);
+    updateLookToggle();
     // PWA: register the service worker when served over http(s)
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
       navigator.serviceWorker.register('sw.js').catch(()=>{});

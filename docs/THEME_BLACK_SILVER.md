@@ -37,7 +37,7 @@ Playbook screen in today's navy look and in Black & Silver, with glass controls 
 | Phase | What | Size | Status |
 |-------|------|------|--------|
 | 0 | Foundation: every colour becomes a token, a theme switch exists, today's look unchanged | L | ☑ done |
-| 1 | Black & Silver chrome: palette, bars, panels, buttons, forms, menus, toasts | M | ☐ |
+| 1 | Black & Silver chrome: palette, bars, panels, buttons, forms, menus, toasts | M | ☑ done |
 | 2 | The pool and everything drawn: board, animation, Film Room board, 3D, celebrations | M | ☐ |
 | 3 | Glass on floating controls, with a solid fallback | S | ☐ |
 | 4 | Every screen, both looks, phone widths; sign-off and release | M | ☐ |
@@ -152,6 +152,58 @@ The switch goes in the top bar next to the sound toggle, labelled in EN/DE/FR/IT
 WCAG contrast for every text token on every surface token, and must meet AA (4.5:1 body, 3:1 large) in
 both looks. This is the sunlight guard.
 
+**Done 2026‑09‑15.** Black & Silver is opt-in from the top-bar switch. Today stays the default until Phase 4.
+
+- **Tokens.** `:root[data-look="silver"]` redefines 68 tokens and adds none (a smoke check enforces that).
+  - The base set follows the approved sample: `--bg #050506`, `--panel #111214`, `--line #2a2c30`,
+    `--ink #eceef1`. `--ink-faint` is raised to `#8b9199`, because the sample's `#6e747d` fails AA.
+  - The palette is remapped by formula: navy → graphite 4 points darker, mist → neutral silver at the
+    same lightness, sky → muted steel-blue (still tells offense from defense), brand cyan → silver
+    lifted 24 points so it still reads as the highlight.
+  - Red, green, yellow, orange and violet keep their meaning. Every `-rgb` twin matches its colour in
+    each look (smoke).
+- **Components.** Only where a token swap would put white text on light silver: `.btn-primary`,
+  `.audible-btn` and the avatars take the **metal** gradient with dark ink. The active 3D toggle is metal
+  too. There's also an inset highlight on the active tab, and `.icon-btn` gets an ink colour.
+- **The switch.** `◐` next to the sound toggle.
+  - Its title and aria-label say what the next press does, in EN/DE/FR/IT, and follow a language change.
+  - Pressing it shows a toast ("Black & Silver look on").
+  - `aria-pressed` reflects the look; the choice is saved per device and survives a reload.
+- **Contrast audit (new, `tests/visual.mjs audit <url> <look> [maxFail]`).** On all 18 screens it checks
+  every visible text element against the background actually behind it: semi-transparent layers
+  composited, a gradient judged by its worst stop, colour emoji skipped.
+  - **Black & Silver: 0 below AA** (`maxFail 0`). Getting there took 4 fixes in this look:
+    - a deeper `--danger-strong` for the keeper badge and active keeper view;
+    - full opacity for `<small>` in table headers;
+    - a colour for unstyled links (they were browser-default blue);
+    - metal for the active 3D toggle.
+- **Today's look.** Unchanged except the switch. The pixel comparison against Phase 0 shows changes only
+  inside the top bar (desktop y ≤ 62, phone y ≤ 190) on 17 screens; auth, which has no top bar, is
+  identical.
+- **Tests.**
+  - Smoke +3: the look exists and `theme.js` offers it; a look invents no tokens; `-rgb` twins match
+    per look.
+  - The colour ratchet now accepts look blocks.
+  - `tests/browser.mjs`: `LOOK=silver` runs the whole walkthrough in Black & Silver, setting only the
+    *starting* look, so a choice made during the run survives a reload. Browser +3: the switch flips the
+    app and relabels, survives a reload, and switches back.
+- **Verified** on 7eeda96 plus exactly these files:
+  - browser 197/197 in **today** and 197/197 in **silver**, zero console errors;
+  - smoke 674/674, i18n scan 0, host server 84 + 17 skipped, image server 101/101;
+  - identity 79, auth 153, clubs 127;
+  - contrast audit silver 0.
+- **Fault-injected** 5 ways, each caught:
+  1. the silver look inventing a token;
+  2. an `-rgb` twin disagreeing with its colour;
+  3. `theme.js` not offering silver;
+  4. faint text too dim (the audit fails, 142 below AA);
+  5. the switch not saving (reload check fails).
+
+  Two injections first failed to inject: a multi-line `perl -pi` pattern, and a Docker mount on a
+  deleted and recreated folder. Both were redone properly.
+- **Design check** (captures reviewed): dashboard, playbook, auth and phone dashboard read as Black &
+  Silver. The board still shows today's bright cyan water and navy deck, which is Phase 2 by plan.
+
 ## Phase 2 — The pool and everything drawn
 
 **What changes.**
@@ -188,6 +240,20 @@ checks for the board, cue overlay and 3D stay green.
 - dashboard, playbook and editor, basics, Film Room, season, matches, teams and team sheets (paper
   preview stays paper);
 - trivia, My Development, announcements, admin, help, auth.
+
+**Found in today's look by the Phase 1 contrast audit (not fixed; today had to stay unchanged):**
+- **261** text elements below AA across the 18 screens. The main causes:
+  - `--ink-faint` `#647d93` at 3.6–4.0:1;
+  - white on the bright teal primary buttons and avatars at 2.54:1;
+  - the top bar's **"？" help button rendering black on dark** (1.15:1, `.icon-btn` has no text colour);
+  - unstyled links in browser-default blue (1.99:1).
+
+  Black & Silver fixes all of these for its own look. Decide in Phase 4 whether today's look gets the
+  same fixes, which would change its pixels.
+- Other small leftovers seen while wiring the switch:
+  - `.cmd-info` uses `var(--muted)`, which is never defined;
+  - the sound toggle's toast says "Sound on" / "Sound off" in English in every language (the i18n scanner
+    can't see a toast built from a ternary).
 
 **Already seen at phone width (375 px, today's look, found by the Phase 0 captures):** on the Playbook, the
 situation tabs and the Share button run off the right edge, and the "Paused — drag players…" hint is cut

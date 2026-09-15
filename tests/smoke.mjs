@@ -1492,7 +1492,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
        block (:root), in regions marked theme:fixed (paper, third-party logos, the print booklet until Phase 2),
        in js/theme.js (the fallback copy) and js/qr.js (a QR code must stay dark on light to scan). */
     const HEX = /#[0-9a-fA-F]{6}(?![\w-])|#[0-9a-fA-F]{3}(?![\w-])|rgba?\(\s*\d/g;
-    const cssBody = (css.slice(0, rs) + css.slice(re + 1)).replace(/\/\* theme:fixed[\s\S]*?\/\* theme:fixed-end \*\//g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    const cssBody = (css.slice(0, rs) + css.slice(re + 1)).replace(/:root\[data-look="[a-z]+"\]\{[^}]*\}/g, '').replace(/\/\* theme:fixed[\s\S]*?\/\* theme:fixed-end \*\//g, '').replace(/\/\*[\s\S]*?\*\//g, '');
     const cssLeft = [];
     cssBody.replace(/\{([^{}]*)\}/g, (w, d) => { (d.match(HEX) || []).forEach(x => cssLeft.push(x)); return w; });
     const htmlSrc = readFileSync(join(APP, 'index.html'), 'utf8').replace(/<!-- theme:fixed[\s\S]*?<!-- theme:fixed-end -->/g, '').replace(/<meta name="theme-color"[^>]*>/, '');
@@ -1503,6 +1503,14 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
       src = src.replace(/theme:fixed[\s\S]*?(<\/style>|`;)/g, '');   // a fixed region runs to the end of its style block
       (src.match(HEX) || []).forEach(x => jsLeft.push(n + ' ' + x));
     });
+    // a look redefines tokens; it may not invent new ones, and an -rgb twin must be the same colour as its token
+    const hexRgb = v => { let x = v.replace('#', ''); if (x.length === 3) x = x.split('').map(c => c + c).join(''); return [0, 2, 4].map(i => parseInt(x.slice(i, i + 2), 16)).join(','); };
+    const looks = [...css.matchAll(/:root\[data-look="([a-z]+)"\]\{([^}]*)\}/g)].map(m => [m[1], Object.fromEntries([...m[2].matchAll(/(--[\w-]+):\s*([^;]+);/g)].map(x => [x[1], x[2].trim()]))]);
+    ok('the CSS defines a Black & Silver look, and js/theme.js offers it', looks.some(([n]) => n === 'silver') && THEME.LOOKS.join() === 'today,silver');
+    const invented = looks.flatMap(([n, t]) => Object.keys(t).filter(k => !(k in cssTok)).map(k => n + ':' + k));
+    ok('a look only redefines tokens that already exist' + (invented.length ? ' — new: ' + invented.join(', ') : ''), invented.length === 0);
+    const twinOff = [['today', cssTok], ...looks].flatMap(([n, t]) => Object.keys(t).filter(k => /-rgb$/.test(k)).filter(k => { const base = t[k.replace(/-rgb$/, '')] || cssTok[k.replace(/-rgb$/, '')]; return !/^#/.test(base) || hexRgb(base) !== t[k].replace(/\s/g, ''); }).map(k => n + ':' + k));
+    ok('every -rgb twin is the same colour as its token, in every look' + (twinOff.length ? ' — off: ' + twinOff.join(', ') : ''), twinOff.length === 0);
     ok('no colour is hard-coded outside the tokens (CSS ' + cssLeft.length + ', index.html ' + htmlLeft.length + ', JS ' + jsLeft.length + ')' + (jsLeft.length ? ' — ' + jsLeft.slice(0, 5).join(', ') : ''), cssLeft.length === 0 && htmlLeft.length === 0 && jsLeft.length === 0);
   }
 

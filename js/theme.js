@@ -13,11 +13,12 @@
    suite). tests/smoke.mjs fails if a value here differs from css/styles.css, or if code asks for a name
    that is missing — so the two cannot drift.
 
-   Looks: 'today' (the navy look). docs/THEME_BLACK_SILVER.md Phase 1 adds 'silver'.
+   Looks: 'today' (the navy look) and 'silver' (Black & Silver). FALLBACK holds today's values: the smoke
+   suite runs in the default look, and drawn surfaces only get silver values in Phase 2.
    ============================================================ */
 const THEME = (() => {
   const KEY = 'thplay.look.v1';
-  const LOOKS = ['today'];
+  const LOOKS = ['today', 'silver'];   // silver: Black & Silver (docs/THEME_BLACK_SILVER.md Phase 1)
   const FALLBACK = { today: {
     "--status-bar":"#0e7c86", "--logo-water":"#0e7c86", "--logo-edge":"#0a5860", "--logo-wave":"#bff0f4",
     "--logo-ball":"#ff7a18", "--logo-seam":"#fff", "--pool-deck":"#0c2030", "--pool-water-top":"#1aa3b0",

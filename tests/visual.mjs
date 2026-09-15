@@ -2,6 +2,8 @@
 
      node tests/visual.mjs capture <appUrl> <outDir>      e.g. http://localhost:8091/ /tmp/vis-base
      node tests/visual.mjs compare <baseDir> <candDir>    exit 1 if any screen differs
+     node tests/visual.mjs audit <appUrl> <look> [maxFail]  WCAG AA text contrast on every screen, in a look
+     LOOK=silver node tests/visual.mjs capture …          capture in a look other than the default
 
    Written for the Black & Silver theme work (docs/THEME_BLACK_SILVER.md): Phase 0 turns every colour into
    a token and must leave today's look exactly as it was, and this is the proof. Everything that could make
@@ -17,7 +19,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 const [mode, a, b] = process.argv.slice(2);
-if (!['capture', 'compare'].includes(mode) || !a || !b) { console.error('usage: visual.mjs capture <appUrl> <outDir> | compare <baseDir> <candDir>'); process.exit(2); }
+if (!['capture', 'compare', 'audit'].includes(mode) || !a || !b) { console.error('usage: visual.mjs capture <appUrl> <outDir> | compare <baseDir> <candDir> | audit <appUrl> <look> [maxFail]'); process.exit(2); }
+const LOOK = mode === 'audit' ? b : (process.env.LOOK || '');
 
 // same reason as tests/browser.mjs: the user's everyday Firefox home breaks Playwright's Firefox
 const ffHome = mkdtempSync(join(tmpdir(), 'thplay-ffhome-'));
@@ -38,6 +41,7 @@ async function session(appUrl, viewport, persona, lang) {
   await page.clock.setFixedTime(FROZEN);
   await page.addInitScript(PIN);
   if (lang) await page.addInitScript(l => { try { localStorage.setItem('thplay.lang', l); } catch (e) {} }, lang);
+  if (LOOK) await page.addInitScript(l => { try { if (!localStorage.getItem('thplay.look.v1')) localStorage.setItem('thplay.look.v1', l); } catch (e) {} }, LOOK); /* the STARTING look: a choice made during the run must survive a reload */
   await page.goto(appUrl, { waitUntil: 'networkidle' });
   if (persona) {
     await page.click(`.demo-btn[data-demo="${persona}"]`); await page.waitForTimeout(500);
@@ -78,7 +82,7 @@ if (mode === 'capture') {
      js/theme.js (before the theme work) skip this. */
   {
     const { ctx, page } = await session(a, DESK, null);
-    const bad = await page.evaluate(() => typeof THEME === 'undefined' ? null : Object.entries(THEME.FALLBACK.today).filter(([k, v]) => THEME.c(k) !== v).map(([k, v]) => k + ': ' + THEME.c(k) + ' ≠ ' + v));
+    const bad = await page.evaluate(() => typeof THEME === 'undefined' ? null : THEME.look() !== 'today' ? [] : Object.entries(THEME.FALLBACK.today).filter(([k, v]) => THEME.c(k) !== v).map(([k, v]) => k + ': ' + THEME.c(k) + ' ≠ ' + v));
     await ctx.close();
     if (bad && bad.length) { console.log('  ✗ computed token values differ from the CSS text:\n    ' + bad.join('\n    ')); await browser.close(); process.exit(1); }
     console.log(bad ? '  ✓ every drawn-by-code token computes to exactly its CSS text' : '  – no js/theme.js in this build (token check skipped)');
@@ -91,6 +95,72 @@ if (mode === 'capture') {
     console.log('  captured', name);
   }
   console.log(`\n==== ${SCREENS.length} screens captured → ${b} ====`);
+}
+
+/* WCAG AA on what is really on screen: every visible text element against the background actually behind it
+   (semi-transparent layers composited, a gradient judged by its WORST stop, the page ground for the body).
+   4.5:1, or 3:1 for large text (≥ 24 px, or ≥ 18.66 px bold). Board SVG text and disabled controls are exempt. */
+const AUDIT = () => {
+  const parse = s => { const m = /rgba?\(([^)]+)\)/.exec(s || ''); if (!m) return null; const p = m[1].split(/[\s,\/]+/).filter(Boolean).map(Number); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };
+  const stops = s => [...(s || '').matchAll(/rgba?\([^)]+\)/g)].map(m => parse(m[0]));
+  const lum = c => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+  const over = (t, u) => ({ r: t.r * t.a + u.r * (1 - t.a), g: t.g * t.a + u.g * (1 - t.a), b: t.b * t.a + u.b * (1 - t.a), a: 1 });
+  const ratio = (x, y) => { const [l1, l2] = [lum(x), lum(y)].sort((p, q) => q - p); return (l1 + 0.05) / (l2 + 0.05); };
+  const ground = parse('rgb(' + (getComputedStyle(document.documentElement).getPropertyValue('--bg-rgb') || '7,15,23') + ')');
+  // candidate backgrounds behind an element: composite layers bottom-up; a gradient layer yields one candidate per stop
+  function backs(el) {
+    const layers = [];
+    for (let e = el; e && e !== document.body && e !== document.documentElement; e = e.parentElement) {
+      const cs = getComputedStyle(e);
+      const img = cs.backgroundImage !== 'none' ? stops(cs.backgroundImage).filter(Boolean) : [];
+      const col = parse(cs.backgroundColor);
+      if (img.length) { layers.push({ grad: img }); if (img.every(c => c.a >= 1)) break; }
+      if (col && col.a > 0) { layers.push({ col }); if (col.a >= 1) break; }
+    }
+    let cands = [ground];
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const L = layers[i];
+      cands = L.col ? cands.map(b => over(L.col, b)) : L.grad.flatMap(g => cands.map(b => over(g, b)));
+    }
+    return cands;
+  }
+  const out = []; let checked = 0;
+  const vw = innerWidth, vh = innerHeight;
+  for (const el of document.querySelectorAll('body *')) {
+    if (el.closest('svg, canvas, option, script, style, [hidden]')) continue;
+    const own = [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('');
+    // colour emoji ignore CSS colour, so only judge text that has letters, digits or punctuation of its own
+    if (!own.replace(/[\p{Extended_Pictographic}\u200d\ufe0f\s]/gu, '')) continue;
+    if (el.matches(':disabled, [aria-disabled="true"]') || el.closest(':disabled')) continue;
+    const r = el.getBoundingClientRect(); if (r.width < 1 || r.height < 1 || r.bottom < 0 || r.top > vh || r.right < 0 || r.left > vw) continue;
+    const cs = getComputedStyle(el); if (cs.visibility !== 'visible') continue;
+    let op = 1; for (let e = el; e; e = e.parentElement) op *= +getComputedStyle(e).opacity; if (op < 0.05) continue;
+    const fg0 = parse(cs.color); if (!fg0) continue;
+    const size = parseFloat(cs.fontSize), bold = +cs.fontWeight >= 700, need = (size >= 24 || (size >= 18.66 && bold)) ? 3 : 4.5;
+    const worst = Math.min(...backs(el).map(bg => ratio(over({ ...fg0, a: fg0.a * op }, bg), bg)));
+    checked++;
+    if (worst < need) out.push({ text: el.textContent.trim().replace(/\s+/g, ' ').slice(0, 36), ratio: +worst.toFixed(2), need, sel: el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : ''), color: cs.color });
+  }
+  return { checked, fails: out };
+};
+
+if (mode === 'audit') {
+  const maxFail = process.argv[5] === undefined ? Infinity : +process.argv[5];
+  let total = 0; const bySel = {};
+  for (const [name, vp, persona, go, lang] of SCREENS) {
+    const { ctx, page } = await session(a, vp, persona, lang);
+    await go(page); await settle(page);
+    const look = await page.evaluate(() => document.documentElement.getAttribute('data-look'));
+    const r = await page.evaluate(AUDIT);
+    total += r.fails.length;
+    r.fails.forEach(x => { const k = x.sel + ' ' + x.color; (bySel[k] = bySel[k] || { n: 0, ratio: x.ratio, need: x.need, text: x.text }).n++; });
+    console.log(`  ${r.fails.length ? '✗' : '✓'} ${name} [${look || 'no look'}]: ${r.checked} texts, ${r.fails.length} below AA`);
+    await ctx.close();
+  }
+  console.log('\n  worst offenders (selector · colour · lowest ratio · count):');
+  Object.entries(bySel).sort((x, y) => y[1].n - x[1].n).slice(0, 25).forEach(([k, v]) => console.log(`    ${v.n}× ${k} → ${v.ratio}:1 (needs ${v.need}) e.g. "${v.text}"`));
+  console.log(`\n==== ${total} text elements below AA across ${SCREENS.length} screens (allowed: ${maxFail === Infinity ? 'report only' : maxFail}) ====`);
+  await browser.close(); process.exit(total > maxFail ? 1 : 0);
 }
 
 if (mode === 'compare') {

@@ -54,7 +54,33 @@
   --reel-subtitle:#7fd4de; --reel-brand:rgba(232,246,248,.55);
   --fx-confetti-1:#ff7a18; --fx-confetti-2:#16b3c4; --fx-confetti-3:#2bd07a; --fx-confetti-4:#ffd400; --fx-confetti-5:#ffffff; --fx-confetti-6:#e23b3b;
   --mascot-body:#ff7a18; --mascot-edge:#9c3d00; --mascot-seam:#fff; --mascot-eye:#fff; --mascot-ink:#0b1f2c;
+
+  /* metal (theme Phase 1): the polished-silver fill of the active control; used by the Black & Silver look */
+  --metal:linear-gradient(180deg,#fbfcfd 0%,#d4d9df 48%,#9aa0a8 100%); --metal-soft:linear-gradient(180deg,#f3f5f7,#aeb4bc); --metal-ink:#0b0c0e; --metal-edge:rgba(255,255,255,.6);
+  /* a red that still carries white text (keeper badge, active keeper view); today it is exactly --red */
+  --danger-strong:#e23b3b;
 }
+/* ===== Black & Silver (theme Phase 1): the same tokens, redefined. Opt-in from the top-bar switch until Phase 4.
+   Neutrals become graphite, brand cyan becomes silver; red/green/yellow/orange keep their meaning (right, warning,
+   offense, defense). Drawn surfaces (pool, 3D, reels) are Phase 2 and keep today's values for now. ===== */
+:root[data-look="silver"]{
+  --bg:#050506; --bg2:#0b0c0d; --panel:#111214; --panel2:#1a1b1e; --line:#2a2c30; --line-soft:#1d1f22;
+  --danger-strong:#c42f2f;
+  --ink:#eceef1; --ink-dim:#a7adb6; --ink-faint:#8b9199; --teal:#c9ced5; --teal-d:#5b6068; --accent:#e3e6ea;
+  --black:#0b0c0e; --status-bar:#050506; --logo-water:#136373; --logo-edge:#0a2e36; --logo-wave:#d9dee5;
+  --navy-04:#040505; --navy-06:#050505; --navy-07:#070708; --navy-07b:#080809; --navy-08b:#09090a;
+  --navy-08:#0a0a0b; --navy-08c:#0a0b0b; --navy-09:#0c0c0d; --navy-11:#101112; --navy-11c:#111213;
+  --navy-11b:#121214; --navy-12:#121314; --navy-13:#151617; --navy-14:#17181a; --navy-15:#191a1c;
+  --navy-15d:#1a1b1d; --navy-15b:#1b1c1e; --navy-15c:#1c1d1f; --navy-18:#232427; --navy-19:#232527;
+  --navy-19b:#242528; --navy-22:#2b2c2f; --navy-29:#3c3e42; --navy-32:#44464b; --mist-65:#a1a4ab;
+  --mist-69:#abaeb4; --mist-74:#b9bcc1; --mist-79:#c7c9ce; --mist-83:#d0d2d6; --mist-88:#dfe0e2; --sky-58:#7e91ac;
+  --sky-68:#9aa9bf; --sky-75:#b1bdcd; --sky-78:#bbc5d3; --sky-78b:#bbc5d3; --sky-87:#d8dee6; --cyan-40:#9ba1aa;
+  --cyan-48:#b1b6bc; --cyan-68:#eaebed; --cyan-76:#f4f5f6; --cyan-94:#f4f5f6; --bg-rgb:5,5,6;
+  --teal-rgb:201,206,213; --teal-d-rgb:91,96,104; --accent-rgb:227,230,234; --navy-04-rgb:4,5,5;
+  --navy-07b-rgb:8,8,9; --navy-08c-rgb:10,11,11; --sky-68-rgb:154,169,191; --cyan-40-rgb:155,161,170;
+  --cyan-48-rgb:177,182,188;
+}
+
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
@@ -1249,3 +1275,14 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
   .tm-lineup td:nth-child(3){margin-left:calc(2em + 10px)}
   .tm-lineup td.tm-move{margin-left:auto}
 }
+
+/* ===== Black & Silver components: where a token swap alone would put white text on light silver ===== */
+:root[data-look="silver"] .btn-primary,:root[data-look="silver"] .audible-btn{background:var(--metal);color:var(--metal-ink);box-shadow:inset 0 1px 0 var(--metal-edge),0 6px 16px rgba(var(--pure-black-rgb),.45)}
+:root[data-look="silver"] .user-avatar,:root[data-look="silver"] .ar-av{background:var(--metal-soft);color:var(--metal-ink)}
+:root[data-look="silver"] .nav-btn.active{box-shadow:inset 0 1px 0 rgba(var(--white-rgb),.12)}
+:root[data-look="silver"] .icon-btn{color:var(--ink)}
+/* the contrast audit (tests/visual.mjs audit) found these below WCAG AA in this look */
+:root[data-look="silver"] .assign-badge.gk,:root[data-look="silver"] #gk-toggle.active{background:var(--danger-strong);border-color:var(--danger-strong)}
+:root[data-look="silver"] .dev-table th small{opacity:1}
+:root[data-look="silver"] a:not([class]){color:var(--teal)}
+:root[data-look="silver"] #scene3d-toggle.active{background:var(--metal);color:var(--metal-ink);border-color:var(--line)}   /* an active control is metal in this look */
