@@ -364,13 +364,13 @@ await page.screenshot({ path:OUT+'/qa_25_autoscout.png' });
 // Half a match must say so above the report — not only in the collapsed "Go further" part.
 {
   const scoutResult = meta => ({ engine:'server', version:1, tracks:[], events:[], frames:[], scout:{ possessions:0, plays:[], profile:{}, summary:[], playbook:[] }, meta:Object.assign({ fps:6, field:{ mode:'fixed' } }, meta) });
-  let answer = null;
+  let answer = null, jobState = { status:'done', error:null }, health = { ok:true, engine:'server', ffmpeg:true, maxUploadMB:4096 };
   const json = (route, body, status=200) => route.fulfill({ status, contentType:'application/json', body:JSON.stringify(body) });
   const mocks = {
-    '**/api/health': r => json(r, { ok:true, engine:'server', ffmpeg:true, maxUploadMB:4096 }),
+    '**/api/health': r => json(r, health),
     '**/api/upload': r => json(r, { videoRef:'mock.mp4', bytes:16 }),
     '**/api/jobs': r => json(r, { id:'job_mock', status:'queued' }, 202),
-    '**/api/jobs/job_mock': r => json(r, { id:'job_mock', status:'done', error:null }),
+    '**/api/jobs/job_mock': r => json(r, Object.assign({ id:'job_mock' }, jobState)),
     '**/api/jobs/job_mock/result': r => json(r, answer),
   };
   for (const [pat, fn] of Object.entries(mocks)) await page.route(pat, fn);
@@ -389,6 +389,26 @@ await page.screenshot({ path:OUT+'/qa_25_autoscout.png' });
   ok('nearly all read but damaged parts → the "not read cleanly" warning instead', /could not be read cleanly/.test((await warn.textContent().catch(()=>''))||''));
   await runScout({ seconds:45, chunks:3, expectedSeconds:45 });
   ok('a clean, complete read shows no warning', /No possessions/.test(await page.locator('#scout-out').textContent()) && await page.locator('#scout-out .scout-warn').count()===0);
+  // When scouting fails, the coach reads WHY in plain words, never the server's code (video pipeline phase 3)
+  const failScout = async () => {
+    await page.evaluate(() => { document.querySelector('#scout-out').innerHTML = ''; });
+    await page.click('#scout-run');
+    await page.waitForFunction(() => /Auto-scout failed/.test(document.querySelector('#scout-out').textContent), { timeout:20000 }).catch(()=>{});
+    return (await page.locator('#scout-out').textContent().catch(()=>'')) || '';
+  };
+  jobState = { status:'error', error:'no-frames' };
+  let failTxt = await failScout();
+  ok('a job ending "no-frames" tells the coach no video could be read from the file — without the code', /no video could be read from this file/.test(failTxt) && !/no-frames/.test(failTxt));
+  await page.screenshot({ path:OUT+'/qa_42_scout_why.png' });
+  jobState = { status:'error', error:'field-not-found' };
+  failTxt = await failScout();
+  ok('"field-not-found" → the pool could not be found, click the corners — without the code', /pool couldn’t be found/.test(failTxt) && /Click corners/.test(failTxt) && !/field-not-found/.test(failTxt));
+  jobState = { status:'error', error:'some-code-nobody-knows' };
+  failTxt = await failScout();
+  ok('an unknown server code → a plain fallback sentence, the code never shown', /club server couldn’t finish the analysis/.test(failTxt) && !/some-code-nobody-knows|scout-/.test(failTxt));
+  jobState = { status:'done', error:null }; health = Object.assign({}, health, { ffmpeg:false });
+  failTxt = await failScout();
+  ok('a club server without ffmpeg says so before uploading (health ffmpeg:false)', /no ffmpeg/.test(failTxt) && !/backend-no-ffmpeg/.test(failTxt));
   for (const [pat, fn] of Object.entries(mocks)) await page.unroute(pat, fn);
 }
 // 🎯 Game plan chips + 📣 Team debriefs panel

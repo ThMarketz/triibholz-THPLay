@@ -26,9 +26,9 @@ built-in `lavfi` test source, so nothing needs downloading. Fault-inject each ne
 | 0 | Land the three fixes already made | S | ☑ committed; both gates green on the commit |
 | 1 | Long videos analysed as 0.5 s and reported "done" | M | ☑ done |
 | 2 | Partly unreadable videos look like complete ones | M | ☑ done |
-| 3 | Coaches see raw error codes, in every language | S | ☐ |
+| 3 | Coaches see raw error codes, in every language | S | ☑ done |
 | 4 | Test and documentation gaps | S | ☐ |
-| 5 | Browser gate | S | ☑ gate fixed (ea826cc); Phase 2 UI checks in; Phase 0/3 UI checks still to add |
+| 5 | Browser gate | S | ☑ done: gate fixed (ea826cc); UI checks for Phases 0, 2 and 3 in |
 
 ---
 
@@ -207,6 +207,49 @@ fallback that never shows a raw code.
 `index.js`) maps to a translation key that exists in all four languages. This is a list
 check, so it fails as soon as someone adds a new code without a message.
 
+**Done 2026‑09‑15.** One function in `js/film.js`, `errorReason(message)`, now turns every failure a
+coach can see into a translated reason. It handles the app's own messages, `scout-` / `cloud-error: `
+plus a server code, and `upload|job|clip|debrief|comment|cloud-http` plus an HTTP status (matched by
+pattern). It returns a key and never the message. Anything unknown gets one of two fallback sentences.
+
+- **Where it's used.** Auto-scout, both clip buttons, sharing a debrief, posting a comment, and the
+  cloud "Run analysis" path. The cloud path used to say "didn't respond" even when the server
+  answered with a reason; now it shows that reason, and keeps the untick hint for no answer at all.
+- **Example, before → after.** "Auto-scout failed — scout-no-frames." → "Auto-scout failed —
+  no video could be read from this file — check that it is a video and that it finished uploading."
+  "Clip failed (clip-404)." → "Clip failed (the uploaded video is no longer on the club server —
+  scout the video again to upload it once more)."
+- **Translations.** 13 new reasons in EN/DE/FR/IT, fragment style like the existing ones
+  (lowercase, no closing punctuation), naming the real buttons ("Click corners", "moving camera").
+  The i18n scan stays at 0.
+- **Also fixed.** The attack list's clip button said a hard-coded English "Cutting the clip… ⏳".
+  **The i18n scanner never flagged it**, even though it claims to scan markup in plain quotes; that
+  scanner gap is still open. Service worker cache → v68.
+- **Tests.**
+  - Smoke `[6q2]` +7. It reads the server codes from `server/engine.js`, `index.js` and
+    `detector.js`, plus every quoted string inside `new Error(…)` in `js/film.js` (ternaries
+    included). Every one must map to its own reason in all four languages, the rendered sentence must
+    never contain the code or an unfilled `{placeholder}`, statuses must be woven in, and unknown
+    codes must get the fallback.
+  - Browser `[4b]` +4, mocked club server. A `no-frames` job, a `field-not-found` job, an unknown
+    code, and health `ffmpeg:false` (Phase 0's message, first UI test) each show the reason and never
+    the code.
+- **Verified** on 608e617 plus exactly these files: image 94/94, host 84 + 10 skipped, smoke 661/661,
+  identity 79, auth 153, clubs 127, and browser 194/194 with zero console errors (throwaway stack on
+  :8090). Fault-injected 6 ways, each caught:
+  1. a new server code with no reason;
+  2. a reason removed;
+  3. a new client message;
+  4. `timed-out` losing its reason (thrown from a ternary);
+  5. a German string deleted;
+  6. the Film Room showing raw messages again (all 4 browser checks fail).
+
+  Fault injection also found two weaknesses in the new smoke check, both fixed. A missing
+  translation crashed the whole smoke run instead of failing one check. And the first version of
+  the source reader missed messages thrown from a ternary.
+- **Limit.** Existing reasons that address a developer ("start it with docker compose up -d
+  analysis", "raise MAX_UPLOAD") were left as they were.
+
 ---
 
 ## Phase 4 — Test and documentation gaps
@@ -243,6 +286,6 @@ The gate still uses Playwright 1.61.1 / Firefox 151. Firefox 155 (build 1543, ~2
 downloaded while diagnosing and is in `~/Library/Caches/ms-playwright`. Moving `tests/` to
 Playwright 1.63.0 would use it; otherwise it can be deleted.
 
-**Still to do for this plan:** Film Room checks for Phase 0's no-ffmpeg message and the
-Phase 3 messages. Phase 2's are in (the mocked club server in `[4b]`), and
-`APP_URL=http://localhost:<port>/` points the gate at a stack other than the running containers.
+**UI checks:** all in, using the mocked club server in `[4b]`: Phase 0's no-ffmpeg message,
+Phase 2's coverage warnings and Phase 3's failure reasons. `APP_URL=http://localhost:<port>/`
+points the gate at a stack other than the running containers.

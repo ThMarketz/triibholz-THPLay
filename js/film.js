@@ -535,14 +535,43 @@ const FILM = (() => {
       const result = await ANALYSIS.submit(job, opts);
       renderReview(result);
     } catch (e) {
-      const msg = /cloud-http|cloud-error|Failed to fetch|NetworkError/.test(e.message)
-        ? TX('film.cloudNoResponse')
+      // no answer at all → the untick hint; an answer with a reason (or our own video-missing) → that reason
+      const m = String(e && e.message || '');
+      const msg = /Failed to fetch|NetworkError|Load failed/.test(m) ? TX('film.cloudNoResponse')
+        : /^cloud-(http|error)|^video-missing$/.test(m) ? whyText(m)
         : TX('film.couldntAnalyseWhy', { why: scanErr(e) });
       if (out) out.innerHTML = `<div class="muted">${TX('film.analysisFailed', { msg })}</div>`;
     } finally { btn.disabled = false; }
   }
   /* ---- Auto-scout: whole video → possessions → tactics → summary → playbook ---- */
   const scoutBase = () => API.base();   // the club server is always the app's own origin
+  /* Why something failed, in the coach's language — never a raw code. A message is either the app's own
+     ('upload-413', 'backend-no-ffmpeg', 'too-large:900:500') or a club-server code: a job error arrives as
+     scout- plus the code, a direct analysis error as cloud-error: plus the code. tests/smoke.mjs [6q2] reads the server
+     and this file and fails if a code can reach the coach without a reason of its own. */
+  const SERVER_REASONS = { 'no-frames': 'film.whyNoFrames', 'field-not-found': 'film.whyFieldNotFound', 'ffmpeg': 'film.whyDecodeFailed',
+    'ffmpeg-unavailable': 'film.whyNoFfmpeg', 'bad-calibration': 'film.whyBadCalibration', 'video-not-found': 'film.whyVideoGone',
+    'no-input': 'film.whyNoInput', 'model': 'film.whyModelDown', 'too-large': 'film.whyUpload413' };
+  function errorReason(message) {
+    const m = String(message || ''); let x;
+    if ((x = /^too-large:(\d+):(\d+)$/.exec(m))) return { key: 'film.whyTooLarge', vars: { got: x[1], max: x[2] } };
+    if (m === 'backend-unreachable' || /Failed to fetch|NetworkError|Load failed/.test(m)) return { key: 'film.whyBackendUnreachable' };
+    if (m === 'upload-network') return { key: 'film.whyUploadCut' };
+    if (m === 'backend-no-ffmpeg') return { key: 'film.whyNoFfmpeg' };
+    if (m === 'video-missing') return { key: 'film.whyVideoMissing' };
+    if (m === 'timed-out') return { key: 'film.whyTimedOut' };
+    if (m === 'upload-bad-json') return { key: 'film.whyServerOdd' };
+    if ((x = /^(?:scout-|cloud-error: )(.+)$/.exec(m))) return { key: Object.prototype.hasOwnProperty.call(SERVER_REASONS, x[1]) ? SERVER_REASONS[x[1]] : 'film.whyServerUnknown' };
+    if ((x = /^(upload|job|clip|debrief|comment|cloud-http)-(\d{3})$/.exec(m))) {
+      const status = +x[2];
+      if (status === 413) return { key: 'film.whyUpload413' };
+      if (x[1] === 'clip' && status === 404) return { key: 'film.whyVideoGone' };
+      if (x[1] === 'clip' && status === 503) return { key: 'film.whyNoFfmpeg' };
+      return { key: status >= 500 ? 'film.whyServerError' : 'film.whyServerRefused', vars: { status } };
+    }
+    return { key: 'film.whyUnknown' };
+  }
+  const whyText = (message, base) => { const r = errorReason(message); return TX(r.key, Object.assign({ base: base || scoutBase() }, r.vars)); };
   function setScoutStatus(txt, cls) { const c = root && root.querySelector('#scout-status'); if (c) { c.textContent = txt; c.className = 'cloud-status ' + (cls || 'offline'); } }
   async function runAutoScout(btn) {
     const out = root && root.querySelector('#scout-out');
@@ -570,15 +599,7 @@ const FILM = (() => {
       setScoutStatus(TX('film.statusDone'), 'cloud'); ctx.toast(TX('film.scoutingReportReady'));
     } catch (e) {
       setScoutStatus(TX('film.statusFailed'), 'offline');
-      const m = String(e.message || e); let why;
-      if (/^too-large:/.test(m)) { const [, got, max] = m.split(':'); why = TX('film.whyTooLarge', { got, max }); }
-      else if (m === 'upload-413') why = TX('film.whyUpload413');
-      else if (m === 'backend-unreachable' || /Failed to fetch|NetworkError/.test(m)) why = TX('film.whyBackendUnreachable', { base });
-      else if (m === 'upload-network') why = TX('film.whyUploadCut', { base });
-      else if (m === 'backend-no-ffmpeg') why = TX('film.whyNoFfmpeg');
-      else if (m === 'video-missing') why = TX('film.whyVideoMissing');
-      else why = m;
-      if (out) out.innerHTML = `<div class="muted">${TX('film.autoScoutFailed', { why: esc(why) })}</div>`;
+      if (out) out.innerHTML = `<div class="muted">${TX('film.autoScoutFailed', { why: esc(whyText(e && e.message || e, base)) })}</div>`;
     } finally { btn.disabled = false; }
   }
   function uploadWithProgress(url, blob, onPct) {
@@ -664,7 +685,7 @@ const FILM = (() => {
       const p = sc.plays[+b.dataset.pclip], holder = b.closest('.ta-pat').querySelector('.ar-clip');
       b.disabled = true; holder.hidden = false; holder.innerHTML = `<span class="muted">${TX('film.cuttingTheClip')}</span>`;
       try { const url = await cutClip(result.meta.videoRef, p.tStart, p.tEnd); holder.innerHTML = `<video controls playsinline preload="metadata" src="${esc(scoutBase() + url)}"></video>`; }
-      catch (e) { holder.innerHTML = `<span class="muted">${TX('film.clipFailed', { error: esc(e.message) })}</span>`; b.disabled = false; }
+      catch (e) { holder.innerHTML = `<span class="muted">${TX('film.clipFailed', { error: esc(whyText(e.message)) })}</span>`; b.disabled = false; }
     });
   }
 
@@ -723,9 +744,9 @@ const FILM = (() => {
   function wireAttacks(out, sc, result) {
     out.querySelectorAll('[data-clip]').forEach(b => b.onclick = async () => {
       const p = sc.plays[+b.dataset.clip], holder = b.closest('.attack-row').querySelector('.ar-clip');
-      b.disabled = true; holder.hidden = false; holder.innerHTML = '<span class="muted">Cutting the clip… ⏳</span>';
+      b.disabled = true; holder.hidden = false; holder.innerHTML = `<span class="muted">${TX('film.cuttingTheClip')}</span>`;
       try { const url = await cutClip(result.meta.videoRef, p.tStart, p.tEnd); holder.innerHTML = `<video controls playsinline preload="metadata" src="${esc(scoutBase() + url)}"></video>`; }
-      catch (e) { holder.innerHTML = `<span class="muted">${TX('film.clipFailed', { error: esc(e.message) })}</span>`; b.disabled = false; }
+      catch (e) { holder.innerHTML = `<span class="muted">${TX('film.clipFailed', { error: esc(whyText(e.message)) })}</span>`; b.disabled = false; }
     });
     out.querySelectorAll('[data-board]').forEach(b => b.onclick = () => {
       const p = sc.plays[+b.dataset.board];
@@ -756,7 +777,7 @@ const FILM = (() => {
       if (!r.ok) throw new Error('debrief-' + r.status);
       if (st) st.textContent = ' — ' + TX('film.sharedSeeBelow'); ctx.toast(TX('film.debriefShared'));
       await loadDebriefs(); const d = root.querySelector('#film-debriefs'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } catch (e) { if (st) st.textContent = ` — ${TX('film.shareFailed', { error: e.message })}`; btn.disabled = false; }
+    } catch (e) { if (st) st.textContent = ` — ${TX('film.shareFailed', { error: whyText(e.message) })}`; btn.disabled = false; }
   }
   async function loadDebriefs() {
     const list = root && root.querySelector('#debrief-list'); if (!list) return;
@@ -811,7 +832,7 @@ const FILM = (() => {
         const r = await fetch(scoutBase() + '/api/debriefs/' + id + '/comments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ author: ctx.user && ctx.user.name, text, itemId: b.dataset.cpost || null }) });
         if (!r.ok) throw new Error('comment-' + r.status);
         await openDebrief(id); loadDebriefs();
-      } catch (e) { ctx.toast(TX('film.commentFailed', { error: e.message })); b.disabled = false; }
+      } catch (e) { ctx.toast(TX('film.commentFailed', { error: whyText(e.message) })); b.disabled = false; }
     });
     box.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -1176,5 +1197,5 @@ const FILM = (() => {
     };
   }
 
-  return { render, load, parseSource, ZONE_HINTS, _insights: insights, motionScan, teamOf };
+  return { render, load, parseSource, ZONE_HINTS, _insights: insights, motionScan, teamOf, _errorReason: errorReason, _serverReasons: SERVER_REASONS };
 })();
