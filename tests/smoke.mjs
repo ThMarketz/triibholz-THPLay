@@ -15,9 +15,9 @@ window.TextDecoder = window.TextDecoder || TD;   // TESTLOG's XLSX reader needs 
 window.DecompressionStream = window.DecompressionStream || globalThis.DecompressionStream;   // jsdom has neither; Node does
 window.Response = window.Response || globalThis.Response;
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/sheetdoc.js','js/eligibility.js','js/teamsheet.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH };';
+  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -1571,6 +1571,178 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
       const t = rec.tests.find(x => x.test === '50 m freestyle');
       return t.status === 'approved' && t.verifiedBy === 'Demo Coach' && !!t.verifiedAt;
     })());
+  }
+
+  console.log('\n[12] Team sheet documents — real .docx and .pdf, zero dependencies');
+  {
+    const { SHEETDOC: S, TESTLOG: TL } = window.__T;
+    const bin = s => { const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i) & 0xFF; return b; };
+    const latin1 = b => { let s = ''; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return s; };
+
+    ok('CRC-32 matches the standard check value', S.crc32(bin('123456789')) === 0xCBF43926);
+
+    /* The writer is checked by a SECOND, independent implementation: testlog.js's ZIP reader,
+       written months earlier to read real club workbooks. A writer verified only by itself
+       proves nothing. */
+    const z = S.zip([{ name: 'a.txt', data: 'hello' }, { name: 'dir/ü.xml', data: '<x>grüezi</x>' }]);
+    const entries = TL.zipEntries(z);
+    ok('the independent ZIP reader finds both entries, UTF-8 name intact',
+       entries.length === 2 && entries[0].name === 'a.txt' && entries[1].name === 'dir/ü.xml');
+    const readStored = (bytes, e) => { const p = e.lho, nl = bytes[p + 26] | (bytes[p + 27] << 8), xl = bytes[p + 28] | (bytes[p + 29] << 8);
+      return bytes.subarray(p + 30 + nl + xl, p + 30 + nl + xl + e.compSize); };
+    const stored = e => readStored(z, e);
+    ok('and reads the stored bytes back unchanged', new TextDecoder().decode(stored(entries[1])) === '<x>grüezi</x>' && entries.every(e => e.method === 0));
+    ok('each stored CRC matches the data it claims to protect',
+       entries.every(e => { const cd = z.findIndex((_, i) => z[i] === 0x50 && z[i + 1] === 0x4b && z[i + 2] === 1 && z[i + 3] === 2 && new TextDecoder().decode(z.subarray(i + 46, i + 46 + new TextEncoder().encode(e.name).length)) === e.name);   // BYTE length: ü is two bytes
+         const crc = (z[cd + 16] | (z[cd + 17] << 8) | (z[cd + 18] << 16) | (z[cd + 19] << 24)) >>> 0; return crc === S.crc32(stored(e)); }));
+
+    // FICTIONAL players, chosen to break things: Latin-1 accents, two names outside WinAnsi,
+    // and a value too long for any column
+    const model = {
+      title: 'OFFIZIELLE SPIELAUFSTELLUNG', docTitle: 'Test – U14',
+      blocks: [
+        { type: 'fields', split: 0.3, rows: [{ label: ['Verein', 'Club'], value: 'Test WPC' }, { label: ['Liga', 'Ligue'], value: 'U14' }] },
+        { type: 'roster', columns: [{ label: ['', ''], w: 0.07 }, { label: ['Lizenznummer', 'No de Licence'], w: 0.23 }, { label: ['Name', 'Nom'], w: 0.28 }, { label: ['Vorname', 'Prénom'], w: 0.42 }],
+          rows: [['1', '50001', 'Müller', 'Anna'], ['2', '50002', 'Łukaszewicz', 'Paweł'], ['3', '50003', 'Đorđević', 'Nikola'],
+                 ['4', '50004', 'A'.repeat(90), 'Lea']] },
+        { type: 'signatures', rows: [{ label: ['Coach/Trainer', 'Coach/entraîneur'], value: 'Sam Beispiel', sign: ['Unterschrift', 'Signature'] }] },
+        { type: 'note', lines: [{ lead: 'Wichtig:', text: 'Dieses Formular muss vor dem Spiel abgegeben werden.' }] },
+      ] };
+
+    const docx = S.toDocx(model);
+    const parts = TL.zipEntries(docx).map(e => e.name);
+    ok('the .docx carries the parts Word requires', ['[Content_Types].xml', '_rels/.rels', 'word/document.xml'].every(n => parts.includes(n)));
+    const docXml = new TextDecoder().decode(readStored(docx, TL.zipEntries(docx).find(e => e.name === 'word/document.xml')));
+    const parsed = new window.DOMParser().parseFromString(docXml, 'application/xml');
+    ok('word/document.xml is well-formed XML', !parsed.getElementsByTagName('parsererror').length);
+    ok('Word keeps every name exactly — Łukaszewicz and Đorđević included', /Łukaszewicz/.test(docXml) && /Đorđević/.test(docXml) && /Müller/.test(docXml));
+
+    const pdf = S.toPdf(model);
+    const raw = latin1(pdf.bytes);
+    ok('the .pdf starts and ends like a PDF', raw.startsWith('%PDF-1.4') && raw.trimEnd().endsWith('%%EOF'));
+    /* The xref table is where hand-written PDFs usually break: one wrong byte offset and a
+       strict reader refuses the file. Check every single offset lands on its object. */
+    const xrefAt = +raw.match(/startxref\n(\d+)/)[1];
+    ok('startxref points at the xref table', raw.slice(xrefAt, xrefAt + 4) === 'xref');
+    const offs = raw.slice(xrefAt).split('\n').filter(l => / 00000 n $/.test(l)).map(l => +l.slice(0, 10));
+    ok(`every one of the ${offs.length} xref offsets lands exactly on its object`, offs.length > 5 && offs.every((o, i) => raw.startsWith(`${i + 1} 0 obj`, o)));
+    ok('every content stream declares its true byte length',
+       [...raw.matchAll(/<< \/Length (\d+) >>\nstream\n/g)].every(m => raw.slice(m.index + m[0].length + +m[1], m.index + m[0].length + +m[1] + 10) === '\nendstream'));
+    ok('Latin-1 names are written in WinAnsi, not mangled', raw.includes('(M\xFCller)'));
+    ok('a letter WinAnsi cannot show is transliterated AND reported, never silently swapped',
+       pdf.substituted.some(x => x.from === 'Ł' && x.to === 'L') && pdf.substituted.some(x => x.from === 'Đ' && x.to === 'D') && raw.includes('(Lukaszewicz)'));
+    ok('each unsupported letter is reported once, not once per occurrence', pdf.substituted.filter(x => x.from === 'ł').length === 1);
+    ok('a value too long for its column is cut with an ellipsis and reported', pdf.truncated.length === 1 && /^A+$/.test(pdf.truncated[0].text));
+    ok('the document title is UTF-16, so an en dash is not read as "Œ"', /\/Title <FEFF[0-9A-F]*2013/.test(raw));
+    ok('same model → byte-identical files, so both writers are testable',
+       latin1(S.toDocx(model)) === latin1(docx) && latin1(S.toPdf(model).bytes) === raw);
+
+    const big = JSON.parse(JSON.stringify(model));
+    big.blocks[1].rows = Array.from({ length: 45 }, (_, i) => [String(i + 1), String(50000 + i), 'Name' + i, 'Vorname']);
+    const long = S.toPdf(big), longRaw = latin1(long.bytes);
+    ok('a roster longer than one page breaks onto a second page', long.pages >= 2);
+    ok('and the column header repeats at the top of it', (longRaw.match(/\(Lizenznummer\)/g) || []).length === long.pages);
+
+    const html = S.toHtml(model);
+    ok('the HTML preview escapes names rather than injecting them', !/<script/i.test(S.toHtml({ title: '<script>x</script>', blocks: [] })) && /Łukaszewicz/.test(html));
+  }
+
+  console.log('\n[13] Eligibility — who may go on the official sheet (Reglement 5.1.1, 2025 and 2026 editions)');
+  {
+    const E = window.__T.ELIGIBILITY;
+    // FICTIONAL players. Row order is cap order, so row 1 is the starting goalkeeper.
+    const P = (n, o) => Object.assign({ licence: String(50000 + n), name: 'P' + n, birthYear: '2014', gender: 'M', status: 'Swiss' }, o);
+    const lineup = (n, over) => Array.from({ length: n }, (_, i) => P(i + 1, (over && over[i]) || {}))
+      .map((p, i) => i === 0 ? Object.assign(p, { gk: true, captain: true }) : p);
+    const has = (r, code) => r.findings.some(f => f.code === code);
+    const flagged = (r, code) => (r.findings.find(f => f.code === code) || { players: [] }).players;
+
+    ok('the season turns over on 1 September, not 1 January',
+       E.seasonOf('2026-08-31').label === '2025/26' && E.seasonOf('2026-09-01').label === '2026/27' && E.seasonOf('2027-03-10').label === '2026/27');
+    ok('every wpmatch eligibility value is understood', ['Swiss', 'Swiss Sport Nationality', 'Swiss Sport Experience', 'Ausländer/Étranger', 'Inactive License']
+       .map(E.statusOf).join() === 'swiss,ssn,sse,foreign,inactive' && E.statusOf('') === 'unknown');
+
+    const U14 = { category: 'U14' }, oct = { date: '2026-10-04' };   // season 2026/27 → counts from 2027
+    ok('U14 2026/27: born 2013–2015 is clean', E.check(U14, lineup(10, [0, { birthYear: '2013' }, { birthYear: '2015' }]), oct).findings.length === 0);
+    ok('a boy born 2012 is too old for U14', has(E.check(U14, lineup(10, [0, { birthYear: '2012' }]), oct), 'too-old'));
+    ok('…but a GIRL born 2012 may play — girls get one year over the limit', !has(E.check(U14, lineup(10, [0, { birthYear: '2012', gender: 'F' }]), oct), 'too-old'));
+    ok('more than 3 younger players is flagged', has(E.check(U14, lineup(10, [0, { birthYear: '2016' }, { birthYear: '2016' }, { birthYear: '2016' }, { birthYear: '2017' }]), oct), 'too-many-younger'));
+    const girls = [0, 1, 2, 3, 4, 5].map(() => ({ gender: 'F', birthYear: '2013' }));
+    ok('U14 girls above 50% of the list is flagged in 2026/27 (Anhang 13A)…', has(E.check(U14, lineup(10, girls), oct), 'girls-share'));
+    ok('…and NOT in 2025/26, when that rule did not exist yet', !has(E.check(U14, lineup(10, girls), { date: '2026-03-01' }), 'girls-share'));
+
+    const ST = { category: 'ST' };
+    const stl = lineup(11, [{ birthYear: '1995' }, { status: 'Swiss Sport Nationality' }, { status: 'Swiss Sport Experience' }, { status: 'Ausländer/Étranger' }]);
+    ok('Swiss Trophy 2026/27: Swiss Sport Nationality may play…', !flagged(E.check(ST, stl, { date: '2026-11-01' }), 'only-swiss').includes('50002'));
+    ok('…Swiss Sport Experience and foreigners may not (Anhang 2, 2026)', flagged(E.check(ST, stl, { date: '2026-11-01' }), 'only-swiss').join() === '50003,50004');
+    ok('in 2025/26 Swiss Sport Experience was still allowed there', flagged(E.check(ST, stl, { date: '2026-02-01' }), 'only-swiss').join() === '50004');
+
+    const NLA = { category: 'NLA' }, nov = { date: '2026-11-01' }, F = { status: 'Ausländer/Étranger' }, SSE = { status: 'Swiss Sport Experience' };
+    ok('NLA: 3 foreigners is over the limit of 2', has(E.check(NLA, lineup(12, [0, F, F, F]), nov), 'too-many-foreigners'));
+    ok('NLA 2026/27: 2 foreigners plus 1 Swiss Sport Experience is allowed', E.check(NLA, lineup(12, [0, F, F, SSE]), nov).findings.length === 0);
+    ok('…but a second Swiss Sport Experience player tips it over', has(E.check(NLA, lineup(12, [0, F, F, SSE, SSE]), nov), 'too-many-foreigners'));
+    ok('Nationalliga Damen allows only 1 foreigner', has(E.check({ category: 'NLD' }, lineup(10, [{ gender: 'F' }, Object.assign({ gender: 'F' }, F), Object.assign({ gender: 'F' }, F)].concat(Array(7).fill({ gender: 'F' }))), nov), 'too-many-foreigners'));
+    ok('Promotionalliga Damen has no foreigner limit', !has(E.check({ category: 'PLD' }, lineup(10, Array(10).fill(Object.assign({ gender: 'F' }, F))), nov), 'too-many-foreigners'));
+
+    // the form itself — the only ERRORS; everything read out of a regulation is a warning
+    ok('15 players is an error: the form has 14 rows', E.check(NLA, lineup(15), nov).errors === 1 && has(E.check(NLA, lineup(15), nov), 'too-many-players'));
+    ok('no goalkeeper is an error', has(E.check(NLA, lineup(10).map(p => Object.assign(p, { gk: false })), nov), 'no-goalkeeper'));
+    ok('a duplicated or missing licence number is an error', ['duplicate-licence', 'missing-licence'].every(c => has(E.check(NLA, lineup(10, [0, { licence: '50001' }, { licence: '' }]), nov), c)));
+    ok('an inactive licence WARNS rather than blocks — licences are issued late', (() => { const r = E.check(NLA, lineup(10, [0, { status: 'Inactive License' }]), nov); return has(r, 'inactive-licence') && r.errors === 0; })());
+    ok('a senior keeper in cap 7 is flagged: red caps are 1 and 13 from 2026', has(E.check(NLA, lineup(10, [0, 0, 0, 0, 0, 0, { gk: true }]), nov), 'goalkeeper-cap'));
+    ok('in U10–U14 only cap 1 must be red, so a second keeper anywhere is fine', !has(E.check(U14, lineup(10, [0, 0, 0, 0, 0, 0, { gk: true }]), oct), 'goalkeeper-cap'));
+    ok('errors are listed before warnings', (() => { const f = E.check(NLA, lineup(15, [0, F, F, F]), nov).findings; return f[0].severity === 'error' && f.some(x => x.severity === 'warn'); })());
+    ok('a coach "special" overrides the category preset — e.g. a Swiss-only friendly',
+       has(E.check({ category: 'RL', rules: { foreigners: { onlySwiss: true } } }, lineup(10, [0, F]), nov), 'only-swiss'));
+  }
+
+  console.log('\n[14] wpmatch players + templates — the licence number, and what never to fetch');
+  {
+    const { WPMATCH: W, TEAMSHEET: TS, SHEETDOC: S } = window.__T;
+    // FICTIONAL records in the exact shape the API returns
+    const rec = (id, slug, title, o) => Object.assign({ id, slug, title: { rendered: title }, number: '4',
+      metrics: { Gender: 'M', Eligibility: 'Swiss', 'Year of Birth': '2013' }, current_teams: [9001] }, o);
+
+    ok('the licence number is the SLUG, never the post id', W.normPlayer(rec(3400, '50123', 'Nina Keller')).licence === '50123');
+    ok('a non-numeric slug is not mistaken for a licence', W.normPlayer(rec(3401, 'nina-keller', 'Nina Keller')).licence === '');
+    ok('"First Last" is split into the form\'s two columns', (() => { const p = W.normPlayer(rec(1, '50001', 'Nina Keller')); return p.firstName === 'Nina' && p.name === 'Keller' && !p.nameGuessed; })());
+    ok('a three-word name is split but marked as a guess for the coach to check', W.normPlayer(rec(1, '50002', 'Anna Maria Rossi')).nameGuessed === true);
+    // what wpmatch actually sends: raw UTF-8 letters and NUMERIC entities (300 real titles sampled)
+    ok('a name as wpmatch sends it — raw UTF-8 plus a numeric entity — is decoded, "_TEMP" stripped and flagged',
+       (() => { const p = W.normPlayer(rec(1, '50003', 'Zoë O&#8217;Müller_TEMP')); return p.firstName === 'Zoë' && p.name === 'O’Müller' && p.temp === true; })());
+    ok('a NAMED accented entity is decoded too, so "M&uuml;ller" can never reach a form', W.normPlayer(rec(1, '50006', 'L&eacute;a M&uuml;ller')).name === 'Müller' && W.normPlayer(rec(1, '50006', 'L&eacute;a M&uuml;ller')).firstName === 'Léa');
+    ok('an unknown named entity is left alone rather than guessed', W.decodeEntities('a &bogus; b') === 'a &bogus; b');
+    ok('gender, birth year, cap and eligibility are read from the right places', (() => { const p = W.normPlayer(rec(1, '50004', 'Lea Frei', { number: '13', metrics: { Gender: 'F', Eligibility: 'Swiss Sport Nationality', 'Year of Birth': '2012' } }));
+       return p.gender === 'F' && p.birthYear === '2012' && p.cap === '13' && p.status === 'Swiss Sport Nationality'; })());
+
+    // PRIVACY: `date` is a real player's date of birth on wpmatch
+    ok('PLAYER_FIELDS never asks wpmatch for `date` (it is the date of birth)', !W.PLAYER_FIELDS.split(',').includes('date'));
+    ok('…and a record that arrives WITH a date does not carry it into the app', !Object.values(W.normPlayer(rec(1, '50005', 'Tim Graf', { date: '2013-04-17T00:00:00' }))).some(v => /2013-04-17/.test(String(v))));
+
+    const twin = [rec(1, '31000', 'Luca Rossi', { metrics: { Gender: 'M', Eligibility: 'Inactive License' } }), rec(2, '52000', 'Luca Rossi')].map(W.normPlayer);
+    ok('one person with an old inactive licence and a new one: the old number is dropped', (() => { const d = W.dedupePlayers(twin); return d.length === 1 && d[0].licence === '52000'; })());
+    const namesakes = [rec(1, '52001', 'Luca Rossi'), rec(2, '52002', 'Luca Rossi', { metrics: { Gender: 'M', Eligibility: 'Swiss', 'Year of Birth': '1998' } })].map(W.normPlayer);
+    ok('two ACTIVE players who share a name are both kept — guessing would put the wrong licence on a sheet', W.dedupePlayers(namesakes).length === 2);
+
+    // templates
+    ok('two built-in layouts: the current official form, and the classic licence-first one', TS.BUILTIN.map(t => t.id).join() === 'sa-2025,sa-classic');
+    const cur = TS.normalizeTemplate(TS.BUILTIN[0]), old = TS.normalizeTemplate(TS.BUILTIN[1]);
+    ok('the 2025 official form: 14 rows, licence number in the LAST column', cur.rows === 14 && cur.columns[cur.columns.length - 1].key === 'licence');
+    ok('the classic layout: 13 rows, licence number FIRST', old.rows === 13 && old.columns[1].key === 'licence');
+    const line = [{ licence: '50001', name: 'Keller', firstName: 'Nina', gk: true }, { licence: '50002', name: 'Brunner', firstName: 'Jonas', captain: true }];
+    const data = { club: 'Test WPC', team: { name: 'U14', staff: { coach: 'Sam Beispiel' } }, match: { date: '2026-10-04', league: 'U14 - Group A' }, lineup: line };
+    const m = TS.buildModel(TS.BUILTIN[0], data);
+    ok('every row of the form is printed even when fewer players are listed', m.blocks[1].rows.length === 14 && m.blocks[1].rows[13][0] === '14' && m.blocks[1].rows[13][3] === '');
+    ok('row n is cap n, and the captain reads "First Last #cap" as on the real form', m.blocks[1].rows[1].join('|') === '2|Brunner|Jonas|50002' && m.blocks[2].rows[3].value === 'Jonas Brunner #2');
+    ok('the date is written the Swiss way', m.blocks[0].rows[2].value === '04.10.2026');
+    ok('labels are the official German and French, character for character', m.blocks[2].rows[1].label.join('/') === 'Betreuer:in Coach/AssistantCoach' && TS.buildModel(TS.BUILTIN[1], data).blocks[2].rows[0].label[0] === 'Coach/Trainer');
+    const custom = TS.normalizeTemplate({ columns: ['name', 'bogus', 'name'], rows: 99, langs: ['it', 'xx'] });
+    ok('a malformed saved template still renders: unknown columns dropped, licence column restored, rows capped', custom.columns.map(c => c.key).join() === 'name,licence' && custom.rows === 30 && custom.langs[0] === 'it');
+    ok('column widths always fill the page exactly', Math.abs(custom.columns.reduce((n, c) => n + c.w, 0) - 1) < 1e-9);
+    ok('a built-in is copied, never edited in place', (() => { const c = TS.cloneTemplate(TS.BUILTIN[0], 't1', 'Cup'); return c.id === 't1' && !c.builtin && TS.BUILTIN[0].id === 'sa-2025' && TS.BUILTIN[0].builtin; })());
+    ok('an Italian-labelled template is marked unofficial — there is no Italian form', !TS.buildModel({ langs: ['it', 'de'] }, data).official && TS.buildModel(TS.BUILTIN[0], data).official);
+    ok('a filename a club secretary can file as it is', TS.fileName(data, 'pdf') === 'Spielaufstellung_Test-WPC_U14-Group-A_20261004.pdf');
+    ok('the goalkeeper mark prints in the PDF font (X, not a tick it cannot draw)', S.toPdf(TS.buildModel({ columns: ['nr', 'name', 'licence', 'gk'] }, data)).substituted.length === 0);
   }
 
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);

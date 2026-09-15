@@ -60,11 +60,16 @@ const WPMATCH = (() => {
      third-party markup, and `<img onerror>` fires even on a detached node.
      Decoding is NOT escaping: every value still goes through escapeHtml at render. */
   const NAMED = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ndash: '–', mdash: '—' };
+  /* Named accented letters. wpmatch sends player names as raw UTF-8 today (32 of 300 sampled),
+     but WordPress can emit &uuml; — and "M&uuml;ller" printed on an official team sheet is a
+     silent failure. Generated from the HTML entity table for U+00C0–U+00FF, not typed by hand. */
+  const LATIN1 = { AElig: 'Æ', Aacute: 'Á', Acirc: 'Â', Agrave: 'À', Aring: 'Å', Atilde: 'Ã', Auml: 'Ä', Ccedil: 'Ç', ETH: 'Ð', Eacute: 'É', Ecirc: 'Ê', Egrave: 'È', Euml: 'Ë', Iacute: 'Í', Icirc: 'Î', Igrave: 'Ì', Iuml: 'Ï', Ntilde: 'Ñ', Oacute: 'Ó', Ocirc: 'Ô', Ograve: 'Ò', Oslash: 'Ø', Otilde: 'Õ', Ouml: 'Ö', THORN: 'Þ', Uacute: 'Ú', Ucirc: 'Û', Ugrave: 'Ù', Uuml: 'Ü', Yacute: 'Ý', aacute: 'á', acirc: 'â', aelig: 'æ', agrave: 'à', aring: 'å', atilde: 'ã', auml: 'ä', ccedil: 'ç', divide: '÷', eacute: 'é', ecirc: 'ê', egrave: 'è', eth: 'ð', euml: 'ë', iacute: 'í', icirc: 'î', igrave: 'ì', iuml: 'ï', ntilde: 'ñ', oacute: 'ó', ocirc: 'ô', ograve: 'ò', oslash: 'ø', otilde: 'õ', ouml: 'ö', szlig: 'ß', thorn: 'þ', times: '×', uacute: 'ú', ucirc: 'û', ugrave: 'ù', uuml: 'ü', yacute: 'ý', yuml: 'ÿ' };
   function decodeEntities(s) {
     let out = String(s == null ? '' : s)
       .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
       .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n))
-      .replace(/&(lt|gt|quot|apos|nbsp|ndash|mdash);/g, (_, k) => NAMED[k]);
+      .replace(/&(lt|gt|quot|apos|nbsp|ndash|mdash);/g, (_, k) => NAMED[k])
+      .replace(/&([A-Za-z]+);/g, (m, k) => LATIN1[k] || m);
     return out.replace(/&amp;/g, '&');   // last, so &amp;#8211; cannot double-decode
   }
 
@@ -230,7 +235,8 @@ const WPMATCH = (() => {
     // an HTTP error still returns valid JSON — with a GERMAN message. Never surface it in a four-language app.
     if (!r.ok) throw Object.assign(new Error('wpmatch-http-' + r.status), { code: 'http', status: r.status });
     const total = +(r.headers.get('x-wp-total') || 0);
-    return { items: parse(await r.text()), total };
+    const pages = +(r.headers.get('x-wp-totalpages') || 0);
+    return { items: parse(await r.text()), total, pages };
   }
 
   async function searchTeams(q) {
@@ -301,6 +307,99 @@ const WPMATCH = (() => {
     });
   }
 
+  /* ---------------- 5) players — licence numbers for the team sheet ----------------
+     THE LICENCE NUMBER IS THE PLAYER'S `slug` (wpmatch.ch/player/<licence>/). Not the post
+     id — /players/<licence> returns rest_post_invalid_id. Proven against the official Game
+     Report PDFs (157 licence↔name matches, 0 contradictions) and against a real club team
+     sheet (12 of 13 resolved to the right surname; the 13th has no public record).
+
+     PRIVACY — NEVER request `date`. For every real player record it is the full date of
+     birth, public, for ~2560 people, many of them minors. PLAYER_FIELDS leaves it out, and
+     normPlayer() does not read it even when a caller passes a record that has it.
+
+     Traps, all silent:
+     · every team filter (?teams=, ?current_teams=, ?sp_team=) is IGNORED — x-wp-total stays
+       2572 and you get the whole country. The only real roster is a crawl filtered here.
+     · `slug=a,b,c` IS honoured: 13 licences come back in one request.
+     · ~100 people have TWO records: an old "Inactive License" number and a new active one.
+       Take the old one and the sheet carries a stale licence. dedupePlayers() drops it.
+     · parallel page requests make wpmatch answer with an HTML "Database Error" page; the
+       crawl is sequential with retries, and parse() rejects anything that is not JSON. */
+  const PLAYER_FIELDS = 'id,slug,title,number,metrics,current_teams';
+  const LICENCE_RE = /^\d{3,6}$/;
+
+  function normPlayer(raw) {
+    const r = raw || {};
+    const title = decodeEntities((r.title && r.title.rendered) || '').replace(/\s+/g, ' ').trim();
+    const temp = /_TEMP$/i.test(title);
+    const words = title.replace(/_TEMP$/i, '').trim().split(' ').filter(Boolean);
+    const m = r.metrics && typeof r.metrics === 'object' ? r.metrics : {};
+    const slug = String(r.slug == null ? '' : r.slug);
+    return {
+      wpId: r.id ? +r.id : null,
+      licence: LICENCE_RE.test(slug) ? slug : '',
+      // titles are "First Last" (11 of 12 checked); a third word makes the split a guess
+      firstName: words.length > 1 ? words[0] : '',
+      name: words.length > 1 ? words.slice(1).join(' ') : words.join(' '),
+      nameGuessed: words.length > 2,
+      cap: r.number == null || r.number === '' ? '' : String(r.number),
+      birthYear: /^\d{4}$/.test(String(m['Year of Birth'] || '')) ? String(m['Year of Birth']) : '',
+      gender: m.Gender === 'F' ? 'F' : m.Gender === 'M' ? 'M' : '',
+      status: String(m.Eligibility || ''),
+      temp,
+      teams: Array.isArray(r.current_teams) ? r.current_teams.map(Number) : [],
+    };
+  }
+
+  const foldName = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  /* One person, two records: keep the active one. Two ACTIVE records with the same name are
+     two different people and both stay — guessing there would put the wrong licence on a sheet. */
+  function dedupePlayers(list) {
+    const groups = new Map();
+    (list || []).forEach(p => { const k = foldName(p.firstName + ' ' + p.name); groups.set(k, (groups.get(k) || []).concat(p)); });
+    const out = [];
+    groups.forEach(g => {
+      const live = g.filter(p => p.status !== 'Inactive License' && !p.temp);
+      out.push(...(live.length && live.length < g.length ? live : g));
+    });
+    return out;
+  }
+
+  /* The fast path: a coach's licence numbers, 50 to a request. Returns what was found AND
+     what was not, so a typo is shown rather than silently dropped from the roster. */
+  const LICENCE_BATCH = 50;
+  async function lookupLicences(licences) {
+    const want = [...new Set((licences || []).map(x => String(x).trim()).filter(x => LICENCE_RE.test(x)))];
+    const found = [];
+    for (let i = 0; i < want.length; i += LICENCE_BATCH) {
+      const { items } = await get('/players', { slug: want.slice(i, i + LICENCE_BATCH).join(','), per_page: 100, _fields: PLAYER_FIELDS });
+      (Array.isArray(items) ? items : []).forEach(x => found.push(normPlayer(x)));
+    }
+    const have = new Set(found.map(p => p.licence));
+    return { players: found, missing: want.filter(l => !have.has(l)) };
+  }
+
+  const pause = ms => new Promise(res => setTimeout(res, ms));
+  /* The slow path: every player page, one at a time, keeping those whose current_teams holds
+     this team. ~26 pages at ~2.5 s — about a minute — so the caller shows progress and caches. */
+  async function fetchTeamPlayers(teamId, opts) {
+    const o = opts || {}, tid = +teamId, keep = [];
+    let page = 1, pages = 1;
+    do {
+      let res;
+      for (let tries = 0; ; tries++) {
+        try { res = await get('/players', { per_page: 100, page, _fields: PLAYER_FIELDS }); break; }
+        catch (e) { if (tries >= 2) throw e; await pause(800 * (tries + 1)); }
+      }
+      if (!Array.isArray(res.items)) throw Object.assign(new Error('wpmatch-bad-json'), { code: 'bad-json' });
+      pages = res.pages || pages;
+      res.items.forEach(x => { if ((x.current_teams || []).map(Number).includes(tid)) keep.push(normPlayer(x)); });
+      if (o.onProgress) o.onProgress(page, pages);
+      page++;
+    } while (page <= pages && page <= 60);
+    return dedupePlayers(keep);
+  }
+
   return {
     BASE_DEFAULT, LIST_FIELDS, BOX_FIELDS, PER_PAGE, MAX_PAGES, SITE,
     getBase, setBase, loadTeam, saveTeam,
@@ -308,6 +407,7 @@ const WPMATCH = (() => {
     normTeam, normTerm, normFixture, normBox, normTable, pickTable, resultFor, opponentOf,
     cacheGet, cachePut,
     searchTeams, fetchFixtures, fetchBox, fetchTables, fetchVenues,
+    PLAYER_FIELDS, normPlayer, dedupePlayers, lookupLicences, fetchTeamPlayers,
     teamUrl, matchUrl, toCalendarEvents,
   };
 })();
