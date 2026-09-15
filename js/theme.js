@@ -13,8 +13,8 @@
    suite). tests/smoke.mjs fails if a value here differs from css/styles.css, or if code asks for a name
    that is missing — so the two cannot drift.
 
-   Looks: 'today' (the navy look) and 'silver' (Black & Silver). FALLBACK holds today's values: the smoke
-   suite runs in the default look, and drawn surfaces only get silver values in Phase 2.
+   Looks: 'today' (the navy look) and 'silver' (Black & Silver). FALLBACK holds today's values: code that cannot
+   compute CSS draws in the navy look.
    ============================================================ */
 const THEME = (() => {
   const KEY = 'thplay.look.v1', GLASS_KEY = 'thplay.glass.v1';
@@ -96,11 +96,28 @@ const THEME = (() => {
     try { localStorage.setItem(GLASS_KEY, on ? 'on' : 'off'); } catch (e) {}
     applyGlass(); listeners.forEach(fn => { try { fn(look()); } catch (e) {} });
   }
+  /* The look a device starts in when nobody chose one (theme Phase 4, owner decision): a new device gets Black &
+     Silver; a device that already holds Triibholz data keeps the navy look it knows. The choice is written down on
+     the first run, so the app's own data created a moment later cannot flip a new device back to navy. */
+  function startLook() {
+    const s = saved();
+    if (LOOKS.includes(s)) return s;
+    let known = false;
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i) || '';
+        if (k.startsWith('thplay.') && k !== KEY && k !== GLASS_KEY) { known = true; break; }
+      }
+    } catch (e) { return 'today'; }   // no storage: nothing can be remembered, stay with the look everyone knows
+    const l = known ? 'today' : 'silver';
+    try { localStorage.setItem(KEY, l); } catch (e) {}
+    return l;
+  }
   if (rtq && rtq.addEventListener) rtq.addEventListener('change', applyGlass);
-  if (root) root.setAttribute('data-look', valid(saved()));   // before the first paint
+  if (root) root.setAttribute('data-look', startLook());   // before the first paint
   applyGlass();
   if (doc) doc.addEventListener('DOMContentLoaded', statusBar);
-  return { KEY, GLASS_KEY, LOOKS, FALLBACK, look, c, setLook, onChange, glass, glassWanted, reducedTransparency, setGlass };
+  return { KEY, GLASS_KEY, LOOKS, FALLBACK, look, c, setLook, onChange, glass, glassWanted, reducedTransparency, setGlass, startLook };
 })();
 
 // Node/CommonJS interop (no-op in the browser)

@@ -2,8 +2,12 @@
 :root{
   --bg:#070f17; --bg2:#0b1622; --panel:#0f1c2b; --panel2:#13263a;
   --line:#1e3650; --line-soft:#16293d;
-  --ink:#eaf4fb; --ink-dim:#9fb6c9; --ink-faint:#647d93;
+  --ink:#eaf4fb; --ink-dim:#9fb6c9; --ink-faint:#8fa6ba;
   --teal:#16b3c4; --teal-d:#0e7c86; --accent:#2bd07a;
+  /* white text needs a darker teal than the brand cyan (WCAG AA, theme Phase 4): primary buttons, avatars, Audible */
+  --teal-strong:#0c7e88; --teal-deep:#0a5f67;
+  /* older rules name these; they mean the same as ink, dim ink and line */
+  --text:var(--ink); --muted:var(--ink-dim); --border:var(--line);
   --white:#ffffff; --black:#0b0f14; --red:#e23b3b; --orange:#ff7a18;
   --radius:14px; --shadow:0 10px 30px rgba(0,0,0,.45);
   --font:'SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
@@ -17,7 +21,7 @@
   --yellow-15b:#3a2c10; --yellow-15:#3a2f12; --yellow-15c:#3a2f14; --yellow-16:#3a3417; --yellow-50:#ffc400; --yellow-55:#e0b83a; --yellow-70:#ffd766; --yellow-70b:#ffd166; --yellow-73:#ffd874; --yellow-74:#ffcf7a; --yellow-77:#ffe08a; --yellow-86:#ffeab8; 
   --orange-05:#1a0a00; --orange-31:#9c3d00; --orange-62b:#ffaa3c; --orange-62:#ff9b3d; --orange-64:#ffb347; --orange-67:#ffb057; --orange-82:#ffd0a1; 
   --red-12:#2a1414; --red-17:#3a1c1c; --red-24:#5a2020; --red-27:#7a0f0f; --red-56:#e2413a; --red-57:#e74c3c; --red-62:#e05a5a; --red-66:#ff5050; --red-71:#ff6b6b; --red-77:#f3a196; --red-80:#ff9b9b; --red-81:#ff9d9d; --red-85:#ffb3b3; --red-89:#ffc9c9; --red-91:#ffd4d1; --red-94:#ffdede; 
-  --violet-11:#171326; --violet-15:#241a33; --violet-20:#2a2440; --violet-66:#8a5cf6; --violet-77:#b78bff; --violet-86:#c5b6ff; 
+  --violet-59:#7447e8; --violet-11:#171326; --violet-15:#241a33; --violet-20:#2a2440; --violet-66:#8a5cf6; --violet-77:#b78bff; --violet-86:#c5b6ff; 
   --pure-black:#000000; 
   /* the same colours as r,g,b for rgba(var(--x-rgb),alpha) — identical pixels, works on every browser the app supports */
   --accent-rgb:43,208,122; --bg-rgb:7,15,23; --cyan-40-rgb:26,163,176; --cyan-48-rgb:31,192,212; --green-49-rgb:46,204,113; --navy-04-rgb:4,9,14; 
@@ -57,8 +61,8 @@
 
   /* metal (theme Phase 1): the polished-silver fill of the active control; used by the Black & Silver look */
   --metal:linear-gradient(180deg,#fbfcfd 0%,#d4d9df 48%,#9aa0a8 100%); --metal-soft:linear-gradient(180deg,#f3f5f7,#aeb4bc); --metal-ink:#0b0c0e; --metal-edge:rgba(255,255,255,.6);
-  /* a red that still carries white text (keeper badge, active keeper view); today it is exactly --red */
-  --danger-strong:#e23b3b;
+  /* a red that still carries white text (keeper badge, active keeper view) */
+  --danger-strong:#c42f2f;
   /* glass (theme Phase 3): these are the SOLID values — used when glass is off or the device asks for less transparency.
      The Black & Silver look with glass on redefines them below. Only Black & Silver rules use them. */
   --glass-tint:#17181b; --glass-sheen:none; --glass-blur:none; --glass-edge:rgba(255,255,255,.10); --glass-hi:inset 0 1px 0 rgba(255,255,255,.08); --glass-bar:#0b0c0d;
@@ -68,7 +72,6 @@
    offense, defense). Drawn surfaces (pool, 3D, reels) are Phase 2 and keep today's values for now. ===== */
 :root[data-look="silver"]{
   --bg:#050506; --bg2:#0b0c0d; --panel:#111214; --panel2:#1a1b1e; --line:#2a2c30; --line-soft:#1d1f22;
-  --danger-strong:#c42f2f;
   --ink:#eceef1; --ink-dim:#a7adb6; --ink-faint:#8b9199; --teal:#c9ced5; --teal-d:#5b6068; --accent:#e3e6ea;
   --black:#0b0c0e; --status-bar:#050506; --logo-water:#136373; --logo-edge:#0a2e36; --logo-wave:#d9dee5;
   --navy-04:#040505; --navy-06:#050505; --navy-07:#070708; --navy-07b:#080809; --navy-08b:#09090a;
@@ -165,32 +168,38 @@ em{color:var(--ink-faint);font-style:italic}
 .pos-chip.active{background:var(--white);color:var(--black);border-color:var(--white)}
 .pos-chip.pos-gk{background:var(--red-12);border-color:var(--red-24);color:var(--red-80)}
 .pos-chip.pos-gk.active{background:var(--red);color:var(--white);border-color:var(--red-71)}
-.btn-primary{width:100%;padding:14px;border:none;border-radius:12px;background:linear-gradient(180deg,var(--teal),var(--teal-d));color:var(--white);font-size:15px;font-weight:700;box-shadow:0 8px 20px rgba(var(--teal-d-rgb),.4)}
+.btn-primary{width:100%;padding:14px;border:none;border-radius:12px;background:linear-gradient(180deg,var(--teal-strong),var(--teal-deep));color:var(--white);font-size:15px;font-weight:700;box-shadow:0 8px 20px rgba(var(--teal-d-rgb),.4)}
 .btn-primary:active{transform:scale(.99)}
 
 /* ---------- APP LAYOUT ---------- */
 #app-screen{flex-direction:column}
 .topbar{
-  display:flex;align-items:center;gap:14px;padding:10px 16px;
+  display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 16px;   /* wraps: in one row the controls, flags and account ran off the right edge of a laptop (theme Phase 4) */
   background:linear-gradient(180deg,var(--panel),var(--bg2));border-bottom:1px solid var(--line);
 }
-.topbar-left{flex:0 0 auto}
+.topbar-left{flex:0 1 auto;min-width:0}   /* may shrink so the nav wraps: a 768–1000 px window cut off Trivia, My Development and Admin */
 .brand-mini{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.3px}
 .brand-dot{width:11px;height:11px;border-radius:50%;background:var(--orange);box-shadow:0 0 0 3px rgba(var(--orange-rgb),.18)}
 .brand-code{font-size:9.5px;font-weight:800;letter-spacing:1.5px;color:var(--teal);background:rgba(var(--teal-rgb),.12);border:1px solid rgba(var(--teal-rgb),.3);padding:2px 6px;border-radius:6px}
-.topbar-center{flex:1 1 auto;min-width:0;display:flex;gap:6px;justify-content:center;overflow-x:auto;scrollbar-width:none}
+.topbar-center{flex:1 1 auto;min-width:0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+/* centred with auto margins, not justify-content:center — that clips the START of an overflowing scroller, and the first
+   situation tab (6 on 6) could not be scrolled to on a small laptop (theme Phase 4) */
+.topbar-center>:first-child{margin-left:auto}.topbar-center>:last-child{margin-right:auto}
 .topbar-center::-webkit-scrollbar{display:none}
 .sit-tab{white-space:nowrap;padding:8px 13px;border-radius:10px;border:1px solid var(--line);background:var(--bg2);color:var(--ink-dim);font-size:13px;font-weight:600}
 .sit-tab.active{background:var(--white);color:var(--black);border-color:var(--white)}
 .sit-num{font-weight:700}
-.topbar-right{flex:0 0 auto;display:flex;align-items:center;gap:12px}
+.topbar-right{flex:0 0 auto;display:flex;align-items:center;gap:12px;margin-left:auto}
+/* between phone and wide screens the situation tabs share the second row with the controls, and scroll */
+@media (min-width:721px) and (max-width:1240px){ .topbar-center{flex-basis:320px} }
 .phase-toggle{display:flex;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:3px}
 .phase-btn{padding:7px 12px;border:none;background:transparent;color:var(--ink-dim);border-radius:7px;font-size:13px;font-weight:600}
 .phase-btn.active[data-phase="offense"]{background:var(--navy-22);color:var(--sky-87)}
 .phase-btn.active[data-phase="defense"]{background:var(--red-17);color:var(--red-89)}
 .user-pill{display:flex;align-items:center;gap:9px;background:var(--bg2);border:1px solid var(--line);border-radius:30px;padding:5px 8px 5px 6px}
-.user-avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--teal),var(--teal-d));display:grid;place-items:center;font-weight:700;font-size:14px;color:var(--white)}
+.user-avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--teal-strong),var(--teal-deep));display:grid;place-items:center;font-weight:700;font-size:14px;color:var(--white)}
 .user-meta{display:flex;flex-direction:column;line-height:1.15}
+@media (max-width:1440px){ .user-meta{display:none} }   /* the account pill is avatar + sign-out, as on a phone: two header rows, not three */
 #user-name{font-size:13px;font-weight:600}
 .user-sub{font-size:10.5px;color:var(--ink-faint)}
 .logout-btn{background:transparent;border:none;color:var(--ink-faint);font-size:16px;padding:2px 4px;border-radius:6px}
@@ -268,7 +277,7 @@ em{color:var(--ink-faint);font-style:italic}
 .assign-row.faded{opacity:.5}
 .assign-badge{flex:0 0 auto;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:12px}
 .assign-badge.att{background:var(--white);color:var(--black)}
-.assign-badge.gk{background:var(--red);color:var(--white)}
+.assign-badge.gk{background:var(--danger-strong);border-color:var(--danger-strong);color:var(--white)}
 .assign-text{font-size:12.5px;line-height:1.45;color:var(--ink-dim);padding-top:3px}
 .assign-row.mine .assign-text,.assign-row.focused .assign-text{color:var(--ink)}
 
@@ -321,7 +330,7 @@ em{color:var(--ink-faint);font-style:italic}
 }
 
 /* ========== v2: nav, views, dashboards, trivia, admin, status ========== */
-.main-nav{display:flex;gap:4px;margin-left:8px}
+.main-nav{display:flex;flex-wrap:wrap;gap:4px;margin-left:8px}
 .nav-btn{position:relative;padding:7px 12px;border:1px solid transparent;background:transparent;color:var(--ink-dim);border-radius:9px;font-size:13px;font-weight:600}
 .nav-btn:hover{color:var(--ink)}
 .nav-btn.active{background:var(--bg2);border-color:var(--line);color:var(--ink)}
@@ -404,7 +413,7 @@ em{color:var(--ink-faint);font-style:italic}
 .pill-count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;background:var(--orange);color:var(--orange-05);border-radius:10px;font-size:11px;font-weight:800}
 .admin-list{display:flex;flex-direction:column;gap:8px}
 .admin-row{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:10px 13px}
-.ar-av{flex:0 0 auto;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;background:linear-gradient(135deg,var(--teal),var(--teal-d));color:var(--white)}
+.ar-av{flex:0 0 auto;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;background:linear-gradient(135deg,var(--teal-strong),var(--teal-deep));color:var(--white)}
 .ar-av.pending{background:var(--yellow-16)}.ar-av.denied{background:var(--red-17)}
 .ar-main{flex:1;display:flex;flex-direction:column;min-width:0}
 .ar-name{font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:7px}
@@ -428,6 +437,8 @@ em{color:var(--ink-faint);font-style:italic}
 
 /* ========== Problem → Solution mode ========== */
 .stage-head-actions{display:flex;align-items:center;gap:10px}
+/* a small laptop: the play's title above its buttons — side by side, the buttons left the title one word per line (theme Phase 4) */
+@media (min-width:721px) and (max-width:1240px){ .stage-head{flex-direction:column;align-items:stretch;gap:8px} .stage-head-actions{flex-wrap:wrap} }
 .mode-toggle{display:inline-flex;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:3px}
 .mode-btn{padding:7px 13px;border:none;background:transparent;color:var(--ink-dim);border-radius:7px;font-size:13px;font-weight:700}
 .mode-btn.active[data-mode="problem"]{background:var(--yellow-16);color:var(--yellow-73)}
@@ -512,7 +523,8 @@ em{color:var(--ink-faint);font-style:italic}
 .tour-actions .btn-primary.sm{margin-top:0}
 
 /* ========== playful layer ========== */
-.icon-btn{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:6px 8px;font-size:15px;line-height:1}
+.icon-btn{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:6px 8px;font-size:15px;line-height:1;color:var(--ink)}
+a:not([class]){color:var(--teal)}
 .icon-btn:hover{border-color:var(--navy-32)}
 .mascot{flex:0 0 auto;filter:drop-shadow(0 3px 6px rgba(var(--pure-black-rgb),.35))}
 .dash-head.with-mascot{display:flex;align-items:center;gap:12px}
@@ -580,7 +592,7 @@ em{color:var(--ink-faint);font-style:italic}
 }
 @media (max-width:720px){
   .stage-head{flex-direction:column;align-items:stretch;gap:8px}
-  .stage-head-actions{justify-content:flex-start}
+  .stage-head-actions{justify-content:flex-start;flex-wrap:wrap}   /* Share and Edit stayed on one line past a phone's edge */
 }
 
 /* ========== trivia set picker ========== */
@@ -701,7 +713,7 @@ kbd{background:var(--navy-19);border:1px solid var(--navy-29);border-radius:5px;
 #adj-undo:disabled{opacity:.4;cursor:default}
 
 /* pause-to-move */
-.pool-drag-hint{position:absolute;left:12px;bottom:12px;z-index:4;background:rgba(var(--navy-08c-rgb),.85);border:1px solid var(--yellow-16);color:var(--yellow-73);font-size:12px;font-weight:700;padding:7px 12px;border-radius:20px;pointer-events:none}
+.pool-drag-hint{position:absolute;left:12px;bottom:12px;z-index:4;background:rgba(var(--navy-08c-rgb),.85);border:1px solid var(--yellow-16);color:var(--yellow-73);font-size:12px;font-weight:700;padding:7px 12px;border-radius:20px;pointer-events:none;max-width:calc(100% - 160px)}   /* leaves room for ⚡ Audible at the other corner */
 .scn-card.scn-new{border-style:dashed;color:var(--ink-dim);text-align:center;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px}
 .scn-card.scn-new:hover{border-color:var(--accent);color:var(--accent)}
 .scn-new-plus{font-size:18px;font-weight:800}
@@ -746,7 +758,7 @@ kbd{background:var(--navy-19);border:1px solid var(--navy-29);border-radius:5px;
 .cmd-scope{font-size:8.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);background:var(--panel2);border-radius:5px;padding:2px 5px;font-weight:700}
 
 /* stage audible button + sheet */
-.audible-btn{position:absolute;right:14px;bottom:14px;z-index:6;background:linear-gradient(180deg,var(--teal),var(--teal-d));color:var(--white);border:none;border-radius:11px;padding:9px 14px;font-weight:800;font-size:13.5px;box-shadow:0 8px 20px rgba(var(--teal-d-rgb),.45)}
+.audible-btn{position:absolute;right:14px;bottom:14px;z-index:6;background:linear-gradient(180deg,var(--teal-strong),var(--teal-deep));color:var(--white);border:none;border-radius:11px;padding:9px 14px;font-weight:800;font-size:13.5px;box-shadow:0 8px 20px rgba(var(--teal-d-rgb),.45)}
 .audible-btn:active{transform:scale(.97)}
 .audible-sheet{position:absolute;right:14px;bottom:60px;z-index:7;width:min(360px,88%);max-height:70%;overflow-y:auto;background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:14px}
 .as-head{display:flex;align-items:center;gap:9px;margin-bottom:12px}
@@ -956,7 +968,7 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 
 /* ---- Download menu + team analysis cards (v1.26) ---- */
 .dl-wrap{position:relative;display:inline-block}
-.dl-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:40;min-width:260px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px rgba(var(--pure-black-rgb),.45);padding:6px;display:flex;flex-direction:column;gap:2px}
+.dl-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:40;min-width:260px;max-width:calc(100vw - 16px);background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px rgba(var(--pure-black-rgb),.45);padding:6px;display:flex;flex-direction:column;gap:2px}
 .dl-menu button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;background:transparent;border:0;color:var(--text);padding:8px 10px;border-radius:8px;cursor:pointer;font:inherit}
 .dl-menu button:hover{background:rgba(var(--cyan-48-rgb),.12)}.dl-menu button span{font-size:.76rem;color:var(--muted)}
 .ta-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
@@ -1015,7 +1027,7 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 
 /* ---- shot zones + keeper's view (v1.30) ---- */
 #zones-toggle.active{background:var(--green-49);color:var(--navy-06);border-color:var(--green-49)}
-#gk-toggle.active{background:var(--red-56);color:var(--white);border-color:var(--red-56)}
+#gk-toggle.active{background:var(--danger-strong);color:var(--white);border-color:var(--danger-strong)}
 .gk-view{position:absolute;left:12px;top:12px;z-index:8;width:min(38%,270px);padding:9px 11px;border-radius:12px;
   background:rgba(var(--navy-07b-rgb),.9);border:1px solid rgba(var(--red-56-rgb),.6);backdrop-filter:blur(4px);pointer-events:none;
   display:flex;flex-direction:column;gap:5px}
@@ -1041,7 +1053,7 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 @media (max-width:760px){.gk-view{left:8px;right:auto;top:8px}}
 
 /* ---- 3D replay camera (v1.31) ---- */
-#scene3d-toggle.active{background:var(--violet-66);color:var(--white);border-color:var(--violet-66)}
+#scene3d-toggle.active{background:var(--violet-59);color:var(--white);border-color:var(--violet-59)}
 #scene3d{position:absolute;inset:0;width:100%;height:100%;z-index:2;cursor:grab;touch-action:none;border-radius:16px}
 #scene3d:active{cursor:grabbing}
 .scene3d-hint{position:absolute;right:12px;top:12px;z-index:3;font-size:.68rem;color:var(--cyan-76);background:rgba(var(--navy-07b-rgb),.72);
@@ -1116,7 +1128,7 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 /* A header's qualifier — "(self-logged)" — gets its own smaller line instead of doubling the
    column width. German and Italian pay for that parenthesis far more than English does:
    "Home training (self-logged)" is 74px, "Allenamento a casa (autoregistrato)" was 136px. */
-.dev-table th small{display:block;font-size:.88em;font-weight:400;opacity:.72;letter-spacing:0;text-transform:none}
+.dev-table th small{display:block;font-size:.88em;font-weight:400;letter-spacing:0;text-transform:none}
 /* On a phone the squad table is seven columns in ~340px, so it scrolls sideways however
    short the words are. Tighten the headers there so there is simply less to scroll past.
 
@@ -1171,7 +1183,7 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 .wpm-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 .wpm-head .muted{font-size:11px;margin-left:auto;padding:0}
 .wpm-pick{display:flex;gap:8px;margin:8px 0}
-.wpm-pick input{flex:1;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--ink);font:inherit}
+.wpm-pick input{flex:1;min-width:0;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--ink);font:inherit}
 .wpm-teamlist{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .wpm-group{margin:10px 0}
 .wpm-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line-soft);font-size:.84rem}
@@ -1229,7 +1241,7 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 .tm-card strong{font-size:15px}
 .tm-form{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin:8px 0}
 .tm-form label,.tm-lic{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--ink-dim)}
-.tm-form input,.tm-form select,.tm-lic textarea,.tm-wpm input,.tm-roster input,.tm-lineup select{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--ink);font:inherit;min-width:0}
+.tm-form input,.tm-form select,.tm-lic textarea,.tm-lic input,.tm-wpm input,.tm-roster input,.tm-lineup select{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--ink);font:inherit;min-width:0}
 .tm-roster input{width:100%;padding:4px 6px}
 .tm-roster input.tm-cap{width:3.2em;text-align:center}
 .tm-lineup select{width:100%;max-width:340px}
@@ -1308,11 +1320,6 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 :root[data-look="silver"] .btn-primary,:root[data-look="silver"] .audible-btn{background:var(--metal);color:var(--metal-ink);box-shadow:inset 0 1px 0 var(--metal-edge),0 6px 16px rgba(var(--pure-black-rgb),.45)}
 :root[data-look="silver"] .user-avatar,:root[data-look="silver"] .ar-av{background:var(--metal-soft);color:var(--metal-ink)}
 :root[data-look="silver"] .nav-btn.active{box-shadow:inset 0 1px 0 rgba(var(--white-rgb),.12)}
-:root[data-look="silver"] .icon-btn{color:var(--ink)}
-/* the contrast audit (tests/visual.mjs audit) found these below WCAG AA in this look */
-:root[data-look="silver"] .assign-badge.gk{background:var(--danger-strong);border-color:var(--danger-strong)}
-:root[data-look="silver"] .dev-table th small{opacity:1}
-:root[data-look="silver"] a:not([class]){color:var(--teal)}
 :root[data-look="silver"] #scene3d-toggle.active,:root[data-look="silver"] #zones-toggle.active,:root[data-look="silver"] #gk-toggle.active{background:var(--metal);color:var(--metal-ink);border-color:var(--line)}   /* an active board toggle is metal in this look; its icon (🟩 🧤 🎥) still says which */
 
 /* ===== Glass (theme Phase 3): only what floats over the pool or video, only in Black & Silver. Borders keep their meaning

@@ -220,6 +220,31 @@ export function scanFile(relPath) {
   const toast = /\btoast\(\s*(['"])((?:[^\\]|\\.)*?)\1/g;
   while ((m = toast.exec(src))) push(m.index, m[2], 'toast');
 
+  /* …and every other literal inside the toast's argument: `toast(on ? 'Sound on' : 'Sound off')` and
+     `toast(msg || 'Saved')` start with code, so the pattern above never saw them (the sound toast stayed
+     English through the whole translation work). Walk to the matching `)`, drop T(...) calls, and report
+     what is left in quotes. */
+  const toastCall = /\btoast\(/g;
+  while ((m = toastCall.exec(src))) {
+    let i = m.index + m[0].length, depth = 1, q = null;
+    const from = i;
+    for (; i < src.length && depth; i++) {
+      const ch = src[i];
+      if (q) { if (ch === '\\') i++; else if (ch === q) q = null; continue; }
+      if (ch === "'" || ch === '"' || ch === '`') q = ch;
+      else if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+      else if (ch === '\n' && depth === 1 && i - from > 400) break;
+    }
+    let arg = src.slice(from, i - 1);
+    if (/^\s*(['"])/.test(arg) && !/^\s*(['"])(?:(?!\1)[^\\\n]|\\.)*\1\s*[?:|&]/.test(arg)) continue;   // a bare literal: reported above
+    for (let prev = ''; prev !== arg;) { prev = arg; arg = arg.replace(/\bTX?\((?:[^()]|\([^()]*\))*\)/g, ' '); }   // T() in app.js, TX() in film.js
+    arg = arg.replace(/[!=]==?\s*(['"])(?:(?!\1)[^\\\n]|\\.)*\1|(['"])(?:(?!\2)[^\\\n]|\\.)*\2\s*[!=]==?/g, ' ');   // compared, not shown: lane === 'exc'
+    const lit = /(['"])((?:(?!\1)[^\\\n]|\\.)*?)\1/g;
+    let t;
+    while ((t = lit.exec(arg))) push(m.index, t[2], 'toast');
+  }
+
   /* 4) el.textContent = '…' — visible text that never passes through markup at all, so
      passes 1 and 2 are blind to it. By definition textContent IS what the user reads, which
      makes this the rare pattern with no false positives worth speaking of. This is how

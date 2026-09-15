@@ -74,6 +74,26 @@ const SCREENS = [
   ['17-playbook-zones-keeper', DESK, 'coach', async p => { await view(p, 'playbook'); await p.click('#zones-toggle'); await p.click('#gk-toggle'); await p.waitForTimeout(350); }],
   ['18-playbook-3d', DESK, 'coach', async p => { await view(p, 'playbook'); await p.click('#scene3d-toggle'); await p.waitForTimeout(500); }],
   ['19-fullscreen-bar', DESK, 'coach', async p => { await view(p, 'playbook'); await p.click('#fs-btn'); await p.waitForTimeout(300); await p.mouse.move(400, 300); await p.waitForTimeout(150); }],
+  /* theme Phase 4: every other screen at phone width, and what opens on top (menus, sheets, modals) */
+  ['20-phone-film-room', PHONE, 'coach', async p => { await view(p, 'film'); await p.click('.film-item:has-text("Sample match")').catch(() => {}); }],
+  ['21-phone-season', PHONE, 'coach', async p => view(p, 'season')],
+  ['22-phone-development', PHONE, 'player', async p => view(p, 'development')],
+  ['23-phone-teams', PHONE, 'coach', async p => { if (await p.locator('.nav-btn[data-view="teams"]').count()) await view(p, 'teams'); }],
+  ['24-phone-solutions', PHONE, 'coach', async p => view(p, 'solutions')],
+  ['25-phone-basics', PHONE, 'coach', async p => view(p, 'basics')],
+  ['26-phone-trivia', PHONE, 'player', async p => view(p, 'trivia')],
+  ['27-phone-admin', PHONE, 'super-admin', async p => { if (await p.locator('.nav-btn[data-view="admin"]').count()) await view(p, 'admin'); }],
+  ['28-editor-modal', DESK, 'coach', async p => { await view(p, 'playbook'); await p.click('#edit-btn'); await p.waitForTimeout(400); }],
+  ['29-announcements', DESK, 'coach', async p => { await p.click('#announce-btn'); await p.waitForTimeout(300); }],
+  ['30-look-menu', DESK, 'coach', async p => { await p.click('#look-toggle'); await p.waitForTimeout(200); }],
+  ['31-download-menu', DESK, 'coach', async p => { await view(p, 'playbook'); await p.click('#dl-btn'); await p.waitForTimeout(200); }],
+  ['32-audible-sheet', DESK, 'coach', async p => { await view(p, 'playbook'); await p.click('#audible-btn'); await p.waitForTimeout(400); }],
+  ['33-new-play-chooser', DESK, 'coach', async p => { await view(p, 'playbook'); await p.click('#new-scenario-btn'); await p.waitForTimeout(400); }],
+  ['34-log-test-modal', DESK, 'player', async p => { await view(p, 'development'); await p.click('[data-open-modal="test"]'); await p.waitForTimeout(300); }],
+  ['35-phone-look-menu', PHONE, 'coach', async p => { await p.click('#look-toggle'); await p.waitForTimeout(200); }],
+  ['36-phone-announcements', PHONE, 'coach', async p => { await p.click('#announce-btn'); await p.waitForTimeout(300); }],
+  ['37-small-laptop-admin-playbook', { width: 1100, height: 760 }, 'super-admin', async p => view(p, 'playbook')],
+  ['38-tablet-admin-dashboard', { width: 768, height: 1024 }, 'super-admin', async () => {}],
 ];
 
 if (mode === 'capture') {

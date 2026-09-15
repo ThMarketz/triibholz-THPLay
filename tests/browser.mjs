@@ -25,6 +25,14 @@ function hook(page, tag){
   page.on('console', m=>{ if(m.type()==='error' && !thirdParty(m.text())) errs.push(`[${tag}] ${m.text()}`); });
 }
 const skipTour = async (page)=>{ if (await page.locator('#tour-skip').count()) await page.click('#tour-skip').catch(()=>{}); };
+/* Theme Phase 4: in one row the top bar ran past the right edge of a 1360 px laptop, and the body clips sideways — flags,
+   avatar and sign-out were unreachable by hand. Playwright's click scrolls a clipped element into view, so every click-based
+   check still passed; this measures instead. Returns what sits outside the viewport (an open menu too, when given). */
+const offScreen = (p, extra = '') => p.evaluate(extra => { const vw = document.documentElement.clientWidth;
+  return [...document.querySelectorAll('.topbar-left button, .topbar-right button, .topbar-right .user-avatar' + (extra ? ', ' + extra : ''))]
+    .filter(e => e.getClientRects().length && !e.closest('[hidden]') && (extra && e.matches(extra) || !e.closest('.dl-menu')))
+    .filter(e => { const r = e.getBoundingClientRect(); return r.right > vw + 1 || r.left < -1; })
+    .map(e => '#' + (e.id || e.className || e.textContent.trim().slice(0, 12))); }, extra);
 // poll a condition instead of a fixed sleep — network round-trips (announcements, debriefs, …) don't have a fixed latency
 const waitUntil = async (fn, { timeout = 6000, interval = 150 } = {}) => {
   const start = Date.now();
@@ -32,6 +40,7 @@ const waitUntil = async (fn, { timeout = 6000, interval = 150 } = {}) => {
   return false;
 };
 const dragBy = async (page, locator, dx, dy) => {
+  await locator.scrollIntoViewIfNeeded();   // a person scrolls to what they drag; the mouse cannot reach below the fold
   const bb = await locator.boundingBox();
   await page.mouse.move(bb.x + bb.width/2, bb.y + bb.height/2);
   await page.mouse.down();
@@ -526,6 +535,8 @@ await page.click('#lang-switch-top .lang-btn:nth-child(1)'); await page.waitForT
 console.log('\n[6] Admin — approvals');
 await page.click('#logout-btn'); await page.waitForTimeout(300);
 await page.click('.demo-btn[data-demo="super-admin"]'); await page.waitForTimeout(500); await skipTour(page);
+await page.click('.nav-btn[data-view="playbook"]'); await page.waitForTimeout(400);
+{ const off = await offScreen(page); ok('the widest top bar (Super Admin, playbook, 1360 px) keeps every control on screen' + (off.length ? ' — off: ' + off.join(', ') : ''), off.length === 0); }
 await page.click('.nav-btn[data-view="admin"]'); await page.waitForTimeout(300);
 const pend = await page.locator('#approve-list [data-approve]').count();
 ok('pending queue shown ('+pend+')', pend>=1);
@@ -562,6 +573,16 @@ const poolBox = await mp.locator('#pool').boundingBox();
 ok('pool visible on mobile ('+Math.round(poolBox?.width||0)+'px wide)', poolBox && poolBox.width>300);
 const overflowPx = await mp.evaluate(()=>document.body.scrollWidth - window.innerWidth);
 ok('no meaningful horizontal overflow ('+overflowPx+'px)', overflowPx <= 4);
+{ const off = await offScreen(mp); ok('every top-bar control is on a 375 px screen' + (off.length ? ' — off: ' + off.join(', ') : ''), off.length === 0);
+  await mp.click('.nav-btn[data-view="dashboard"]'); await mp.waitForTimeout(300);   // no Offense/Defense here, so ◐ sits mid-screen
+  await mp.click('#look-toggle'); await mp.waitForTimeout(150);
+  const offLook = await offScreen(mp, '#look-menu, #look-menu button');
+  await mp.keyboard.press('Escape'); await mp.waitForTimeout(100);
+  await mp.click('#announce-btn'); await mp.waitForTimeout(300);
+  const offAnn = await offScreen(mp, '#announce-panel');
+  await mp.click('#announce-btn'); await mp.waitForTimeout(150);
+  await mp.click('.nav-btn[data-view="playbook"]'); await mp.waitForTimeout(400);
+  ok('the Look menu and announcements open inside a phone screen, not off its left edge' + (offLook.length + offAnn.length ? ' — off: ' + offLook.concat(offAnn).join(', ') : ''), offLook.length === 0 && offAnn.length === 0); }
 await mp.screenshot({ path:OUT+'/qa_12_mobile.png' });
 
 console.log('\n[9] Common laptop viewport (1280×720) — controls must never be pushed below the fold');
@@ -574,6 +595,7 @@ await lp.click('.nav-btn[data-view="playbook"]'); await lp.waitForTimeout(400);
 await lp.locator('.scn-card:not(.scn-new)').first().click(); await lp.waitForTimeout(400);
 const inView = async (sel) => { const r = await lp.locator(sel).boundingBox(); return !!r && r.y >= 0 && r.y + r.height <= 720 && r.height > 0; };
 ok('play/pause/step controls are fully visible without scrolling', await inView('#play-btn') && await inView('#step-fwd') && await inView('#step-back'));
+{ const off = await offScreen(lp); ok('every top-bar control is on screen at 1280 px' + (off.length ? ' — off: ' + off.join(', ') : ''), off.length === 0); }
 ok('the board still gets real height, not squeezed to nothing', (await lp.locator('#pool').boundingBox()).height > 150);
 await lp.click('#play-btn'); await lp.waitForTimeout(250);
 ok('play actually plays at this viewport size', await lp.locator('#play-btn.playing').count()===1);
@@ -584,6 +606,11 @@ const stepBefore = await lp.locator('#frame-label').textContent();
 await lp.click('#step-fwd'); await lp.waitForTimeout(200);
 ok('step-forward still advances the play with 3D on ('+stepBefore+' → '+(await lp.locator('#frame-label').textContent())+')', (await lp.locator('#frame-label').textContent()) !== stepBefore);
 await lp.click('#scene3d-toggle');
+await lp.setViewportSize({ width: 1100, height: 720 }); await lp.waitForTimeout(300);
+{ const tabs = await lp.evaluate(() => { const box = document.querySelector('#situation-tabs'); box.scrollLeft = 0; const first = box.firstElementChild; return { over: box.scrollWidth > box.clientWidth, gap: first ? Math.round(first.getBoundingClientRect().left - box.getBoundingClientRect().left) : -1 }; });
+  ok('the situation tabs scroll from their first tab when they do not fit (a centred scroller clipped "6 on 6"; gap ' + tabs.gap + ' px, overflowing: ' + tabs.over + ')', tabs.over && tabs.gap >= 0); }
+await lp.setViewportSize({ width: 768, height: 1024 }); await lp.waitForTimeout(300);
+{ const off = await offScreen(lp); ok('…and at 768 px (a tablet held upright) the nav wraps instead of running off the edge' + (off.length ? ' — off: ' + off.join(', ') : ''), off.length === 0); }
 await lctx.close();
 
 console.log('\n[10] My Development — hero mascot, stat strip, modal-based profile/test/swim logging');

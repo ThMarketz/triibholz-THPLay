@@ -18,7 +18,7 @@ const HELP = (() => {
       'help.dashboard.s2',
       'help.dashboard.s3',
       'help.dashboard.s4',
-    ], tips:[ 'help.dashboard.t1', 'help.dashboard.t2', 'help.dashboard.t3', 'help.dashboard.t4', 'help.dashboard.t5' ]},
+    ], tips:[ 'help.dashboard.t1', 'help.dashboard.t6', 'help.dashboard.t2', 'help.dashboard.t3', 'help.dashboard.t4', 'help.dashboard.t5' ]},
 
     playbook: { icon:'📖', title:'help.playbook.title', steps:[
       'help.playbook.s1',

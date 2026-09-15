@@ -1460,7 +1460,9 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     {
       const seen = scanFile('tests/fixtures/i18n-scan-quotes.js').map(x => x.text);
       ok('the guard sees markup and textContent inside strings that contain the other quote kind, and not translated markup',
-        seen.includes('Cutting the clip now') && seen.includes('Season tools unavailable') && seen.includes('He said "hold the ball" twice') && seen.length === 3);
+        seen.includes('Cutting the clip now') && seen.includes('Season tools unavailable') && seen.includes('He said "hold the ball" twice') && seen.length === 6);
+      ok('the guard sees the text of a toast chosen in code (a ternary or a default), and not a T()/TX() key or a compared value',
+        seen.includes('Whistle blows now') && seen.includes('Whistle stays quiet') && seen.includes('Nothing to share yet') && !seen.some(x => /^(ui|film)\.|^exc$/.test(x)));
     }
 
     // the ratchet: this number may only ever go DOWN
@@ -1487,7 +1489,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     const asked = [...new Set(jsFiles.flatMap(fl => [...readFileSync(join(APP, fl), 'utf8').matchAll(/\bC\('(--[\w-]+)'\)|THEME\.c\('(--[\w-]+)'\)/g)].map(m => m[1] || m[2])))];
     const missing = asked.filter(n => !(n in fb) || !(n in cssTok));
     ok('every colour token code asks for exists in the CSS and the fallback (' + asked.length + ' names)' + (missing.length ? ' — missing: ' + missing.join(', ') : ''), asked.length >= 90 && missing.length === 0);
-    ok('THEME.c returns the value, and the look is set on <html> before anything draws', THEME.c('--pool-deck') === '#0c2030' && document.documentElement.getAttribute('data-look') === 'today' && THEME.look() === 'today');
+    ok('THEME.c returns the value, and the look is set on <html> before anything draws', THEME.c('--pool-deck') === '#0c2030' && THEME.LOOKS.includes(document.documentElement.getAttribute('data-look')) && THEME.look() === document.documentElement.getAttribute('data-look'));
     /* the ratchet: a colour written straight into a file is a colour a look cannot change. Allowed only in the token
        block (:root), in regions marked theme:fixed (paper, third-party logos, the print booklet until Phase 2),
        in js/theme.js (the fallback copy) and js/qr.js (a QR code must stay dark on light to scan). */
@@ -1544,6 +1546,25 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
         vm.runInNewContext(readFileSync(join(APP, 'js/theme.js'), 'utf8') + '\n;globalThis.__T = THEME;', sandbox);
         const T2 = sandbox.__T; T2.setLook('silver'); T2.setGlass(true);
         ok('when the device asks for less transparency, glass stays solid even if switched on', T2.glassWanted() === true && T2.reducedTransparency() === true && T2.glass() === false && attrs['data-glass'] === 'off' && attrs['data-look'] === 'silver');
+      }
+      /* the look a device starts in (owner decision, theme Phase 4): a new device gets Black & Silver, a device that already
+         holds Triibholz data keeps navy — and either way the answer is written down on the first run */
+      {
+        const vm = await import('node:vm');
+        const boot = (seed, broken) => {
+          const attrs = {}, store = { ...seed };
+          const ls = broken ? { get length() { throw new Error('denied'); }, key() { throw new Error('denied'); }, getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } }
+            : { get length() { return Object.keys(store).length; }, key: i => Object.keys(store)[i] ?? null, getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } };
+          const sb = { document: { documentElement: { getAttribute: k => attrs[k] || null, setAttribute: (k, v) => { attrs[k] = v; } }, addEventListener() {}, querySelector: () => null },
+            localStorage: ls, matchMedia: () => ({ matches: false, addEventListener() {} }), getComputedStyle: () => ({ getPropertyValue: () => '' }) };
+          vm.runInNewContext(readFileSync(join(APP, 'js/theme.js'), 'utf8'), sb);
+          return { look: attrs['data-look'], saved: store['thplay.look.v1'] };
+        };
+        const fresh = boot({}), known = boot({ 'thplay.users.v1': '[]' }), glassOnly = boot({ 'thplay.glass.v1': 'off' }), chose = boot({ 'thplay.look.v1': 'today' }), chose2 = boot({ 'thplay.look.v1': 'silver', 'thplay.lang': 'de' }), junk = boot({ 'thplay.look.v1': 'pink', 'thplay.sound': '1' }), noStore = boot({}, true);
+        ok('a new device starts in Black & Silver and remembers it; a device with Triibholz data keeps navy and remembers that',
+          fresh.look === 'silver' && fresh.saved === 'silver' && known.look === 'today' && known.saved === 'today' && glassOnly.look === 'silver');
+        ok('a look someone chose always wins; an unknown saved look counts as not chosen; no storage at all stays navy',
+          chose.look === 'today' && chose2.look === 'silver' && junk.look === 'today' && junk.saved === 'today' && noStore.look === 'today');
       }
       ok('js/theme.js offers the glass switch and sets data-glass before anything draws', typeof THEME.setGlass === 'function' && typeof THEME.glass === 'function' && ['on', 'off'].includes(document.documentElement.getAttribute('data-glass')));
     }

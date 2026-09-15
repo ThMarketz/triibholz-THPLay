@@ -40,7 +40,7 @@ Playbook screen in today's navy look and in Black & Silver, with glass controls 
 | 1 | Black & Silver chrome: palette, bars, panels, buttons, forms, menus, toasts | M | ☑ done |
 | 2 | The pool and everything drawn: board, animation, Film Room board, 3D, celebrations | M | ☑ done |
 | 3 | Glass on floating controls, with a solid fallback | S | ☑ done |
-| 4 | Every screen, both looks, phone widths; sign-off and release | M | ☐ |
+| 4 | Every screen, both looks, phone widths; sign-off and release | M | ☑ done |
 
 ## Decisions (owner, 2026‑09‑15)
 
@@ -54,6 +54,9 @@ Playbook screen in today's navy look and in Black & Silver, with glass controls 
    **Decided 2026‑09‑15: white page, diagrams in the look.** The printed booklet keeps its white paper page
    (dark text, normal ink); the play diagrams on it are drawn in whichever look the coach uses.
 4. **Glass:** on by default, with a switch.
+5. **Navy's contrast (Phase 4):** fix all of it, even though navy's pixels change.
+6. **Existing users with no saved look (Phase 4):** they keep navy. A device that already holds Triibholz
+   data starts in navy; a new device starts in Black & Silver.
 
 ---
 
@@ -369,6 +372,87 @@ and tag a release.
 
 **Gates.** Smoke, server (image), browser (both looks, zero console errors), visual check, contrast
 check, and frame-rate check all green. Push and redeploy only on the owner's go.
+
+**Done 2026‑09‑15.**
+- **The default look** (decisions 1 and 6). `theme.js startLook()`:
+  - a saved look always wins;
+  - otherwise, a device holding any other `thplay.*` key is an existing user and gets navy;
+  - a device with nothing gets Black & Silver;
+  - the answer is saved on the first run, so data the app writes a moment later can't flip a new device
+    back to navy;
+  - no storage at all stays navy.
+- **Navy passes AA** (decision 5): 232 failures on the 19 screens → 0.
+  - `--ink-faint` `#647d93` → `#8fa6ba`.
+  - White text on teal now sits on `--teal-strong` `#0c7e88` → `--teal-deep` `#0a5f67`: primary buttons,
+    avatars, Audible.
+  - `--danger-strong` `#c42f2f` for the keeper badge and the active Keeper view; new `--violet-59` for the
+    active 3D toggle.
+  - Moved from silver-only into the base rules: `.icon-btn` text colour (the black "？"), link colour,
+    the team table's `th small` opacity.
+  - `--text`, `--muted` and `--border` are defined (aliases of ink, dim ink and line). They had been used by
+    about 20 rules but never defined, so some borders never drew.
+- **Layout bugs found by the wider sweep** (both looks, not caused by the theme):
+  - The top bar was one row. On a 1360 px laptop the language flags, avatar and sign-out sat past the
+    right edge, unreachable because the body clips sideways; for a Super Admin that was true even at
+    1600 px. From 768 to 1000 px the nav itself ran off the edge.
+    - Fix: the bar wraps (controls on a second row), the nav wraps, and the situation tabs share that
+      row and scroll below 1240 px.
+    - Below 1440 px the account pill is avatar plus sign-out, as on a phone.
+    - Why no test caught it: Playwright's click scrolls a clipped element into view, so every click-based
+      check passed.
+  - The situation tabs were a centred scroller (`justify-content:center`). When the tabs don't fit, that
+    clips the start where no scrolling reaches: on a 1100 px laptop "6 on 6" couldn't be reached. They
+    are now centred with auto margins.
+  - On a phone, the Look menu and announcements opened off the left edge of the screen. `fitMenu()`
+    nudges any open drop-down back on screen.
+  - On a small laptop, the play's title was squeezed to one word per line beside its buttons. Between 721
+    and 1240 px the title now sits above the buttons.
+  - On a phone playbook, Share and Edit ran past the edge (the actions wrap), and the "Paused — drag…"
+    hint slid under ⚡ Audible (it now wraps short of it).
+  - The Season search button stuck out of its card (the input could not shrink). The player card's
+    licence-number box was an unstyled white field.
+- **Translations.**
+  - The i18n guard now reads every literal inside a `toast(…)`, not only a bare first string. That turned
+    up 14 English toasts, not just "Sound on/off": test results, confirm/reject, movement saved, template
+    on/off, lanes, approval. All are translated (EN/DE/FR/IT), and the ratchet is back to 0.
+  - The Help guide's dashboard tips explain ◐.
+- **The full-screen "white band"** from Phase 3 is a test artefact, not an app bug. After the Fullscreen API,
+  headless Firefox reports `innerHeight` as the screen height (768) while the screenshot stays 900 px.
+- **Tests.**
+  - **Smoke +3:** the default look (new, existing, glass-only, chosen, unknown, no storage) and the guard
+    seeing toast text chosen in code (and not `T()`/`TX()` keys or compared values).
+  - **Browser +5:** every top-bar control is on screen at 1360 (Super Admin), 1280 and 768 px, and at
+    375 px; the Look menu and announcements open inside a phone screen; the situation tabs scroll from
+    their first tab at 1100 px. `dragBy` scrolls its target into
+    view first, as a person would (the taller header put the Film Room ball just below the fold).
+  - **Visual sweep:** 19 → 38 screens. It adds every other view at phone width, the editor, announcements,
+    the Look menu, downloads, the Audible sheet, the new-play chooser, the test-log modal, a 1100 px laptop
+    and a 768 px tablet.
+- **Service worker cache** v74 → v75.
+- **Verified** on an export of 9caf3eb plus exactly these files:
+  - smoke 680/680, i18n scan 0;
+  - host server 84 + 17 skipped, image server 101/101, identity 79, auth 153, clubs 127;
+  - contrast audit **0 in navy and 0 in Black & Silver** across 38 screens;
+  - browser **209/209 in navy and in Black & Silver**, and **4 × 209/209 with no look set** (a new device), zero console errors;
+  - frame rate 60 fps with glass vs 60 solid.
+
+  The last CSS fix (the tab scroller) touched only CSS and the browser suite, so smoke, the audits, the
+  captures and the browser runs were repeated on it. The server suites were not.
+- **Fault-injected**, each caught:
+  1. the default logic inverted;
+  2. the glass key counted as existing data;
+  3. the first-run save removed;
+  4. the guard's toast pass, comparison stripping and `TX()` stripping each removed;
+  5. the top bar and nav not wrapping, plus `fitMenu` disabled (4 browser failures, naming every
+     off-screen control);
+  6. the centred tab scroller (the first tab 68 px out of reach).
+- **Intermittent, not explained:** 2 of 10 browser runs with no look set stalled on a page reload (Playwright's
+  30 s timeout), at two different steps: after switching glass off, and after a CSV download. There were no
+  such stalls in 8 navy / Black & Silver runs.
+  - Four more runs were instrumented to log requests in flight, the load event and any dialog at a stall.
+    They all passed, with every reload loading in 0.0–5.5 s.
+  - The app has no `beforeunload` handler. A reload stall had been seen once before this phase, too.
+  - Treated as a harness flake for now. If it comes back, run `browser.mjs` with the same instrumentation.
 
 ---
 

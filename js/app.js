@@ -828,7 +828,7 @@
       const official = devCanCoach(), today = new Date().toISOString().slice(0, 10);
       dev.tests = dev.tests || []; dev.tests.push({ id: 'd' + Math.random().toString(36).slice(2, 9), date: root.querySelector('#dev-test-date').value || today, name: dev.info.name || email, test: t.label, result, unit: t.unit, testedBy: root.querySelector('#dev-test-by').value, remark: root.querySelector('#dev-test-remark').value,
         status: official ? 'approved' : 'pending', verifiedBy: official ? state.user.name : '', verifiedAt: official ? today : '' });
-      saveDev(email, dev); toast(official ? 'Test result saved' : 'Logged — waiting for your coach to confirm it'); renderDevelopment();
+      saveDev(email, dev); toast(T(official ? 'ui.testResultSaved' : 'ui.testLoggedPending')); renderDevelopment();
     };
     root.querySelectorAll('[data-test-del]').forEach(b => b.onclick = () => { dev.tests = (dev.tests || []).filter(t => t.id !== b.dataset.testDel); saveDev(email, dev); renderDevelopment(); });
     // a coach confirms or rejects a self-reported number
@@ -838,7 +838,7 @@
       t.status = status; t.verifiedBy = state.user.name; t.verifiedAt = new Date().toISOString().slice(0, 10);
       saveDev(email, dev);
       DATA.logActivity(status === 'approved' ? 'approve' : 'deny', `${state.user.name} ${status === 'approved' ? 'confirmed' : 'rejected'} ${dev.info.name || email}'s ${t.test} result (${t.result})`, state.user.name);
-      toast(status === 'approved' ? 'Result confirmed' : 'Result rejected'); renderDevelopment();
+      toast(T(status === 'approved' ? 'ui.resultConfirmed' : 'ui.resultRejected')); renderDevelopment();
     }
     root.querySelectorAll('[data-test-verify]').forEach(b => b.onclick = () => devSetTestStatus(b.dataset.testVerify, 'approved'));
     root.querySelectorAll('[data-test-deny]').forEach(b => b.onclick = () => devSetTestStatus(b.dataset.testDeny, 'denied'));
@@ -2165,10 +2165,22 @@
     if (badge) { badge.textContent = announce.unread; badge.hidden = !announce.unread; }
     if ($('announce-panel') && !$('announce-panel').hidden) renderAnnouncePanel();
   }
+  /* A drop-down hangs from the right edge of its button. On a phone the top-bar buttons sit mid-screen, and the Look menu
+     and announcements opened off the left side of it (theme Phase 4) — so nudge an open menu back onto the screen. */
+  function fitMenu(m) {
+    if (!m) return;
+    m.style.transform = '';
+    if (m.hidden) return;
+    const r = m.getBoundingClientRect(), vw = document.documentElement.clientWidth, pad = 8;
+    if (!r.width || !vw) return;
+    const dx = r.left < pad ? pad - r.left : r.right > vw - pad ? vw - pad - r.right : 0;
+    if (dx) m.style.transform = `translateX(${Math.round(dx)}px)`;
+  }
   function toggleAnnouncePanel(force) {
     const m = $('announce-panel'); if (!m) return;
     m.hidden = force == null ? !m.hidden : !force;
     if (!m.hidden) { renderAnnouncePanel(); loadAnnouncements(); }
+    fitMenu(m);
   }
   function renderAnnouncePanel() {
     const m = $('announce-panel'); if (!m) return;
@@ -2420,7 +2432,7 @@
     resetAdjust();
     renderLibrary();
     openScenario(id);
-    toast(asNew ? 'Saved as a new movement ⑂' : 'Changes saved ✓');
+    toast(T(asNew ? 'ui.savedAsNewMovement' : 'ui.changesSaved'));
   }
 
   /* ======================================================
@@ -2493,7 +2505,7 @@
     const sc = currentScenario(); if (!sc || sc.builtIn || sc.shared) return;
     sc.template = !sc.template; sc.updated = Date.now();
     DATA.save(state.scenarios); renderLibrary(); openScenario(sc.id);
-    toast(sc.template ? '⭐ Template — it now shows under “New play” and as a personal audible' : 'No longer a template');
+    toast(T(sc.template ? 'ui.templateOn' : 'ui.templateOff'));
   }
   const myTemplates = () => state.scenarios.filter(sc => sc.template && !sc.builtIn && !sc.shared);
   function templatesFor(situation, phase) {
@@ -2722,7 +2734,7 @@
     if (fmt === 'pdf') { openPrint([sc]); return; }
     if (fmt === 'video') { const d = $('video-panel'); if (d) { d.open = true; if (typeof d.scrollIntoView === 'function') d.scrollIntoView({ behavior: 'smooth', block: 'start' }); const b = $('vid-generate'); if (b) b.focus(); } return; }
   }
-  function toggleDlMenu(force) { const m = $('dl-menu'); if (!m) return; m.hidden = force == null ? !m.hidden : !force; }
+  function toggleDlMenu(force) { const m = $('dl-menu'); if (!m) return; m.hidden = force == null ? !m.hidden : !force; fitMenu(m); }
   async function downloadPlay() {
     const sc = currentScenario(); if (!sc || typeof SHARE === 'undefined') return;
     if (!await guardConfidential([sc])) return;
@@ -2789,7 +2801,7 @@
     toast(`${added} play${added === 1 ? '' : 's'} imported${dup ? ` · ${dup} skipped (already in your playbook)` : ''}${bad ? ` · ${bad} item${bad > 1 ? 's' : ''} not understood` : ''}`);
     return { added, dup, bad };
   }
-  function toggleImportMenu(force) { const m = $('import-menu'); if (!m) return; m.hidden = force == null ? !m.hidden : !force; }
+  function toggleImportMenu(force) { const m = $('import-menu'); if (!m) return; m.hidden = force == null ? !m.hidden : !force; fitMenu(m); }
   function openPaste() { const m = $('paste-modal'); if (!m) return; m.hidden = false; $('paste-text').value = ''; setTimeout(() => $('paste-text').focus(), 30); }
   async function backupAll() {
     const mine = state.scenarios.filter(sc => !sc.builtIn && !sc.shared);
@@ -3096,7 +3108,7 @@
     const p = POOL.stackPos(z, sameLane);
     f.extra.push({ team, label, x:p.x, y:p.y });
     editorRender();
-    toast(lane==='exc' ? 'Excluded player added to re-entry lane' : 'Substitute added to flying-sub lane');
+    toast(T(lane==='exc' ? 'ui.excludedAddedReentry' : 'ui.subAddedFlyingSub'));
   }
   function delWaiting() {
     const f = currentFrame(); if (!f.extra||!f.extra.length){ toast(T('ui.noWaitingPlayers')); return; }
@@ -3232,7 +3244,7 @@
     });
     $('setup-continue').onclick = submitSetup;
 
-    $('pending-recheck').onclick = ()=>{ const u=DATA.findUserByEmail(state.user.email); if(u&&u.status!=='pending'){ routeUser(u); toast(u.status==='approved'?'Approved — welcome in':'Access declined'); } else toast(T('ui.stillPendingApproval')); };
+    $('pending-recheck').onclick = ()=>{ const u=DATA.findUserByEmail(state.user.email); if(u&&u.status!=='pending'){ routeUser(u); toast(T(u.status==='approved'?'ui.approvedWelcome':'ui.accessDeclined')); } else toast(T('ui.stillPendingApproval')); };
     $('pending-signout').onclick = ()=>{ clearSession(); state.user=null; show('auth-screen'); };
     $('denied-signout').onclick = ()=>{ clearSession(); state.user=null; show('auth-screen'); };
 
@@ -3328,7 +3340,7 @@
       const on = !FX.isSoundOn(); FX.setSound(on);
       e.currentTarget.textContent = on ? '🔊' : '🔇';
       if (on) FX.sound('whistle');
-      toast(on ? 'Sound on' : 'Sound off');
+      toast(T(on ? 'ui.soundOn' : 'ui.soundOff'));
     };
 
     $('announce-btn').onclick = e => { e.stopPropagation(); toggleAnnouncePanel(); };
@@ -3410,6 +3422,7 @@
     const m = $('look-menu'); if (!m) return;
     m.hidden = force == null ? !m.hidden : !force;
     $('look-toggle').setAttribute('aria-expanded', m.hidden ? 'false' : 'true');
+    fitMenu(m);
   }
   /* the Look menu (◐): which look is on, whether glass is on, and why glass may be unavailable — in the current language */
   function updateLookToggle(){
