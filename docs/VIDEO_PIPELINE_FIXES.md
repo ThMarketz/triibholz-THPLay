@@ -25,10 +25,10 @@ built-in `lavfi` test source, so nothing needs downloading. Fault-inject each ne
 |-------|------|------|--------|
 | 0 | Land the three fixes already made | S | ☑ committed; both gates green on the commit |
 | 1 | Long videos analysed as 0.5 s and reported "done" | M | ☑ done |
-| 2 | Partly unreadable videos look like complete ones | M | ☐ |
+| 2 | Partly unreadable videos look like complete ones | M | ☑ done |
 | 3 | Coaches see raw error codes, in every language | S | ☐ |
 | 4 | Test and documentation gaps | S | ☐ |
-| 5 | Browser gate | S | ☑ gate fixed, 187/187, **fix not yet committed** (UI checks for Phases 0/2/3 still to add) |
+| 5 | Browser gate | S | ☑ gate fixed (ea826cc); Phase 2 UI checks in; Phase 0/3 UI checks still to add |
 
 ---
 
@@ -133,6 +133,56 @@ bytes mid-mp4 still gave a full 45 s, and I didn't confirm the bytes were actual
 overwritten, so treat that as untested. A file cut short is the reliable case: half an mp4
 already gives `no-frames`. Expect `done` with coverage below 100 % and a failed-chunk count.
 
+**Done 2026‑09‑15.** First I measured how damage actually shows up (image, 45 s fixtures). Two
+of the plan's assumptions were wrong:
+
+| Damage | ffmpeg exit | What shows it |
+|--------|-------------|---------------|
+| MP4 cut in half, index at the front (header still says 45 s) | 0 | chunks come back 113 → 0 → 0 frames |
+| WebM with index, cut in half | 0 | 120 → 14 → 0 frames |
+| Garbage over 25 % of the middle (WebM / MP4 / MPEG-TS) | 0 | chunks come back **too long** (156, 183 frames for a 120-frame chunk), or short |
+
+The exit code is useless, and ffmpeg's error output is unreliable: 281 lines for one file, 0 for
+another with the same damage. So damage is judged by **frame counts**. Only an MP4 with its
+index at the end gives `no-frames` when cut; one with the index at the front plays its first part.
+
+- **`server/engine.js`.** A damaged chunk is one that's short or empty but isn't the end
+  (with an unknown length that's only known once something follows it), or one with more
+  frames than its length. A slightly short *last* chunk doesn't count, because audio can
+  outlast video. Over-long chunks are now **cut to their length**: before, their frames got
+  timestamps that ran into the next chunk's. `meta.expectedSeconds` is set when the length
+  is known, and `meta.damagedChunks` when above zero. `decodeChunk` runs with
+  `-loglevel error` and returns its exit code and error tail.
+- **`server/index.js`.** ffmpeg's words go in the job **file** only. That's `decodeIssues`
+  (up to 20: position, frames/expected, exit code, error tail) and, for errors, `detail`.
+  The server log gets one line. The job and result API answers don't carry them.
+- **Film Room.** A warning **above** the report, including the "no possessions" view. The
+  existing "Ns analysed" line is inside the collapsed "Go further" part, where a coach would
+  miss it. Most serious first: capped ("only the first 12 h were read"), then under 95 % read
+  ("Only 19 s of this 45 s video could be read (42%) …"), then damaged parts. EN/DE/FR/IT,
+  i18n scan at 0. Service worker cache → v67.
+- **Tests.** Server `[3g2]` +5 in the image: a clean file has `expectedSeconds` and no
+  damage; MP4 cut in half; ffmpeg's words in the job file but not the API; garbage WebM
+  with strictly increasing timestamps; a non-video's `detail`. Smoke +1: the normalizer
+  keeps the new fields only as valid numbers. Browser +3 with a mocked club server: the
+  partial warning above the report, the damaged-parts warning, no warning on a clean read.
+  `tests/browser.mjs` now accepts `APP_URL`.
+- **Verified** on HEAD plus exactly these files: image 94/94, host 84 + 10 skipped, smoke
+  654/654, and browser 190/190 with zero console errors. The browser run used a separate
+  stack on :8090 built from the export, so the running containers and the other session's
+  unfinished work weren't involved. Fault-injected 5 ways, each caught: no frame cap, no
+  damage count, details leaking to the API, no Film Room warning, and the normalizer
+  dropping the fields.
+  Accounts slice 3 (79f3e39) landed mid-way, touching `server/index.js`, so everything was
+  re-run on 79f3e39 plus these files. All green again, including that session's
+  `tests/identity.mjs` 79, `auth.mjs` 153 and `clubs.mjs` 127.
+
+**Limits (known, not fixed):**
+- A **header-less** file cut short can't be told apart from a shorter video, since there's
+  no length to compare against.
+- Damage ffmpeg **conceals** without changing the frame count (in the MPEG-TS, the chunk where the
+  garbage began, around 18–20 s, still came back as a normal 120 frames) isn't seen.
+
 ---
 
 ## Phase 3 — Coaches see raw error codes, in every language
@@ -193,5 +243,6 @@ The gate still uses Playwright 1.61.1 / Firefox 151. Firefox 155 (build 1543, ~2
 downloaded while diagnosing and is in `~/Library/Caches/ms-playwright`. Moving `tests/` to
 Playwright 1.63.0 would use it; otherwise it can be deleted.
 
-**Still to do for this plan:** add Film Room checks for the new messages (Phase 0's
-no-ffmpeg message and the Phase 2/3 messages) to `browser.mjs` as those phases land.
+**Still to do for this plan:** Film Room checks for Phase 0's no-ffmpeg message and the
+Phase 3 messages. Phase 2's are in (the mocked club server in `[4b]`), and
+`APP_URL=http://localhost:<port>/` points the gate at a stack other than the running containers.

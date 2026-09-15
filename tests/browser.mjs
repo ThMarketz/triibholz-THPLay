@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const OUT = join(dirname(fileURLToPath(import.meta.url)), 'shots');
 import { mkdirSync, mkdtempSync } from 'node:fs'; mkdirSync(OUT, { recursive: true });
 import { tmpdir } from 'node:os';
-const URL = 'http://localhost:8088/';
+const URL = process.env.APP_URL || 'http://localhost:8088/';   // APP_URL: gate a stack other than the running containers
 let pass=0, fail=0; const errs=[];
 const ok=(n,c)=>{ c?pass++:fail++; console.log((c?'  ✓ ':'  ✗ FAIL: ')+n); };
 
@@ -360,6 +360,37 @@ await page.waitForFunction(() => /failed|done|Find the field/i.test((document.qu
 const scoutTxt = ((await page.locator('#toast').textContent().catch(()=>''))||'') + ' ' + ((await page.locator('#scout-out').textContent().catch(()=>''))||'') + ' ' + ((await page.locator('#scout-status').textContent().catch(()=>''))||'');
 ok('scouting a non-video / no backend explains itself (no crash, no hang)', /Find the field|didn’t respond|failed|No possessions/i.test(scoutTxt));
 await page.screenshot({ path:OUT+'/qa_25_autoscout.png' });
+// How much of the video a report covers: the club server is mocked, so this checks what the coach SEES, not ffmpeg.
+// Half a match must say so above the report — not only in the collapsed "Go further" part.
+{
+  const scoutResult = meta => ({ engine:'server', version:1, tracks:[], events:[], frames:[], scout:{ possessions:0, plays:[], profile:{}, summary:[], playbook:[] }, meta:Object.assign({ fps:6, field:{ mode:'fixed' } }, meta) });
+  let answer = null;
+  const json = (route, body, status=200) => route.fulfill({ status, contentType:'application/json', body:JSON.stringify(body) });
+  const mocks = {
+    '**/api/health': r => json(r, { ok:true, engine:'server', ffmpeg:true, maxUploadMB:4096 }),
+    '**/api/upload': r => json(r, { videoRef:'mock.mp4', bytes:16 }),
+    '**/api/jobs': r => json(r, { id:'job_mock', status:'queued' }, 202),
+    '**/api/jobs/job_mock': r => json(r, { id:'job_mock', status:'done', error:null }),
+    '**/api/jobs/job_mock/result': r => json(r, answer),
+  };
+  for (const [pat, fn] of Object.entries(mocks)) await page.route(pat, fn);
+  const runScout = async meta => {
+    answer = scoutResult(meta);
+    await page.evaluate(() => { document.querySelector('#scout-out').innerHTML = ''; });
+    await page.click('#scout-run');
+    await page.waitForFunction(() => /No possessions/.test(document.querySelector('#scout-out').textContent), { timeout:20000 }).catch(()=>{});
+  };
+  await runScout({ seconds:18.8, chunks:1, expectedSeconds:45, damagedChunks:2 });
+  const warn = page.locator('#scout-out > .scout-warn');
+  ok('a report on half the video says so ABOVE the report: "Only 19 s of this 45 s video could be read (42%)"', await warn.count()===1 && await warn.isVisible() && /Only 19 s of this 45 s video could be read \(42%\)/.test(await warn.textContent()));
+  await page.locator('#scout-out').scrollIntoViewIfNeeded().catch(()=>{});
+  await page.screenshot({ path:OUT+'/qa_41_scout_partial.png' });
+  await runScout({ seconds:44, chunks:3, expectedSeconds:45, damagedChunks:2 });
+  ok('nearly all read but damaged parts → the "not read cleanly" warning instead', /could not be read cleanly/.test((await warn.textContent().catch(()=>''))||''));
+  await runScout({ seconds:45, chunks:3, expectedSeconds:45 });
+  ok('a clean, complete read shows no warning', /No possessions/.test(await page.locator('#scout-out').textContent()) && await page.locator('#scout-out .scout-warn').count()===0);
+  for (const [pat, fn] of Object.entries(mocks)) await page.unroute(pat, fn);
+}
 // 🎯 Game plan chips + 📣 Team debriefs panel
 ok('game plan: 18 instruction chips on the match', await page.locator('#film-plan .plan-chip').count()===18);
 await page.click('#film-plan .plan-chip[data-ins="d-press"]'); await page.waitForTimeout(150);

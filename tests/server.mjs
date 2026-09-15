@@ -186,13 +186,18 @@ function frame(w, h) {
     const over = await fetch(base + '/api/upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: Buffer.alloc(6 * 1024 * 1024, 1) }).catch(() => null);
     ok('over the limit (MAX_UPLOAD=5 MB in tests) → 413 too-large with the limit, or a clean cut', !over || (over.status === 413 && (await over.json()).maxUploadMB === 5));
 
-    console.log('\n[3g2] Auto-scout reads the WHOLE video, with or without a length header (needs ffmpeg)');
+    console.log('\n[3g2] Auto-scout reads the WHOLE video, with or without a length header, and says what it could not read (needs ffmpeg)');
     {
       const names = ['a 45 s MP4 (length in its header) → done, all 45 s read',
         'the WebM test file really has no length header (ffmpeg says "Duration: N/A")',
         'a 45 s WebM with no length header → done, all 45 s read (was 0.5 s)',
         'no length header + opts.maxSec 20 → stops at 20 s and says so (meta.capped)',
-        'a video whose length is known is never marked capped'];
+        'a video whose length is known is never marked capped',
+        'a clean video: expectedSeconds from its header, no damaged parts; a header-less one has no expectedSeconds',
+        'an MP4 cut in half (header still says 45 s) → done, ~19 of 45 s read, damaged parts counted',
+        '…ffmpeg\'s own words land in the job FILE (decodeIssues), never in the job or result API answers',
+        'garbage in the middle of a WebM → done, damaged parts counted, timestamps still strictly increasing inside the video',
+        'a non-video\'s job file keeps ffmpeg\'s reason (detail); the API still says only no-frames'];
       if (!h.ffmpeg) names.forEach(n => skip(n, 'no ffmpeg on this host — the image run covers it'));
       else {
         const { readFileSync, writeFileSync } = await import('node:fs');
@@ -208,7 +213,7 @@ function frame(w, h) {
           const u = await (await fetch(base + '/api/upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: bytes })).json();
           const q = await (await fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef: u.videoRef, calibration: { corners: vCorners }, scout: true, us: 'white', opts: Object.assign({ fps: 6, chunkSec: 20 }, opts) }) })).json();
           let j = {}; for (let i = 0; i < 600 && j.status !== 'done' && j.status !== 'error'; i++) { await wait(100); j = await (await fetch(base + '/api/jobs/' + q.id)).json(); }
-          return j.status === 'done' ? { status: 'done', result: await (await fetch(base + '/api/jobs/' + q.id + '/result')).json() } : j;
+          return j.status === 'done' ? { id: q.id, status: 'done', api: j, result: await (await fetch(base + '/api/jobs/' + q.id + '/result')).json() } : Object.assign({ id: q.id, api: j }, j);
         };
         const near = (a, b) => Math.abs(a - b) <= 0.5;
         const mp4 = await scoutJob(readFileSync(mp4Path), {});
@@ -219,6 +224,26 @@ function frame(w, h) {
         const capped = await scoutJob(webm, { maxSec: 20 });
         ok(names[3], capped.status === 'done' && near(capped.result.meta.seconds, 20) && capped.result.meta.capped === true);
         ok(names[4], mp4.status === 'done' && mp4.result.meta.capped === undefined);
+        ok(names[5], mp4.status === 'done' && near(mp4.result.meta.expectedSeconds, 45) && mp4.result.meta.damagedChunks === undefined && full.status === 'done' && full.result.meta.expectedSeconds === undefined && full.result.meta.damagedChunks === undefined);
+        // damaged fixtures — both have their length in the header, as a phone or camera file does
+        const faststart = join(process.env.DATA_DIR, 'fixture-45s-faststart.mp4'), indexed = join(process.env.DATA_DIR, 'fixture-45s-indexed.webm');
+        spawnSync(ff, [...src, '-c:v', 'mpeg4', '-movflags', '+faststart', faststart]);
+        spawnSync(ff, [...src, '-c:v', 'libvpx', indexed]);
+        const fsBytes = readFileSync(faststart);
+        const cutJob = await scoutJob(fsBytes.subarray(0, Math.floor(fsBytes.length / 2)), {});
+        const cm = cutJob.status === 'done' ? cutJob.result.meta : {};
+        ok(names[6], cutJob.status === 'done' && cm.seconds > 12 && cm.seconds < 26 && near(cm.expectedSeconds, 45) && cm.damagedChunks >= 1);
+        const jobFile = id => JSON.parse(readFileSync(join(process.env.DATA_DIR, 'jobs', id + '.json'), 'utf8'));
+        const cutFile = jobFile(cutJob.id);
+        const leaks = o => /decodeIssues|detail|ffmpeg|Packet corrupt|Invalid data/.test(JSON.stringify(o));
+        ok(names[7], Array.isArray(cutFile.decodeIssues) && cutFile.decodeIssues.length >= 1 && cutFile.decodeIssues.some(i => typeof i.ffmpeg === 'string' && i.ffmpeg.length > 0) && !leaks(cutJob.api) && !leaks(cutJob.result.meta));
+        // deterministic garbage (an LCG, not Math.random) over 25 % of the file, starting at 40 %
+        const garbled = Buffer.from(readFileSync(indexed)); { let x = 12345; const st = Math.floor(garbled.length * 0.4), n = Math.floor(garbled.length * 0.25); for (let k = st; k < st + n; k++) { x = (x * 1103515245 + 12345) >>> 0; garbled[k] = x >>> 24; } }
+        const gJob = await scoutJob(garbled, {});
+        const gts = gJob.status === 'done' ? gJob.result.frames.map(fr => fr.t) : [];
+        ok(names[8], gJob.status === 'done' && gJob.result.meta.damagedChunks >= 1 && gts.length > 10 && gts.every((t, i) => !i || t > gts[i - 1]) && gts[gts.length - 1] < 45);
+        const junkFile = jobFile(sj.id);
+        ok(names[9], sjob.error === 'no-frames' && /Invalid data/.test(junkFile.detail || '') && !('detail' in sjob));
       }
     }
 

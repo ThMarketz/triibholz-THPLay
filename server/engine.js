@@ -136,13 +136,29 @@ async function videoToScout(path, cal, opts) {
   const detector = opts.detector || makeDetector({ modelEndpoint: opts.modelEndpoint, step: opts.step, minArea: opts.minArea });
   const series = [];
   const auto = isAuto(cal); const samples = []; const every = Math.max(1, Math.round(fps * (opts.fieldEverySec || 1)));   // detect the field about once a second
-  let unread = 0, decoded = 0, chunks = 0, prevFull = true, ended = false;
+  let unread = 0, decoded = 0, chunks = 0, damaged = 0, prevFull = true, ended = false, pendingGap = null, firstErr = '';
+  // Damage is judged by frame counts, not ffmpeg's exit code or chatter (both measured useless): a chunk
+  // that comes back short (or empty) but is not the end, or with more frames than it is long (broken
+  // timestamps). ffmpeg's own words go to the job file via opts.onIssues — never to the coach.
+  const issues = [];
+  const note = (at, got, want, dc) => { damaged++; if (issues.length < 20) issues.push({ at: +(start + at).toFixed(1), frames: got, expected: want, exit: dc.code, ffmpeg: dc.errTail }); };
   for (let t0 = 0; t0 < total; t0 += chunkSec) {
-    const len = Math.min(chunkSec, total - t0);
-    const frames = await decodeChunk(path, start + t0, len, w, h, fps, opts.ffmpeg);
+    const len = Math.min(chunkSec, total - t0), want = Math.round(len * fps);
+    const dc = await decodeChunk(path, start + t0, len, w, h, fps, opts.ffmpeg);
+    const got = dc.frames.length;
+    if (!firstErr && dc.errTail) firstErr = dc.errTail;
     // unknown length: an empty chunk right after a short (or empty) one is the end of the video
-    if (!lengthKnown && !frames.length && !prevFull) { ended = true; break; }
-    prevFull = frames.length >= Math.round(len * fps) - 1;
+    if (!lengthKnown && !got && !prevFull) { ended = true; break; }
+    // …so with an unknown length a short chunk is only a gap once something follows it
+    if (pendingGap && got) note(...pendingGap);
+    pendingGap = null;
+    const short = got < want - 1, over = got > want + 1;
+    const last = lengthKnown && t0 + chunkSec >= total;   // a slightly short last chunk is normal (audio outlasting video)
+    if (over) note(t0, got, want, dc);
+    else if (short && !last) { if (lengthKnown) note(t0, got, want, dc); else pendingGap = [t0, got, want, dc]; }
+    prevFull = !short;
+    // never let one chunk's frames spill past its own length into the next chunk's timestamps
+    const frames = over ? dc.frames.slice(0, want) : dc.frames;
     if (!frames.length) continue;
     decoded += frames.length; chunks++;
     const perFrame = []; for (const f of frames) perFrame.push(await detector.detect(f, w, h));
@@ -163,13 +179,17 @@ async function videoToScout(path, cal, opts) {
     if (typeof opts.onProgress === 'function') opts.onProgress(lengthKnown ? Math.min(1, (t0 + chunkSec) / total) : null, +(decoded / fps).toFixed(1));
   }
   // nothing decoded (not a video, or an empty one) is not a missing field: say so, don't blame the pool
-  if (!decoded) { const e = new Error('no-frames-decoded'); e.code = 'no-frames'; throw e; }
+  if (!decoded) { const e = new Error('no-frames-decoded'); e.code = 'no-frames'; if (firstErr) e.detail = firstErr; throw e; }
+  if (typeof opts.onIssues === 'function' && issues.length) opts.onIssues(issues);
   if (!series.length) { const e = new Error('field-not-found'); e.code = 'field-not-found'; throw e; }
   const events = EVENTS.detect(series, {});
   const scout = scoutSeries(series, events, opts);
-  // seconds actually read, not what the probe claimed; capped = an unknown-length video still going at the cap
+  // seconds actually read, not what the probe claimed; capped = an unknown-length video still going at the cap;
+  // expectedSeconds (known length only) + damagedChunks let the Film Room say how much of the match the report covers
   const meta = { seconds: +(decoded / fps).toFixed(1), fps, chunks };
   if (!lengthKnown && !ended && !opts.winSec) meta.capped = true;
+  if (lengthKnown) meta.expectedSeconds = +total.toFixed(1);
+  if (damaged) meta.damagedChunks = damaged;
   if (auto) { const tr = FIELD.timeline(samples, { minConf: cal.minConf || 0.4 }); meta.field = Object.assign({ mode: 'auto', unreadSeconds: +(unread / fps).toFixed(1) }, FIELD.stats(tr), { corners: (tr.find(x => x.corners) || {}).corners || null }); }
   else meta.field = { mode: 'fixed' };
   return ANALYSIS.normalizeResult({ engine: 'server', version: ANALYSIS.VERSION, tracks: [], frames: series.filter((_, i) => i % Math.max(1, Math.round(fps)) === 0), events, scout, meta });
@@ -184,11 +204,13 @@ function probeDuration(path, ffmpegBin) {
 }
 function decodeChunk(path, startSec, lenSec, w, h, fps, ffmpegBin) {
   return new Promise((resolve, reject) => {
-    const args = ['-ss', String(startSec), '-t', String(lenSec), '-i', path, '-vf', `fps=${fps},scale=${w}:${h}`, '-f', 'rawvideo', '-pix_fmt', 'rgba', '-'];
-    const ff = spawn(ffmpegBin || 'ffmpeg', args); const chunks = [];
-    ff.stdout.on('data', d => chunks.push(d)); ff.stderr.on('data', () => {});
+    // -loglevel error: stderr then holds only ffmpeg's complaints, so its tail is worth keeping
+    const args = ['-nostdin', '-loglevel', 'error', '-ss', String(startSec), '-t', String(lenSec), '-i', path, '-vf', `fps=${fps},scale=${w}:${h}`, '-f', 'rawvideo', '-pix_fmt', 'rgba', '-'];
+    const ff = spawn(ffmpegBin || 'ffmpeg', args); const chunks = []; let err = '';
+    ff.stdout.on('data', d => chunks.push(d)); ff.stderr.on('data', d => { err = (err + d).slice(-4000); });
     ff.on('error', e => reject(Object.assign(new Error('ffmpeg-spawn: ' + e.message), { code: 'ffmpeg' })));
-    ff.on('close', () => { const buf = Buffer.concat(chunks), fb = w * h * 4, n = Math.floor(buf.length / fb); const out = []; for (let i = 0; i < n; i++) out.push(buf.subarray(i * fb, (i + 1) * fb)); resolve(out); });
+    // the exit code says little (a file cut in half still exits 0); the frame count is what the caller judges
+    ff.on('close', code => { const buf = Buffer.concat(chunks), fb = w * h * 4, n = Math.floor(buf.length / fb); const out = []; for (let i = 0; i < n; i++) out.push(buf.subarray(i * fb, (i + 1) * fb)); resolve({ frames: out, code, errTail: err.trim().split('\n').slice(-3).join('\n').slice(-300) }); });
   });
 }
 

@@ -93,19 +93,27 @@ function pump() {
 async function processJob(id) {
   const job = loadJob(id); if (!job) return;
   job.status = 'processing'; job.startedAt = Date.now(); saveJob(job);
+  // ffmpeg's own words about a damaged or unreadable video: kept in the job FILE for whoever debugs it,
+  // never in an API answer (they name server paths and mean nothing to a coach)
+  let issues = null;
   try {
-    const result = await runEngine(job.request);
+    const result = await runEngine(job.request, { onIssues: list => { issues = list; } });
     if (job.request && job.request.videoRef && result && typeof result === 'object') result.meta = Object.assign({}, result.meta || {}, { videoRef: job.request.videoRef });   // so clips can be cut from the same file later
-    job.status = 'done'; job.result = result; job.finishedAt = Date.now(); saveJob(job);
+    job.status = 'done'; job.result = result; job.finishedAt = Date.now();
+    if (issues) { job.decodeIssues = issues; console.warn(`[triibholz-analysis] ${id}: ${issues.length} damaged part(s) of the video — see the job file`); }
+    saveJob(job);
   } catch (e) {
-    job.status = 'error'; job.error = e.code || e.message; job.finishedAt = Date.now(); saveJob(job);
+    job.status = 'error'; job.error = e.code || e.message; job.finishedAt = Date.now();
+    if (e.detail) job.detail = e.detail;
+    if (issues) job.decodeIssues = issues;
+    saveJob(job);
   }
 }
 
 /* ---------------- the actual analysis ---------------- */
-async function runEngine(req) {
+async function runEngine(req, hooks) {
   req = req || {};
-  const opts = Object.assign({}, req.opts);
+  const opts = Object.assign({}, req.opts, hooks);   // hooks (callbacks) last: a request can't carry or override them
   opts.modelEndpoint = opts.modelEndpoint || req.modelEndpoint || MODEL_ENDPOINT || undefined;
   if (req.scout) { opts.scout = true; if (req.us) opts.us = req.us; }
   if (req.mode === 'frames' || Array.isArray(req.frames)) {

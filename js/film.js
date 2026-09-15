@@ -592,15 +592,27 @@ const FILM = (() => {
     });
   }
   let lastScout = null;
+  const fmtLen = s => s < 120 ? TX('film.lenSeconds', { n: Math.round(s) }) : s < 7200 ? TX('film.lenMinutes', { n: Math.round(s / 60) }) : TX('film.lenHours', { n: +(s / 3600).toFixed(1) });
+  // How much of the video the report really covers. Shown above the report, never only inside the
+  // collapsed "Go further" part: a coach reading tendencies off half a match has to know it's half.
+  function coverageWarningHtml(meta) {
+    if (!meta) return '';
+    const read = +meta.seconds || 0, of = +meta.expectedSeconds || 0;
+    const msg = meta.capped ? TX('film.coverageCapped', { read: fmtLen(read) })
+      : of && read < 0.95 * of ? TX('film.coveragePartial', { read: fmtLen(read), total: fmtLen(of), pct: Math.round(100 * read / of) })
+      : meta.damagedChunks ? TX('film.coverageDamaged') : '';
+    return msg ? `<div class="scout-warn" role="status">⚠ ${esc(msg)}</div>` : '';
+  }
   function renderScout(sc, result) {
     const out = root && root.querySelector('#scout-out'); if (!out) return;
     lastScout = { sc, result, sessionId: cur && cur.id };
-    if (!sc || !sc.possessions) { const fm0 = result && result.meta && result.meta.field; out.innerHTML = `<div class="muted">${TX('film.noPossessions', { readable: fm0 && fm0.mode === 'auto' ? TX('film.fieldReadableIn', { pct: fm0.readPct }) : '', tip: fm0 && fm0.mode === 'auto' && fm0.readPct < 50 ? TX('film.orClickCorners') : '' })}</div>`; return; }
+    const warn = coverageWarningHtml(result && result.meta);
+    if (!sc || !sc.possessions) { const fm0 = result && result.meta && result.meta.field; out.innerHTML = `${warn}<div class="muted">${TX('film.noPossessions', { readable: fm0 && fm0.mode === 'auto' ? TX('film.fieldReadableIn', { pct: fm0.readPct }) : '', tip: fm0 && fm0.mode === 'auto' && fm0.readPct < 50 ? TX('film.orClickCorners') : '' })}</div>`; return; }
     const fm = result && result.meta && result.meta.field;
     const meta = (result && result.meta ? TX('film.metaSecondsAnalysed', { n: Math.round(result.meta.seconds) }) : '') + (fm && fm.mode === 'auto' ? TX('film.metaFieldTracked', { pct: fm.readPct, unread: fm.unreadSeconds ? TX('film.metaUnreadSeconds', { n: fm.unreadSeconds }) : '' }) : fm && fm.mode === 'fixed' ? TX('film.metaFixedCamera') : '');
     const teamRows = Object.keys(sc.profile || {}).map(k => { const t = sc.profile[k]; return `<div class="scout-team"><strong>${k === 'att' ? TX('film.whiteCaps') : TX('film.blueCaps')}</strong> — ${TX('film.teamRowStats', { poss: t.possessions, rate: Math.round(t.shotRate * 100), passes: t.avgPasses })}
       <div class="scout-tend">${(t.tendencies || []).slice(0, 4).map(x => `<span class="tag">${esc(tacName(x.tactic, x.name))} ${x.pct}%</span>`).join('') || `<span class="muted">${TX('film.noRecognisedTactics')}</span>`}</div></div>`; }).join('');
-    out.innerHTML = `<div class="scout-box">
+    out.innerHTML = `${warn}<div class="scout-box">
       ${teamAnalysisHtml(sc, result)}
       <details class="scout-more"><summary>${TX('film.goFurther')}</summary>
       <div class="ef-label" style="margin-top:8px">${TX('film.scoutingSummary', { n: sc.possessions, meta })}</div>
