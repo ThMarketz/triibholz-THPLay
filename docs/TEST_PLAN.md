@@ -151,6 +151,17 @@ should rise as the model retrains on coach corrections.
 
 A release ships only when:
 1. `smoke.mjs`, `server.mjs`, `browser.mjs` all **green**, **zero app console errors**.
+   - **`server.mjs` counts only when run inside the analysis image.** On a host without ffmpeg,
+     every video check (whole-length reads, damaged files, clips, auto field on real video) prints
+     `SKIPPED`, and a skip is not a pass:
+
+         bash scripts/docker-build.sh
+         docker run --rm -v /private/tmp/triibholz-build:/app -w /app -e NODE_NO_WARNINGS=1 \
+           triibholz-analysis:latest node tests/server.mjs
+
+   - `browser.mjs` gates the running containers at :8088 by default.
+     `APP_URL=http://localhost:<port>/` points it at another stack, e.g. one built from exactly
+     the commit under test.
 2. A live container smoke (health + one real analyse) passes.
 3. If the model changed: the **model scorecard** meets §4 bars with **no regression** on
    the frozen set.
@@ -158,7 +169,7 @@ A release ships only when:
 5. Privacy checklist passes (for anything touching stored video / tenants).
 
 **CI mapping**
-- On PR: smoke + server + browser.
+- On PR: smoke + server (in the analysis image) + browser.
 - On model change: + model eval scorecard.
 - On release tag: + live container smoke + privacy checklist + (periodic) UAT.
 

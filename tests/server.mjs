@@ -197,7 +197,13 @@ function frame(w, h) {
         'an MP4 cut in half (header still says 45 s) → done, ~19 of 45 s read, damaged parts counted',
         '…ffmpeg\'s own words land in the job FILE (decodeIssues), never in the job or result API answers',
         'garbage in the middle of a WebM → done, damaged parts counted, timestamps still strictly increasing inside the video',
-        'a non-video\'s job file keeps ffmpeg\'s reason (detail); the API still says only no-frames'];
+        'a non-video\'s job file keeps ffmpeg\'s reason (detail); the API still says only no-frames',
+        'a job with fixed corners on a real video reports meta.field.mode "fixed"',
+        'POST /api/clip on a real video → 200, and GET clipUrl serves a playable ~4 s MP4 (video/mp4, ftyp box)',
+        'a clip past the end of the video → 422 clip-empty, and the empty file is neither kept nor served',
+        'a clip inside the missing half of a cut-off file → 422 clip-empty (was 200 with a 262-byte file)',
+        'auto mode on a real video with a pool → done, field found where it was drawn (±4 px)',
+        'auto mode on a real video with no pool → field-not-found, never a guessed field'];
       if (!h.ffmpeg) names.forEach(n => skip(n, 'no ffmpeg on this host — the image run covers it'));
       else {
         const { readFileSync, writeFileSync } = await import('node:fs');
@@ -209,11 +215,11 @@ function frame(w, h) {
         const webm = spawnSync(ff, [...src, '-c:v', 'libvpx', '-f', 'webm', 'pipe:1'], { maxBuffer: 64 * 1024 * 1024 }).stdout;
         writeFileSync(webmPath, webm);
         const vCorners = [{ x: 0, y: 0 }, { x: 320, y: 0 }, { x: 320, y: 180 }, { x: 0, y: 180 }];
-        const scoutJob = async (bytes, opts) => {
+        const scoutJob = async (bytes, opts, calibration) => {
           const u = await (await fetch(base + '/api/upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: bytes })).json();
-          const q = await (await fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef: u.videoRef, calibration: { corners: vCorners }, scout: true, us: 'white', opts: Object.assign({ fps: 6, chunkSec: 20 }, opts) }) })).json();
+          const q = await (await fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef: u.videoRef, calibration: calibration || { corners: vCorners }, scout: true, us: 'white', opts: Object.assign({ fps: 6, chunkSec: 20 }, opts) }) })).json();
           let j = {}; for (let i = 0; i < 600 && j.status !== 'done' && j.status !== 'error'; i++) { await wait(100); j = await (await fetch(base + '/api/jobs/' + q.id)).json(); }
-          return j.status === 'done' ? { id: q.id, status: 'done', api: j, result: await (await fetch(base + '/api/jobs/' + q.id + '/result')).json() } : Object.assign({ id: q.id, api: j }, j);
+          return j.status === 'done' ? { id: q.id, ref: u.videoRef, status: 'done', api: j, result: await (await fetch(base + '/api/jobs/' + q.id + '/result')).json() } : Object.assign({ id: q.id, ref: u.videoRef, api: j }, j);
         };
         const near = (a, b) => Math.abs(a - b) <= 0.5;
         const mp4 = await scoutJob(readFileSync(mp4Path), {});
@@ -244,13 +250,43 @@ function frame(w, h) {
         ok(names[8], gJob.status === 'done' && gJob.result.meta.damagedChunks >= 1 && gts.length > 10 && gts.every((t, i) => !i || t > gts[i - 1]) && gts[gts.length - 1] < 45);
         const junkFile = jobFile(sj.id);
         ok(names[9], sjob.error === 'no-frames' && /Invalid data/.test(junkFile.detail || '') && !('detail' in sjob));
+        ok(names[10], mp4.status === 'done' && mp4.result.meta.field && mp4.result.meta.field.mode === 'fixed');
+        // clips from real videos
+        const clipOf = async (videoRef, start, end) => { const r = await fetch(base + '/api/clip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, start, end }) }); return { status: r.status, body: await r.json() }; };
+        const clipDur = fp => { const m = /Duration: (\d+):(\d+):([\d.]+)/.exec(spawnSync(ff, ['-i', fp]).stderr.toString()); return m ? +m[1] * 3600 + +m[2] * 60 + +m[3] : 0; };
+        const good = await clipOf(mp4.ref, 1, 5);
+        const served = good.status === 200 ? await fetch(base + good.body.clipUrl) : null;
+        const servedBytes = served ? Buffer.from(await served.arrayBuffer()) : Buffer.alloc(0);
+        const goodPath = join(process.env.DATA_DIR, 'clips', (good.body.id || 'x') + '.mp4');
+        ok(names[11], good.status === 200 && served.status === 200 && served.headers.get('content-type') === 'video/mp4' && servedBytes.length > 1000 && servedBytes.subarray(4, 8).toString() === 'ftyp' && Math.abs(clipDur(goodPath) - 4) <= 0.5);
+        const { existsSync } = await import('node:fs');
+        const past = await clipOf(mp4.ref, 100, 105), pastAgain = await clipOf(mp4.ref, 100, 105);
+        const pastId = mp4.ref.replace(/\.mp4$/, '') + '_1000_1050';
+        ok(names[12], past.status === 422 && past.body.error === 'clip-empty' && pastAgain.status === 422 && !existsSync(join(process.env.DATA_DIR, 'clips', pastId + '.mp4')) && (await fetch(base + '/api/clips/' + pastId + '.mp4')).status === 404);
+        const hole = await clipOf(cutJob.ref, 30, 35);
+        ok(names[13], hole.status === 422 && hole.body.error === 'clip-empty');
+        // auto mode (moving camera) on the VIDEO path: a grey deck with a blue water rectangle and moving caps, and the same deck with no water
+        const deck = (extra, out) => spawnSync(ff, ['-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=0x78766e:s=320x180:r=25:d=12' + extra, '-c:v', 'mpeg4', '-b:v', '300k', out]);
+        const poolPath = join(process.env.DATA_DIR, 'fixture-pool.mp4'), dryPath = join(process.env.DATA_DIR, 'fixture-no-pool.mp4');
+        deck(",drawbox=x=24:y=16:w=272:h=148:color=0x1e5a8c:t=fill,drawbox=x='" + "40+t*8" + "':y=40:w=10:h=10:color=white:t=fill,drawbox=x=200:y='" + "60+t*4" + "':w=10:h=10:color=0x16181e:t=fill,drawbox=x=150:y=90:w=8:h=8:color=0xff8220:t=fill", poolPath);
+        deck('', dryPath);
+        const autoCal = { mode: 'auto', minConf: 0.4 };
+        const poolJob = await scoutJob(readFileSync(poolPath), {}, autoCal);
+        const fc = poolJob.status === 'done' && poolJob.result.meta.field ? poolJob.result.meta.field : {};
+        const drawn = [[24, 16], [296, 16], [296, 164], [24, 164]];
+        const cornersOk = Array.isArray(fc.corners) && fc.corners.length === 4 && drawn.every(([x, y]) => fc.corners.some(c => Math.abs(c.x - x) <= 4 && Math.abs(c.y - y) <= 4));
+        ok(names[14], poolJob.status === 'done' && fc.mode === 'auto' && fc.readPct >= 90 && cornersOk);
+        const dryJob = await scoutJob(readFileSync(dryPath), {}, autoCal);
+        ok(names[15], dryJob.status === 'error' && dryJob.error === 'field-not-found');
       }
     }
 
     console.log('\n[3h] Clips + team debriefs with comments');
     ok('clip of an unknown video → 404', (await fetch(base + '/api/clip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef: 'nope.mp4', start: 1, end: 5 }) })).status === 404);
     const clipR = await fetch(base + '/api/clip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef: upj.videoRef, start: 1, end: 5 }) });
-    ok('clip of a non-decodable upload fails cleanly (500 clip/ffmpeg or 503 no ffmpeg)', [500, 503].includes(clipR.status) && /ffmpeg|clip/.test((await clipR.json()).error));
+    const clipJ = await clipR.json();
+    ok(h.ffmpeg ? 'clip of a non-decodable upload → 500 ffmpeg (ffmpeg present)' : 'clip of a non-decodable upload → 503 ffmpeg-unavailable (no ffmpeg on this host)',
+      h.ffmpeg ? clipR.status === 500 && clipJ.error === 'ffmpeg' : clipR.status === 503 && clipJ.error === 'ffmpeg-unavailable');
     ok('unknown clip file → 404', (await fetch(base + '/api/clips/nope.mp4')).status === 404);
     {
       // a served clip (and its range requests) must not be kept by the browser or the SW either

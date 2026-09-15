@@ -680,13 +680,14 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     const literals = quoted.filter(q => !q.endsWith('-') && !scanInternal.includes(q));
     const prefixes = [...new Set(quoted.filter(q => q.endsWith('-')).concat([...filmSrc.matchAll(/'(cloud-http-)' \+/g)].map(m => m[1])))];
     ok('film.js failure messages are really read from the source', literals.includes('backend-no-ffmpeg') && literals.includes('upload-network') && literals.includes('timed-out') && prefixes.includes('upload-') && prefixes.includes('clip-') && prefixes.includes('cloud-http-'));
-    const clientMsgs = [...new Set(literals)].concat(prefixes.flatMap(p => p === 'scout-' ? [] : [p + '404', p + '413', p + '500', p + '503']), ['too-large:900:500', 'TypeError: Failed to fetch']);
+    const clientMsgs = [...new Set(literals)].concat(prefixes.flatMap(p => p === 'scout-' ? [] : [p + '404', p + '413', p + '422', p + '500', p + '503']), ['too-large:900:500', 'TypeError: Failed to fetch']);
     const unexplained = clientMsgs.filter(m => { const r = reason(m); return GENERIC.includes(r.key) || !inAll(r.key); });
     ok('every failure film.js can raise has its own reason in EN/DE/FR/IT' + (unexplained.length ? ' — missing: ' + unexplained.join(', ') : ''), unexplained.length === 0);
     // the rendered text: a real sentence, placeholders filled, the code itself never shown
     const said = (m, lang) => { const r = reason(m); return String((I18N.DICT[lang] || {})[r.key] || '').replace(/\{(\w+)\}/g, (_, k) => (Object.assign({ base: 'https://club.example' }, r.vars))[k]); };
     ok('the reason never repeats the raw code, in any language', ['scout-no-frames', 'scout-field-not-found', 'upload-500', 'clip-404', 'timed-out'].every(m => langs.every(l => said(m, l).length > 20 && !said(m, l).includes(m) && !/\{\w+\}/.test(said(m, l)))));
     ok('HTTP statuses are woven in: upload-502 → "error 502"', said('upload-502', 'en').includes('error 502') && reason('job-404').key === 'film.whyServerRefused');
+    ok('an empty clip (clip-422: nothing at that moment) says so — not "the server turned the request down"', reason('clip-422').key === 'film.whyClipEmpty' && inAll('film.whyClipEmpty') && reason('upload-422').key === 'film.whyServerRefused');
     ok('an unknown server code or a stray message falls back to a plain sentence, never the code', reason('scout-something-new').key === 'film.whyServerUnknown' && reason('scout-constructor').key === 'film.whyServerUnknown' && reason('Cannot read properties of undefined').key === 'film.whyUnknown' && inAll('film.whyUnknown') && inAll('film.whyServerUnknown'));
   }
 

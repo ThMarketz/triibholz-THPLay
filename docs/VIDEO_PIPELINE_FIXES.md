@@ -27,7 +27,7 @@ built-in `lavfi` test source, so nothing needs downloading. Fault-inject each ne
 | 1 | Long videos analysed as 0.5 s and reported "done" | M | ☑ done |
 | 2 | Partly unreadable videos look like complete ones | M | ☑ done |
 | 3 | Coaches see raw error codes, in every language | S | ☑ done |
-| 4 | Test and documentation gaps | S | ☐ |
+| 4 | Test and documentation gaps | S | ☑ done |
 | 5 | Browser gate | S | ☑ done: gate fixed (ea826cc); UI checks for Phases 0, 2 and 3 in |
 
 ---
@@ -265,6 +265,56 @@ pattern). It returns a key and never the message. Anything unknown gets one of t
 - **Docs.** `server/README.md` lists no error codes, and its `/api/health` row misses
   `accounts`, `detector`, `videoProvider` and `maxUploadMB`. Add an error-code table. Add the image gate
   command to `docs/TEST_PLAN.md` release gates, noting that the host run doesn't cover video.
+
+**Done 2026‑09‑15.** I probed the real behaviour in the image first. That turned one "test gap" into
+a bug fix.
+
+- **Empty clips were served as clips (fixed).** For a range past the end of a video, or inside the
+  part a cut-off file lacks, ffmpeg exits 0 and writes an empty ~262-byte MP4 with no duration. The
+  server answered **200**, cached it, and served it again on every retry, so the coach got a player
+  that never plays. Now `/api/clip` checks the result has a duration (`probeDuration`, now
+  exported from `server/engine.js`), deletes it if not, and answers **422 `clip-empty`**. A cut
+  that fails also removes any half-written file, so nothing broken can be served from the cache.
+  The Film Room says "there is no video at that moment — the file is shorter than that, or cut off
+  before it" (EN/DE/FR/IT) instead of "the server turned the request down". Service worker cache → v69.
+- **Real-video tests** (server `[3g2]`, image, +6):
+  - fixed corners report `meta.field.mode "fixed"`;
+  - a real 1–5 s clip is served as `video/mp4` with an `ftyp` box, ~4 s long;
+  - past the end → 422, not kept, not served;
+  - inside the missing half of a cut-off file → 422;
+  - auto mode on a generated pool video (grey deck, blue water, moving caps) finds the field where
+    it was drawn (±4 px);
+  - auto mode on the same deck with no water → `field-not-found`.
+- **The loose clip check** in `[3h]` now expects the exact answer for the host: 500 `ffmpeg` with
+  ffmpeg, 503 `ffmpeg-unavailable` without.
+- **Smoke +1.** `clip-422` has its own reason; `upload-422` stays "turned down". Statuses sampled now
+  include 422.
+- **Docs.**
+  - `server/README.md`: the stale "type http://localhost:4200 as the endpoint" replaced (the
+    app uses `/api` on its own address), full `/api/health` fields, the missing `/api/upload`,
+    `/api/clip` and `/api/clips/:file` rows, a scout Result meta paragraph, an **error-code table**
+    with HTTP statuses, and the image command for the video tests.
+  - `docs/TEST_PLAN.md` §7: `server.mjs` only counts when run in the analysis image ("a skip is
+    not a pass"), `APP_URL` for the browser gate, CI mapping updated.
+- **Verified** on f31ba62 plus exactly these files: image 100/100, host 84 + 16 skipped, smoke
+  662/662, i18n scan 0, identity 79, auth 153, clubs 127, browser 194/194 with zero console errors
+  (throwaway stack on :8090). Fault-injected 7 ways, each caught by exactly its check:
+  1. no empty-clip check;
+  2. the empty file kept;
+  3. auto mode ignored on the video path;
+  4. auto mode guessing a full-frame field;
+  5. a failed cut answering 502;
+  6. fixed mode not reporting its field;
+  7. `clip-422` losing its reason.
+
+**Limits found, not fixed:**
+- **Auto-field false positive.** On ffmpeg's colour-bar test pattern, which has no pool, auto
+  mode "finds" a field (84 % readable, average confidence 0.4, which is exactly the app's
+  `minConf`) and reports 17 possessions. That's detection accuracy (`js/field.js`), outside this
+  plan. Real footage with other blue areas (banners, seats) may do the same.
+- **`clip-empty` UI.** Its sentence is covered by smoke, not by a browser check. The clip buttons
+  only appear on a report with real plays, and the rendering path is the same `whyText()` the
+  browser checks already exercise for auto-scout.
 
 ---
 

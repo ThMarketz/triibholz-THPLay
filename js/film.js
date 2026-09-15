@@ -567,6 +567,7 @@ const FILM = (() => {
       if (status === 413) return { key: 'film.whyUpload413' };
       if (x[1] === 'clip' && status === 404) return { key: 'film.whyVideoGone' };
       if (x[1] === 'clip' && status === 503) return { key: 'film.whyNoFfmpeg' };
+      if (x[1] === 'clip' && status === 422) return { key: 'film.whyClipEmpty' };   // nothing to cut there (past the end, or a part the file lacks)
       return { key: status >= 500 ? 'film.whyServerError' : 'film.whyServerRefused', vars: { status } };
     }
     return { key: 'film.whyUnknown' };

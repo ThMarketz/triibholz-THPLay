@@ -302,7 +302,13 @@ const server = http.createServer(async (req, res) => {
       const start = Math.max(0, +cr.start || 0), end = Math.max(start + 1, Math.min(start + 60, +cr.end || start + 10));
       const id = safeToken(cr.videoRef).replace(/\.mp4$/, '') + '_' + Math.round(start * 10) + '_' + Math.round(end * 10);
       const out = path.join(CLIP_DIR, id + '.mp4');
-      if (!fs.existsSync(out)) { try { await cutClip(vp, start, end - start, out); } catch (e) { return send(res, 500, { error: e.code || 'clip-failed' }); } }
+      if (!fs.existsSync(out)) {
+        try { await cutClip(vp, start, end - start, out); }
+        catch (e) { try { fs.unlinkSync(out); } catch (_) {} return send(res, 500, { error: e.code || 'clip-failed' }); }   // no half-written file left to be served as "cached"
+        // ffmpeg exits 0 and writes an empty ~260-byte mp4 for a range past the end of the video, or inside a part a
+        // cut-off file doesn't have: never cache or serve that as a clip (the coach would get a player that never plays)
+        if (!(await engine.probeDuration(out, process.env.FFMPEG) > 0)) { try { fs.unlinkSync(out); } catch (_) {} return send(res, 422, { error: 'clip-empty' }); }
+      }
       return send(res, 200, { id, clipUrl: '/api/clips/' + id + '.mp4', start, end, bytes: fs.statSync(out).size });
     }
     const clipM = p.match(/^\/api\/clips\/([\w\-]+\.mp4)$/);

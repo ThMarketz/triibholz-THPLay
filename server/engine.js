@@ -214,4 +214,4 @@ function decodeChunk(path, startSec, lenSec, w, h, fps, ffmpegBin) {
   });
 }
 
-module.exports = { framesToResult, videoToResult, videoToScout, scoutSeries, homographyOf, WORK_W, WORK_H };
+module.exports = { framesToResult, videoToResult, videoToScout, scoutSeries, homographyOf, probeDuration, WORK_W, WORK_H };
