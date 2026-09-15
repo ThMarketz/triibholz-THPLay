@@ -30,15 +30,16 @@ ball is held, passed, then shot at the goal.
    device — nothing leaves it.*
 
 ### Auto-tagged events — via the backend (Tier 3)
-5. Under **☁️ Cloud analysis**, set the endpoint to **`http://localhost:4200`** and click
-   **Save endpoint** — the chip flips to *☁️ Cloud*.
+5. Under **☁️ Cloud analysis**, tick **Analyse on the club server** — the chip flips to
+   *☁️ Cloud: localhost:8088*. The server is always the address the app was opened from
+   (nginx passes `/api/…` to the analysis container); there is no field to type another one.
 6. Make sure the clip is at **0:00**, then click **Run analysis**. The video is sent to the
    backend, which decodes it full-res and returns an **auto-tagged timeline**:
    *formation*, *shot*, *possession*. Each row → **Confirm → play** (opens it on the board
    to fine-tune and save) or **Dismiss**. *Confirming is exactly what a trained model would
    learn from — the flywheel.*
 
-> No backend running? Leave the endpoint **blank** and press **Run analysis** — it uses
+> No backend running? Leave **Analyse on the club server** unticked and press **Run analysis** — it uses
 > the on-device engine and lists the detected formation to confirm (no events; those need
 > the backend). Start the backend with `docker compose up -d analysis`.
 
@@ -46,10 +47,11 @@ ball is held, passed, then shot at the goal.
 
 ## B. Straight against the API (no browser)
 
-The backend is at `http://localhost:4200`. Analyse the demo clip in one call:
+The backend is at `http://localhost:8088/api` (the same address as the app). Its own port,
+`4200`, is bound to this Mac only, for debugging. Analyse the demo clip in one call:
 
 ```bash
-curl -s -X POST http://localhost:4200/api/analyse \
+curl -s -X POST http://localhost:8088/api/analyse \
   -H 'content-type: application/octet-stream' \
   -H 'x-calibration: {"corners":[{"x":0,"y":0},{"x":320,"y":0},{"x":320,"y":180},{"x":0,"y":180}]}' \
   -H 'x-opts: {"start":0,"winSec":2.6,"fps":12}' \
@@ -57,7 +59,7 @@ curl -s -X POST http://localhost:4200/api/analyse \
 ```
 
 You'll get back the shared **Result** (`engine:"server"`, a time-series of board `frames`,
-and `events`). Health check: `curl -s http://localhost:4200/api/health`.
+and `events`). Health check: `curl -s http://localhost:8088/api/health`.
 
 *(The server analyses at 320×180, so the calibration corners above are that frame's
 corners. In the app, calibrating the on-screen canvas produces the same mapping for you.)*

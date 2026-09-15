@@ -15,9 +15,9 @@ window.TextDecoder = window.TextDecoder || TD;   // TESTLOG's XLSX reader needs 
 window.DecompressionStream = window.DecompressionStream || globalThis.DecompressionStream;   // jsdom has neither; Node does
 window.Response = window.Response || globalThis.Response;
 
-const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/sheetdoc.js','js/eligibility.js','js/teamsheet.js','js/teams.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/sheetdoc.js','js/eligibility.js','js/teamsheet.js','js/teams.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/api.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET , TEAMS };';
+  + '\n;\nwindow.__T = { API, POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET , TEAMS };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -592,11 +592,27 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('submit rejects a non-result response', threw);
     let cloudErr=false; try{ await ANALYSIS.submit(job,{transport:async()=>({error:'gpu-oom'})}); }catch(e){ cloudErr=/cloud-error/.test(e.message); }
     ok('submit surfaces a cloud {error}', cloudErr);
-    // endpoint config toggles the mode
-    ANALYSIS.setEndpoint('https://api.example/analyse');
-    ok('endpoint set → cloud mode', ANALYSIS.status().mode==='cloud');
-    ANALYSIS.setEndpoint('');
-    ok('endpoint cleared → offline mode', ANALYSIS.status().mode==='offline');
+    // the club server is an on/off choice, always on the app's own origin
+    const { API } = window.__T;
+    ok('API base is the app origin', API.base()==='https://test.local' && API.url('/api/health')==='https://test.local/api/health' && API.url('api/x')==='https://test.local/api/x');
+    ok('no way to point the app at another server', typeof ANALYSIS.setEndpoint==='undefined');
+    ANALYSIS.setCloud(true);
+    ok('club server on → cloud mode on the app origin', ANALYSIS.status().mode==='cloud' && ANALYSIS.getEndpoint()==='https://test.local');
+    ANALYSIS.setCloud(false);
+    ok('club server off → offline mode', ANALYSIS.status().mode==='offline' && ANALYSIS.getEndpoint()==='');
+    // a backend URL typed into an older build: its host must never receive a video
+    window.localStorage.setItem('thplay.analysis.endpoint', 'https://evil.example:4200/api');
+    ok('legacy stored URL → on, but the host is discarded', ANALYSIS.usesCloud() && ANALYSIS.getEndpoint()==='https://test.local' && window.localStorage.getItem('thplay.analysis.endpoint')===null);
+    ANALYSIS.setCloud(false);
+    {
+      let posted=null; const realFetch=window.fetch;
+      window.fetch = async (u)=>{ posted=String(u); return { ok:true, json: async()=>res }; };
+      try { await ANALYSIS.submit(job, { endpoint: ANALYSIS.getEndpoint() || 'https://test.local' }); } finally { window.fetch=realFetch; }
+      ok('remote transport posts to /api/analyse on the app origin', posted==='https://test.local/api/analyse');
+    }
+    window.localStorage.setItem('thplay.calendar.feed', 'https://evil.example:4200');
+    API.forgetLegacyOverrides();
+    ok('legacy calendar feed override is forgotten', window.localStorage.getItem('thplay.calendar.feed')===null);
     // human-in-the-loop review model
     const rev=ANALYSIS.buildReview(res);
     ok('review has a confirmable item with a frame', rev.items.length===1 && rev.items[0].state==='pending' && !!rev.items[0].frame);
@@ -1809,6 +1825,53 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('the spy really is listening (a fetch made now is recorded)', (() => { const n = netLog.length; window.fetch('/spy-probe').catch(() => {}); return netLog.length === n + 1; })());
     ok('no licence number or name left the device while building the sheet', !netLog.some(l => /5010[1-5]|Huber|Brunner/.test(l)));
     window.fetch = realFetch;
+  }
+
+  console.log('\n[16] Service worker — the club server is never cached, and only good answers are');
+  {
+    const vm = await import('node:vm');
+    const src = readFileSync(join(APP, 'sw.js'), 'utf8');
+    const store = new Map(); const puts = []; let matches = 0; const net = [];
+    const handlers = {};
+    const resp = (status, type = 'basic', body = 'x') => ({ status, ok: status >= 200 && status < 300, type, body, clone() { return this; } });
+    let nextResponse = () => resp(200);
+    const sandbox = {
+      URL, console,
+      location: { origin: 'https://club.example' },
+      self: { addEventListener: (t, fn) => { handlers[t] = fn; }, skipWaiting() {}, clients: { claim() {} } },
+      caches: {
+        open: async () => ({ put: async (req, r) => { puts.push(req.url + ' ' + r.status); store.set(req.url, r); }, addAll: async () => {} }),
+        match: async req => { matches++; return store.get(typeof req === 'string' ? 'https://club.example/' + req.replace(/^\.\//, '') : req.url); },
+        keys: async () => [], delete: async () => true,
+      },
+      fetch: async req => { net.push(req.url); return nextResponse(); },
+    };
+    vm.runInNewContext(src, sandbox);
+    const flush = () => new Promise(r => setTimeout(r, 5));
+    async function hit(url, method = 'GET') {
+      let responded = null;
+      handlers.fetch({ request: { url, method }, respondWith: p => { responded = p; } });
+      const out = responded ? await responded : undefined; await flush();
+      return { intercepted: !!responded, out };
+    }
+    const m0 = matches;
+    const api = await hit('https://club.example/api/me');
+    const clip = await hit('https://club.example/api/clips/a_1_2.mp4');
+    ok('/api/ requests go straight to the network (not intercepted, cache never consulted)', !api.intercepted && !clip.intercepted && matches === m0 && puts.length === 0);
+    ok('a path that merely contains "api" is still served normally', (await hit('https://club.example/js/api.js')).intercepted);
+    ok('non-GET and third-party requests are left alone', !(await hit('https://club.example/js/x.js', 'POST')).intercepted && !(await hit('https://cdn.example/lib.js')).intercepted);
+    puts.length = 0;
+    nextResponse = () => resp(200); await hit('https://club.example/js/good.js');
+    nextResponse = () => resp(404); await hit('https://club.example/js/missing.js');
+    nextResponse = () => resp(500); await hit('https://club.example/css/broken.css');
+    nextResponse = () => resp(206); await hit('https://club.example/docs/demo/clip.mp4');
+    nextResponse = () => resp(0, 'opaqueredirect'); await hit('https://club.example/somewhere');
+    ok('a 200 from our origin is cached', puts.includes('https://club.example/js/good.js 200'));
+    ok('404, 500, 206 partial and redirects are never cached', puts.length === 1);
+    store.set('https://club.example/data/rules.json', resp(200, 'basic', 'cached-rules'));
+    nextResponse = () => resp(503);
+    const rules = await hit('https://club.example/data/rules.json');
+    ok('rules.json: a server error does not replace the cached rule book', rules.out && rules.out.body === 'cached-rules' && store.get('https://club.example/data/rules.json').body === 'cached-rules');
   }
 
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);

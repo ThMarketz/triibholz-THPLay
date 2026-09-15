@@ -24,4 +24,4 @@ docker build -t "triibholz-analysis:latest" -f "$STAGE/server/Dockerfile" "$STAG
 echo "› (re)creating containers"
 ( cd "$SRC" && docker compose up -d --no-build --force-recreate )
 
-echo "✓ app at http://localhost:8088 · analysis API at http://localhost:4200"
+echo "✓ app at http://localhost:8088 · API at http://localhost:8088/api (port 4200: this Mac only)"

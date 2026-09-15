@@ -113,6 +113,9 @@ async function runEngine(req) {
 
 /* ---------------- http plumbing ---------------- */
 function cors(res) {
+  // API answers carry personal data (announcements, debriefs, soon rosters): no browser, proxy or
+  // service worker may keep a copy
+  res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'content-type,x-calibration,x-video-ref');
@@ -279,7 +282,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && clipM) {
       const fp = path.join(CLIP_DIR, safeToken(clipM[1])); if (!fs.existsSync(fp)) return send(res, 404, { error: 'not-found' });
       const size = fs.statSync(fp).size; const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
-      cors(res); res.setHeader('Accept-Ranges', 'bytes'); res.setHeader('Content-Type', 'video/mp4'); res.setHeader('Cache-Control', 'private, max-age=86400');
+      cors(res); res.setHeader('Accept-Ranges', 'bytes'); res.setHeader('Content-Type', 'video/mp4');
       if (range) { const a = range[1] ? +range[1] : 0, b = range[2] ? Math.min(+range[2], size - 1) : size - 1; res.writeHead(206, { 'Content-Range': `bytes ${a}-${b}/${size}`, 'Content-Length': b - a + 1 }); return fs.createReadStream(fp, { start: a, end: b }).pipe(res); }
       res.writeHead(200, { 'Content-Length': size }); return fs.createReadStream(fp).pipe(res);
     }

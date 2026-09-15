@@ -19,7 +19,8 @@
    is wired and ready for when Phase 1 stands one up.
    ============================================================ */
 const ANALYSIS = (() => {
-  const ENDPOINT_KEY = 'thplay.analysis.endpoint';
+  const ENDPOINT_KEY = 'thplay.analysis.endpoint';   // legacy: a URL typed by the user (never used now)
+  const CLOUD_KEY = 'thplay.analysis.cloud';         // '1' = analyse on the club server
   const CLASSES = ['white', 'dark', 'keeper', 'ball'];
   const EVENT_TYPES = ['shot', 'goal', 'exclusion', 'possession', 'counter', 'turnover', 'formation'];
   const VERSION = 1;
@@ -87,14 +88,35 @@ const ANALYSIS = (() => {
     });
   }
 
-  /* ---- endpoint config (where a future cloud pipeline lives) ---- */
-  function getEndpoint() { try { return localStorage.getItem(ENDPOINT_KEY) || ''; } catch (e) { return ''; } }
-  function setEndpoint(url) { try { url ? localStorage.setItem(ENDPOINT_KEY, url) : localStorage.removeItem(ENDPOINT_KEY); } catch (e) {} }
+  /* ---- club server on/off ----
+     The server is always the app's own origin (API.base()); the only
+     choice is whether to use it. A URL stored by an older build counts as
+     "on", but its host is never used — see api.js. */
+  function origin() {
+    try {
+      if (typeof API !== 'undefined' && API.base) return API.base();
+      const o = typeof location !== 'undefined' && location && location.origin;
+      return o && o !== 'null' ? o : '';
+    } catch (e) { return ''; }
+  }
+  function usesCloud() {
+    try {
+      if (localStorage.getItem(CLOUD_KEY) === '1') return true;
+      if (localStorage.getItem(ENDPOINT_KEY)) {   // legacy URL → on, host discarded
+        localStorage.setItem(CLOUD_KEY, '1'); localStorage.removeItem(ENDPOINT_KEY); return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+  function setCloud(on) {
+    try { on ? localStorage.setItem(CLOUD_KEY, '1') : localStorage.removeItem(CLOUD_KEY); localStorage.removeItem(ENDPOINT_KEY); } catch (e) {}
+  }
+  function getEndpoint() { return usesCloud() ? origin() : ''; }
   function status() { const ep = getEndpoint(); return { mode: ep ? 'cloud' : 'offline', endpoint: ep }; }
 
   function remoteTransport(endpoint) {
     return async (job) => {
-      const r = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(job) });
+      const r = await fetch(String(endpoint).replace(/\/+$/, '') + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(job) });
       if (!r.ok) throw new Error('cloud-http-' + r.status);
       return r.json();
     };
@@ -144,7 +166,7 @@ const ANALYSIS = (() => {
   return {
     CLASSES, EVENT_TYPES, VERSION,
     emptyResult, normalizeResult, validateResult, resultFromBoardFrame,
-    getEndpoint, setEndpoint, status, submit,
+    getEndpoint, setCloud, usesCloud, status, submit,
     buildReview, setItemState,
   };
 })();

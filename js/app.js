@@ -2113,8 +2113,7 @@
     downloadBlob(CALENDAR.toICS(ev, { name: 'Triibholz — ' + (state.user && state.user.name || T('view.team')) }), 'triibholz-season.ics', 'text/calendar');
     toast(T('ui.calendarExportedOpenIt'));
   }
-  function defaultFeedBase() { try { const h = (location && location.hostname) || 'localhost'; const proto = (location && location.protocol === 'https:') ? 'https:' : 'http:'; return `${proto}//${h}:4200`; } catch (e) { return 'http://localhost:4200'; } }
-  function feedBase() { try { return localStorage.getItem('thplay.calendar.feed') || (typeof ANALYSIS!=='undefined' && ANALYSIS.getEndpoint && ANALYSIS.getEndpoint()) || defaultFeedBase(); } catch(e){ return defaultFeedBase(); } }
+  function feedBase() { return API.base(); }   // the club server is always the app's own origin
   function calToken() { try { let t=localStorage.getItem('thplay.calendar.token'); if(!t){ t=CALENDAR.uid().replace('ev_','cal'); localStorage.setItem('thplay.calendar.token',t); } return t; } catch(e){ return 'cal'; } }
   async function publishFeed() {
     const out = $('cal-subscribe-out');
@@ -2132,11 +2131,9 @@
         <div class="feed-url"><code>${escapeHtml(url)}</code><button class="btn-ghost xs" id="feed-copy">${T('ui.copy')}</button></div>
         <a class="btn-primary sm" href="${escapeHtml(webcal)}">${T('ui.subscribeOnThisDevice')}</a>
         ${lanHint}
-        <div class="feed-url"><span class="muted" style="font-size:11px">${T('ui.feedServer')}</span><input type="text" id="feed-base" value="${escapeHtml(base)}" style="flex:1;font-size:11px"><button class="btn-ghost xs" id="feed-base-save">${T('ui.useAndRepublish')}</button></div>
         <p class="fa-note">${T('ui.iphoneCalendarAddAccount')}</p>
       </div>`;
       const cp = $('feed-copy'); if (cp) cp.onclick = ()=>{ try{ navigator.clipboard.writeText(url); toast(T('ui.linkCopied')); }catch(e){} };
-      const fbSave = $('feed-base-save'); if (fbSave) fbSave.onclick = ()=>{ const v=($('feed-base').value||'').trim().replace(/\/+$/,''); try{ v?localStorage.setItem('thplay.calendar.feed',v):localStorage.removeItem('thplay.calendar.feed'); }catch(e){} publishFeed(); };
       toast(T('ui.publishedSubscribeOnAny'));
     } catch(e) {
       out.innerHTML = `<div class="muted">${T('ui.couldNotPublishToBase', { server: escapeHtml(base) })}</div>`;
@@ -3399,6 +3396,7 @@
   function boot() {
     if (boot._done) return;   // guard double DOMContentLoaded (harness/edge cases)
     boot._done = true;
+    if (typeof API!=='undefined') API.forgetLegacyOverrides();   // backend URLs typed into older builds
     if (typeof I18N!=='undefined') {
       I18N.init();
       I18N.onChange(()=>{

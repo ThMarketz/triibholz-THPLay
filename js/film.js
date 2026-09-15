@@ -542,7 +542,7 @@ const FILM = (() => {
     } finally { btn.disabled = false; }
   }
   /* ---- Auto-scout: whole video → possessions → tactics → summary → playbook ---- */
-  const scoutBase = () => { try { return ((typeof ANALYSIS !== 'undefined' && ANALYSIS.getEndpoint && ANALYSIS.getEndpoint()) || localStorage.getItem('thplay.calendar.feed') || `${location.protocol === 'https:' ? 'https:' : 'http:'}//${location.hostname || 'localhost'}:4200`).replace(/\/api\/.*$/, '').replace(/\/+$/, ''); } catch (e) { return 'http://localhost:4200'; } };
+  const scoutBase = () => API.base();   // the club server is always the app's own origin
   function setScoutStatus(txt, cls) { const c = root && root.querySelector('#scout-status'); if (c) { c.textContent = txt; c.className = 'cloud-status ' + (cls || 'offline'); } }
   async function runAutoScout(btn) {
     const out = root && root.querySelector('#scout-out');
@@ -985,7 +985,7 @@ const FILM = (() => {
           <button class="btn-ghost sm" id="cloud-run">${TX('film.runAnalysis')}</button>
           <span class="cloud-status" id="cloud-status">${TX('film.cloudOnDevice')}</span>
           <span class="fa-note">${TX('film.cloudNote')}</span></div>
-        <div class="cloud-cfg"><input type="text" id="cloud-endpoint" placeholder="${TX('film.cloudEndpointPlaceholder')}" /><button class="btn-ghost sm" id="cloud-save">${TX('film.saveEndpoint')}</button></div>
+        <label class="cloud-cfg"><input type="checkbox" id="cloud-use" /> ${TX('film.useClubServer')}</label>
         <div id="cloud-out"></div>
       </div>` : canEdit ? `<div class="film-auto" id="film-scout">
         <div class="fa-head"><strong>${TX('film.autoScout')} <span class="fa-beta">Tier 3</span></strong>
@@ -1068,10 +1068,9 @@ const FILM = (() => {
     });
     loadDebriefs();
     if (main.querySelector('#film-cloud') && typeof ANALYSIS !== 'undefined') {
-      const ep = main.querySelector('#cloud-endpoint'); if (ep) ep.value = ANALYSIS.getEndpoint();
+      const use = main.querySelector('#cloud-use'); if (use) use.checked = ANALYSIS.usesCloud();
       updateCloudStatus();
-      const saveBtn = main.querySelector('#cloud-save');
-      if (saveBtn) saveBtn.onclick = () => { ANALYSIS.setEndpoint((ep.value || '').trim()); updateCloudStatus(); ctx.toast(ANALYSIS.getEndpoint() ? TX('film.cloudEndpointSaved') : TX('film.usingOnDevice')); };
+      if (use) use.onchange = () => { ANALYSIS.setCloud(use.checked); updateCloudStatus(); ctx.toast(use.checked ? TX('film.usingClubServer') : TX('film.usingOnDevice')); };
       const runBtn = main.querySelector('#cloud-run');
       if (runBtn) runBtn.onclick = () => runCloudAnalysis(runBtn);
     }

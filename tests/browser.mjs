@@ -298,11 +298,11 @@ ok('Track positions produces a result panel (board or graceful note)', (await pa
 // Tier 3 Phase 0 — cloud analysis contract UI
 ok('☁️ Cloud analysis panel present', await page.locator('#film-cloud').count()===1 && await page.locator('#cloud-run').count()===1);
 ok('status starts on-device (offline)', /on-device/i.test(await page.locator('#cloud-status').innerText()));
-await page.fill('#cloud-endpoint','https://api.example.test/analyse');
-await page.click('#cloud-save'); await page.waitForTimeout(150);
-ok('saving an endpoint switches status to cloud', /cloud/i.test(await page.locator('#cloud-status').innerText()));
-await page.fill('#cloud-endpoint',''); await page.click('#cloud-save'); await page.waitForTimeout(150);
-ok('clearing the endpoint returns to on-device', /on-device/i.test(await page.locator('#cloud-status').innerText()));
+ok('no field to type a server address', await page.locator('#cloud-endpoint').count()===0);
+await page.check('#cloud-use'); await page.waitForTimeout(150);
+ok('ticking “club server” switches status to cloud on this origin', /cloud/i.test(await page.locator('#cloud-status').innerText()) && (await page.locator('#cloud-status').innerText()).includes(new URL(page.url()).host));
+await page.uncheck('#cloud-use'); await page.waitForTimeout(150);
+ok('unticking returns to on-device', /on-device/i.test(await page.locator('#cloud-status').innerText()));
 await page.click('#cloud-run'); await page.waitForTimeout(800);
 ok('Run analysis produces a review area (items or graceful note)', (await page.locator('#cloud-out').innerText()).trim().length>0);
 await page.click('.nav-btn[data-view="playbook"]'); await page.waitForTimeout(250);   // [3b] expects the playbook stage

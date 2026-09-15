@@ -107,8 +107,11 @@ should rise as the model retrains on coach corrections.
 
 ### Offline / PWA
 - App loads and functions offline (service worker shell).
-- SW cache version bumps on release (currently `triibholz-v27`) and old caches evict.
-- Cross-origin analysis calls (:4200) bypass the SW (they must not be cached).
+- SW cache version bumps on release (currently `triibholz-v65`) and old caches evict.
+- `/api/…` (same origin, proxied by nginx) bypasses the SW entirely; only complete `200`
+  same-origin answers are cached — never 404/500, redirects or `206` video ranges
+  (`tests/smoke.mjs` [16], fault-injected).
+- Every API answer carries `Cache-Control: no-store` (`tests/server.mjs`).
 
 ### Privacy & security *(gains weight as real backend/OAuth land)*
 - **Consent** required before match video is uploaded/stored; opt-out honoured.

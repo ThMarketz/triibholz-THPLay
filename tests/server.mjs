@@ -55,6 +55,7 @@ function frame(w, h) {
     ok('detected board frames with players (time series)', result.frames.length >= 1 && result.frames.some(f => Object.keys(f.boardFrame.att).length >= 1));
     ok('series timestamps start at start=3', result.frames[0].t === 3 && result.events[0].t >= 3);
     ok('CORS is open for the PWA origin', r.headers.get('access-control-allow-origin') === '*');
+    ok('API answers are no-store', r.headers.get('cache-control') === 'no-store');
 
     console.log('\n[3] Async queue — submit → poll → result');
     const sub = await (await fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
@@ -144,6 +145,7 @@ function frame(w, h) {
     const ics = await fetch(base + '/api/calendar/team-abc.ics');
     const icsText = await ics.text();
     ok('feed serves valid iCalendar with the right content-type', ics.headers.get('content-type').includes('text/calendar') && icsText.startsWith('BEGIN:VCALENDAR') && /vs Red Sharks/.test(icsText));
+    ok('calendar feed is no-store', ics.headers.get('cache-control') === 'no-store');
     ok('unknown feed → 404', (await fetch(base + '/api/calendar/nope.ics')).status === 404);
     ok('publish with no events → 400', (await fetch(base + '/api/calendar/x', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status === 400);
 
@@ -183,6 +185,15 @@ function frame(w, h) {
     const clipR = await fetch(base + '/api/clip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef: upj.videoRef, start: 1, end: 5 }) });
     ok('clip of a non-decodable upload fails cleanly (500 clip/ffmpeg or 503 no ffmpeg)', [500, 503].includes(clipR.status) && /ffmpeg|clip/.test((await clipR.json()).error));
     ok('unknown clip file → 404', (await fetch(base + '/api/clips/nope.mp4')).status === 404);
+    {
+      // a served clip (and its range requests) must not be kept by the browser or the SW either
+      const { mkdirSync, writeFileSync } = await import('node:fs');
+      mkdirSync(join(process.env.DATA_DIR, 'clips'), { recursive: true });
+      writeFileSync(join(process.env.DATA_DIR, 'clips', 'nostore_10_20.mp4'), Buffer.alloc(64, 7));
+      const full = await fetch(base + '/api/clips/nostore_10_20.mp4');
+      const part = await fetch(base + '/api/clips/nostore_10_20.mp4', { headers: { range: 'bytes=0-9' } });
+      ok('clips are no-store (full and ranged)', full.status === 200 && full.headers.get('cache-control') === 'no-store' && part.status === 206 && part.headers.get('cache-control') === 'no-store' && (await part.arrayBuffer()).byteLength === 10);
+    }
     const debBody = { team: 'schorgen-u17', title: 'Debrief: vs Red Sharks', matchTitle: 'vs Red Sharks', author: 'Coach Ruiz', us: 'white',
       summary: ['Us (white caps): 12 possessions, 7 shots (58%).'],
       plan: [{ id: 'o-drive-kick', label: 'Drive & kick', side: 'offense', attacks: 4, unread: 1, followed: 2, followedPct: 67, whenFollowed: { n: 2, shots: 2, goals: 1 }, whenNot: { n: 1, shots: 0, goals: 0 }, verdict: 'followed about half the time' }],
@@ -258,7 +269,10 @@ function frame(w, h) {
     const noFrames = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'frames', frames: [], calibration: { corners } }) });
     ok('empty frames → 422 no-frames', noFrames.status === 422 && (await noFrames.json()).error === 'no-frames');
     ok('unknown job → 404', (await fetch(base + '/api/jobs/nope')).status === 404);
-    ok('unknown route → 404', (await fetch(base + '/api/nope')).status === 404);
+    const nfR = await fetch(base + '/api/nope');
+    ok('unknown route → 404, no-store', nfR.status === 404 && nfR.headers.get('cache-control') === 'no-store');
+    const errR = await fetch(base + '/api/analyse', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{oops' });
+    ok('error answers are no-store too', errR.headers.get('cache-control') === 'no-store');
 
     server.close();
     console.log(`\n==== ${pass} passed, ${fail} failed ====`);
