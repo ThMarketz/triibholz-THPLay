@@ -69,7 +69,8 @@ try {
 }
 
 let hasFfmpeg = false;
-try { require('node:child_process').spawnSync(process.env.FFMPEG || 'ffmpeg', ['-version']); hasFfmpeg = true; } catch (e) { hasFfmpeg = false; }
+// spawnSync never throws for a missing binary — it returns { error: ENOENT } — so check the result
+try { const r = require('node:child_process').spawnSync(process.env.FFMPEG || 'ffmpeg', ['-version']); hasFfmpeg = !r.error && r.status === 0; } catch (e) { hasFfmpeg = false; }
 
 /* ---------------- tiny id + storage ---------------- */
 let counter = 0;
@@ -287,9 +288,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && p === '/api/clip') {
       const body = await readBody(req);
       let cr; try { cr = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
-      if (!hasFfmpeg) return send(res, 503, { error: 'ffmpeg-unavailable' });
       const vp = path.join(VIDEO_DIR, safeToken(cr.videoRef));
-      if (!cr.videoRef || !fs.existsSync(vp)) return send(res, 404, { error: 'video-not-found' });
+      if (!cr.videoRef || !fs.existsSync(vp)) return send(res, 404, { error: 'video-not-found' });   // an unknown video is 404 with or without ffmpeg
+      if (!hasFfmpeg) return send(res, 503, { error: 'ffmpeg-unavailable' });
       const start = Math.max(0, +cr.start || 0), end = Math.max(start + 1, Math.min(start + 60, +cr.end || start + 10));
       const id = safeToken(cr.videoRef).replace(/\.mp4$/, '') + '_' + Math.round(start * 10) + '_' + Math.round(end * 10);
       const out = path.join(CLIP_DIR, id + '.mp4');

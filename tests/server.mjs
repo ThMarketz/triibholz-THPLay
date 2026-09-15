@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import http from 'node:http';
+import { spawnSync } from 'node:child_process';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PORT = 4278;
@@ -42,6 +43,8 @@ function frame(w, h) {
     ok('health ok + reports engine', h.ok === true && h.engine === 'server');
     ok('health says accounts are off unless ACCOUNTS=1', h.accounts === false);
     ok('health reports ffmpeg availability (boolean)', typeof h.ffmpeg === 'boolean');
+    const ffProbe = spawnSync(process.env.FFMPEG || 'ffmpeg', ['-version']);
+    ok('health ffmpeg flag matches the host (false when the binary is missing)', h.ffmpeg === (!ffProbe.error && ffProbe.status === 0));
     ok('health reports the detector in use (colour by default)', h.detector === 'colour');
 
     console.log('\n[2] Sync /api/analyse — frames mode (server runs the real engine)');
@@ -173,7 +176,8 @@ function frame(w, h) {
     const sj = await (await fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef: upj.videoRef, calibration: { corners }, scout: true, us: 'dark', opts: { fps: 6, chunkSec: 20 } }) })).json();
     ok('scout job enqueued from a videoRef', !!sj.id && sj.status === 'queued');
     let sjob; for (let i = 0; i < 60; i++) { await wait(100); sjob = await (await fetch(base + '/api/jobs/' + sj.id)).json(); if (sjob.status === 'done' || sjob.status === 'error') break; }
-    ok('job finishes (done, or a clean ffmpeg/no-frames error on a host without ffmpeg)', sjob.status === 'done' || (sjob.status === 'error' && /ffmpeg|no-frames|bad-calibration/.test(sjob.error || '')));
+    // 28 bytes are not a video: never 'done', and never blamed on the field (the corners are given)
+    ok('non-video upload → job ends in a clean error: no-frames when ffmpeg decodes nothing, ffmpeg-unavailable on a host without it', sjob.status === 'error' && sjob.error === (h.ffmpeg ? 'no-frames' : 'ffmpeg-unavailable'));
     ok('empty upload → 400', (await fetch(base + '/api/upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: '' })).status === 400);
     ok('health reports the upload limit (MB)', typeof (await (await fetch(base + '/api/health')).json()).maxUploadMB === 'number');
     const big = await fetch(base + '/api/upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: Buffer.alloc(3 * 1024 * 1024, 1) });

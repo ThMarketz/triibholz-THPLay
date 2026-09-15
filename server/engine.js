@@ -130,10 +130,11 @@ async function videoToScout(path, cal, opts) {
   const detector = opts.detector || makeDetector({ modelEndpoint: opts.modelEndpoint, step: opts.step, minArea: opts.minArea });
   const series = []; const start = opts.start || 0;
   const auto = isAuto(cal); const samples = []; const every = Math.max(1, Math.round(fps * (opts.fieldEverySec || 1)));   // detect the field about once a second
-  let unread = 0;
+  let unread = 0, decoded = 0;
   for (let t0 = 0; t0 < total; t0 += chunkSec) {
     const frames = await decodeChunk(path, start + t0, Math.min(chunkSec, total - t0), w, h, fps, opts.ffmpeg);
     if (!frames.length) continue;
+    decoded += frames.length;
     const perFrame = []; for (const f of frames) perFrame.push(await detector.detect(f, w, h));
     const snaps = BYTETRACK.series(perFrame, { minHits: 2, maxAge: 4, gate: Math.max(w, h) / 8 });
     let track = null;
@@ -150,6 +151,8 @@ async function videoToScout(path, cal, opts) {
     });
     if (typeof opts.onProgress === 'function') opts.onProgress(Math.min(1, (t0 + chunkSec) / total));
   }
+  // nothing decoded (not a video, or an empty one) is not a missing field: say so, don't blame the pool
+  if (!decoded) { const e = new Error('no-frames-decoded'); e.code = 'no-frames'; throw e; }
   if (!series.length) { const e = new Error('field-not-found'); e.code = 'field-not-found'; throw e; }
   const events = EVENTS.detect(series, {});
   const scout = scoutSeries(series, events, opts);
