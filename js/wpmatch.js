@@ -45,6 +45,8 @@ const WPMATCH = (() => {
   const BOX_FIELDS = 'id,slug,date,date_gmt,link,title,teams,main_results,day,leagues,venues,results,performance';
   const TEAM_FIELDS = 'id,slug,link,title,leagues,seasons';
   const TABLE_FIELDS = 'id,slug,link,title,leagues,seasons,data';
+  const LIST_INDEX_FIELDS = 'id,slug,title';                 // 230 lists, ~23 kB — the whole index
+  const SQUAD_FIELDS = 'id,slug,link,title,data';
 
   const getBase = () => { try { return localStorage.getItem(BASE_KEY) || BASE_DEFAULT; } catch (e) { return BASE_DEFAULT; } };
   const setBase = url => { try { url ? localStorage.setItem(BASE_KEY, String(url).replace(/\/+$/, '')) : localStorage.removeItem(BASE_KEY); } catch (e) {} };
@@ -201,6 +203,69 @@ const WPMATCH = (() => {
     return { id: +raw.id, name: nameOf(raw), url: raw.link || '', leagueIds: raw.leagues || [], seasonIds: raw.seasons || [], labels, rows,
       looksLikeTest: /\btest\b/i.test(nameOf(raw)) };
   }
+  /* ---- a squad's season figures (SportsPress calls it a "player list") ----
+
+     One row per player, and every number is what that player did FOR THIS SQUAD. What comes back
+     is narrower than what is published, on purpose:
+
+       · Only the eleven playing columns are kept. `age`, `yearofbirth`, `gender`, `eligibility`
+         (a nationality statement), `height` and `weight` are dropped at this boundary and never
+         reach a caller, so no later code has to remember not to store them. They are about
+         children, most of them somebody else's.
+       · Every value is coerced to a number HERE. wpmatch returns `goals` as a string and `goalon`
+         as an integer, in the same row: sorting the raw values puts '5' above '28' and headlines
+         a squad's twelfth-best scorer. docs/WPMATCH.md records the same bug one endpoint over,
+         where string scores picked the wrong winner in 43% of played matches.
+       · `gpg`, `appearances`, `winratio` and the rest are dropped rather than republished: `gpg`
+         divides by `appearances` while `played` is a different, smaller number, so showing them
+         side by side is visibly broken arithmetic. Rates are computed from `played`.
+       · `eventminutes` is dropped because it is not measured: it is exactly 32 × appearances, a
+         nominal game length multiplied out. A "per 100 minutes" figure built on it would read as
+         time in the water and be a per-appearance rate in disguise.
+       · A row whose goals do not equal 6-on-6 + extra-player + penalty goals is dropped. The
+         identity holds on real rows, so a row that fails it is one we parsed wrong — and a wrong
+         number about a named child is worse than a missing one.
+       · A row with no matches played is dropped: it would divide by zero and says nothing. */
+  const SQUAD_KEEP = ['played', 'goals', 'goalon', 'goalextraplayer', 'penaltygoals', 'exclusionfoul', 'penaltyfouls', 'misconductfoul', 'brutalityfoul'];
+  const numOf = v => { const n = Number(statNumber(v)); return Number.isFinite(n) ? n : 0; };
+  function normSquad(raw) {
+    const data = (raw && raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)) ? raw.data : {};
+    const labels = (data['0'] && typeof data['0'] === 'object') ? data['0'] : {};
+    const players = [];
+    for (const key of Object.keys(data)) {
+      if (isLabelKey(key)) continue;
+      const r = data[key];
+      if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
+      const row = { wpId: +key, name: decodeEntities(String(r.name == null ? '' : r.name)) };
+      SQUAD_KEEP.forEach(k => { row[k] = numOf(r[k]); });
+      if (!(row.played > 0)) continue;                                        // never played: nothing to say
+      if (row.goals !== row.goalon + row.goalextraplayer + row.penaltygoals) continue;   // we parsed it wrong
+      players.push(row);
+    }
+    return { id: +raw.id, name: nameOf(raw), slug: raw.slug || '', url: raw.link || '', labels,
+             players, matches: players.reduce((n, p) => Math.max(n, p.played), 0) };
+  }
+
+  /* Which list belongs to a squad. There is no team field on a list and `?team=` is silently
+     ignored — it answers with the same unfiltered page — so the only link is the slug, by
+     convention `<team-slug>-team`. That convention holds for most of the league but not all of it
+     (one club's team slug is `cn-nyonu14` while its list is `cn-nyon-u14-team`), and a miss
+     answers HTTP 200 with an empty array, which is indistinguishable from "this club publishes
+     nothing". So: try the slug, then the title, and if neither matches say so as its own state
+     rather than showing a real opponent as having no players. */
+  const foldTitle = s2 => decodeEntities(String(s2 || '')).toLowerCase().replace(/\s*[–—-]\s*team\s*$/, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  function resolveList(team, index) {
+    const want = (team && team.slug ? team.slug : '') + '-team';
+    const bySlug = (index || []).find(l => l.slug === want);
+    if (bySlug) return { list: bySlug, by: 'slug' };
+    const key = foldTitle(team && team.name);
+    if (!key) return { list: null, by: 'none' };
+    const hits = (index || []).filter(l => foldTitle(l.name) === key);
+    if (hits.length === 1) return { list: hits[0], by: 'title' };
+    if (hits.length > 1) return { list: null, by: 'ambiguous', candidates: hits };
+    return { list: null, by: 'none' };
+  }
+
   function pickTable(tables, teamId) {
     const mine = (tables || []).filter(t => t.rows.some(r => r.teamId === +teamId));
     if (!mine.length) return null;
@@ -281,6 +346,26 @@ const WPMATCH = (() => {
     if ((team.leagueIds || []).length) params.leagues = team.leagueIds.join(',');
     const { items } = await get('/tables', params);
     return (Array.isArray(items) ? items : []).map(normTable);
+  }
+
+  /* Every list on the site, id + slug + title only. One index serves every squad a coach ever
+     scouts, so a second opponent costs one request rather than two. */
+  async function fetchListIndex() {
+    const out = [];
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const { items } = await get('/lists', { per_page: PER_PAGE, page, _fields: LIST_INDEX_FIELDS });
+      const list = Array.isArray(items) ? items : [];
+      out.push(...list.map(l => ({ id: +l.id, slug: l.slug || '', name: nameOf(l) })));
+      if (list.length < PER_PAGE) break;
+    }
+    return out;
+  }
+
+  async function fetchSquad(listId) {
+    const { items } = await get('/lists', { include: String(listId), _fields: SQUAD_FIELDS });
+    const raw = Array.isArray(items) ? items[0] : null;
+    if (!raw) throw Object.assign(new Error('wpmatch-no-such-list'), { code: 'not-found' });
+    return normSquad(raw);
   }
 
   /* deep links — always the payload's own `link`, never a URL built from an id */
@@ -404,9 +489,9 @@ const WPMATCH = (() => {
     BASE_DEFAULT, LIST_FIELDS, BOX_FIELDS, PER_PAGE, MAX_PAGES, SITE,
     getBase, setBase, loadTeam, saveTeam,
     stripArray, parse, decodeEntities, splitTitle, gameIdOf, postIdOf, statNumber, statDetail,
-    normTeam, normTerm, normFixture, normBox, normTable, pickTable, resultFor, opponentOf,
+    normTeam, normTerm, normFixture, normBox, normTable, normSquad, pickTable, resolveList, foldTitle, resultFor, opponentOf,
     cacheGet, cachePut,
-    searchTeams, fetchFixtures, fetchBox, fetchTables, fetchVenues,
+    searchTeams, fetchFixtures, fetchBox, fetchTables, fetchVenues, fetchListIndex, fetchSquad, SQUAD_KEEP,
     PLAYER_FIELDS, normPlayer, dedupePlayers, lookupLicences, fetchTeamPlayers,
     teamUrl, matchUrl, toCalendarEvents,
   };

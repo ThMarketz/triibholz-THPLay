@@ -21,7 +21,7 @@ if (!window.Blob.prototype.arrayBuffer) window.Blob.prototype.arrayBuffer = func
 
 const files = ['js/theme.js','js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/chart.js','js/sheetdoc.js','js/eligibility.js','js/teamsheet.js','js/teamsync.js','js/teams.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/api.js','js/session.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { THEME, CHART, API, SESSION, POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET , TEAMSYNC , TEAMS };';
+  + '\n;\nwindow.__T = { THEME, CHART, API, SESSION, POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET , TEAMSYNC , TEAMS , WPMATCH };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -2065,6 +2065,73 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('an Italian-labelled template is marked unofficial — there is no Italian form', !TS.buildModel({ langs: ['it', 'de'] }, data).official && TS.buildModel(TS.BUILTIN[0], data).official);
     ok('a filename a club secretary can file as it is', TS.fileName(data, 'pdf') === 'Spielaufstellung_Test-WPC_U14-Group-A_20261004.pdf');
     ok('the goalkeeper mark prints in the PDF font (X, not a tick it cannot draw)', S.toPdf(TS.buildModel({ columns: ['nr', 'name', 'licence', 'gk'] }, data)).substituted.length === 0);
+  }
+
+  console.log('\n[14b] An opposing squad\u2019s season figures — what is kept, and what is refused');
+  {
+    const W = window.__T.WPMATCH;
+    /* An invented squad. No real club, child or licence number appears in this file: the shapes are
+       copied from the live API, the people are not. Goals arrive as STRINGS and 6-on-6 as integers
+       in the same row, exactly as wpmatch sends them. */
+    const raw = {
+      id: 9001, slug: 'invented-u14-team', link: 'https://example.invalid/list/invented-u14-team/',
+      title: { rendered: 'Invented WPC U14 &#8211; Team' },
+      data: {
+        0: { number: '#', name: 'Player', age: 'Age', gender: 'Gender', gpg: 'Goals per Game', played: 'Played',
+             goalon: 'Goals 6on6', goals: 'Goals', eligibility: 'Eligibility', goalextraplayer: 'Goals Extra Player',
+             yearofbirth: 'Year of Birth', exclusionfoul: 'Exclusion Fouls', appearances: 'Appearances', winratio: 'Win Ratio' },
+        // the string-sort trap: '5' sorts above '28' unless the normaliser coerces
+        101: { name: 'Alpha Invented', played: 9, goals: '5', goalon: 4, goalextraplayer: 1, penaltygoals: 0,
+               exclusionfoul: 2, penaltyfouls: 0, misconductfoul: 0, brutalityfoul: 0,
+               age: 12, yearofbirth: '2014', gender: 'F', eligibility: 'Ausl\u00e4nder-\u00c9tranger', height: '-', weight: '-',
+               gpg: '0.6', appearances: '11', eventminutes: 352, winratio: '55.55' },
+        102: { name: 'Bravo Invented', played: 12, goals: '28', goalon: 20, goalextraplayer: 6, penaltygoals: 2,
+               // the real shape of an exclusion cell: a count, then the offence and the game clock, with markup
+               exclusionfoul: "7 (13 <b>1. 0:16</b>')", penaltyfouls: 1, misconductfoul: 0, brutalityfoul: 0,
+               age: 13, yearofbirth: '2013', gender: 'M', eligibility: 'Swiss', gpg: '2.3', appearances: '12' },
+        103: { name: 'Charlie Neverplayed', played: 0, goals: '0', goalon: 0, goalextraplayer: 0, penaltygoals: 0,
+               exclusionfoul: 0, penaltyfouls: 0, misconductfoul: 0, brutalityfoul: 0 },
+        104: { name: 'Delta Miscounted', played: 6, goals: '9', goalon: 3, goalextraplayer: 1, penaltygoals: 0,
+               exclusionfoul: 0, penaltyfouls: 0, misconductfoul: 0, brutalityfoul: 0 },
+      },
+    };
+    const sq = W.normSquad(raw);
+    ok('a squad comes back named, with its own link', sq.id === 9001 && /Invented WPC U14/.test(sq.name) && sq.url.startsWith('https://'));
+    ok('a player who has never played is left out, not shown as a row of zeros', !sq.players.some(p => p.name === 'Charlie Neverplayed'));
+    ok('a row whose goals do not add up is dropped — we parsed it wrong', !sq.players.some(p => p.name === 'Delta Miscounted'));
+    ok('…so two players survive this squad', sq.players.length === 2 && sq.matches === 12);
+    const byGoals = sq.players.slice().sort((a, b) => b.goals - a.goals);
+    ok('goals are numbers, so 28 outranks 5 instead of the other way round', byGoals[0].goals === 28 && byGoals[1].goals === 5);
+    ok('every kept figure is a number, whatever wpmatch sent', sq.players.every(p => W.SQUAD_KEEP.every(k => typeof p[k] === 'number')));
+    ok('an exclusion cell with the offence and the clock inside it still reads as a count', byGoals[0].exclusionfoul === 7);
+    ok('the goal split is kept, because that is what the coach asked for', byGoals[0].goalon === 20 && byGoals[0].goalextraplayer === 6 && byGoals[0].penaltygoals === 2);
+
+    const keys = new Set(); sq.players.forEach(p => Object.keys(p).forEach(k => keys.add(k)));
+    ok('a child\u2019s age and year of birth never come out of the normaliser', !keys.has('age') && !keys.has('yearofbirth'));
+    ok('…nor their gender, nationality status, height or weight', !['gender', 'eligibility', 'height', 'weight'].some(k => keys.has(k)));
+    ok('…and none of it is hiding in the serialised rows either', !/Ausl|2013|2014|"F"|"M"/.test(JSON.stringify(sq.players)));
+    ok('wpmatch\u2019s own goals-per-game and appearances are not republished', !keys.has('gpg') && !keys.has('appearances') && !keys.has('winratio'));
+    ok('…nor the made-up minutes (32 \u00d7 appearances, never measured)', !keys.has('eventminutes'));
+    ok('the row carries only the eleven things it is allowed to', [...keys].sort().join() === ['wpId', 'name'].concat(W.SQUAD_KEEP).sort().join());
+
+    /* which list belongs to a squad: the slug convention holds for most of the league, and the
+       rest have to be found by title — a miss must be a state of its own, never "no players" */
+    const index = [
+      { id: 9001, slug: 'invented-u14-team', name: 'Invented WPC U14 – Team' },
+      { id: 9002, slug: 'other-town-u14-team', name: 'Other Town U14 – Team' },
+      { id: 9003, slug: 'two-rivers-u16-team', name: 'Two Rivers U16 – Team' },
+    ];
+    ok('a squad whose slug follows the convention is found by it', W.resolveList({ slug: 'invented-u14', name: 'Invented WPC U14' }, index).by === 'slug');
+    ok('one whose slug does not is still found, by its name', (() => {
+      const r = W.resolveList({ slug: 'othertownu14', name: 'Other Town U14' }, index);
+      return r.by === 'title' && r.list.id === 9002;
+    })());
+    ok('a squad nobody publishes a list for says so, rather than looking empty', W.resolveList({ slug: 'no-such-club-u12', name: 'No Such Club U12' }, index).by === 'none');
+    ok('two lists with the same name are a question for the coach, not a guess', (() => {
+      const twin = index.concat([{ id: 9004, slug: 'two-rivers-u16-team-2', name: 'Two Rivers U16 – Team' }]);
+      const r = W.resolveList({ slug: 'nope', name: 'Two Rivers U16' }, twin);
+      return r.by === 'ambiguous' && r.candidates.length === 2;
+    })());
   }
 
   console.log('\n[15] Teams & team sheets — the coach flow, end to end in the DOM');

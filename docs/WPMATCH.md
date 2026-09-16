@@ -69,8 +69,26 @@ open.
 - **Fixtures are found by searching the club name** and then filtering on team id. Verified
   at 49/49 recall with zero false positives, but it is a text search — a club that renames
   itself mid-season needs the team picked again.
-- **No player-level season stats yet.** SportsPress exposes them (`/lists` is team-scoped),
-  and that is the obvious next step; this pass covers fixtures, results, box scores and
-  the table.
+- **Player season figures come from `/lists`, found by slug — not by team.** A list carries no
+  team field, and `?team=<id>` is **silently ignored**: it answers 200 with the same unfiltered
+  page, so anything built on it looks right and is wrong. The link is the slug, by convention
+  `<team-slug>-team`. That convention resolves most of the league but not all of it — one club's
+  team slug is `cn-nyonu14` while its list is `cn-nyon-u14-team` — and a miss answers 200 with an
+  empty array, which is indistinguishable from "this club publishes nothing". So the app keeps a
+  cached index of every list (3 pages, ~23 kB) and matches on the slug **and then** the title;
+  no match is a state of its own, and two matches ask the coach rather than guessing.
+- **A list is the current season only.** It declares `leagues: []` and `seasons: []`, filtering by
+  `seasons=` returns nothing, and last season is deleted rather than archived — squads that played
+  a full season and did not return come back with zero player rows. So the app never prints "last
+  season" or a year; every figure is captioned with its own denominator ("50 goals in 14 matches").
+- **The same row mixes strings and integers.** `goals` and `appearances` arrive as strings while
+  `goalon` and `exclusionfoul` are integers, so a naive sort puts `'5'` above `'28'` — the same
+  trap as `main_results`, one endpoint over. Everything is coerced at the boundary.
+- **`gpg` divides by `appearances`, not by `played`**, and the two differ, so republishing it next
+  to the counts is visibly broken arithmetic. `eventminutes` is exactly 32 × appearances — a
+  nominal game length multiplied out, not measured water time. Neither is kept.
+- **`exclusionfoul` is exclusions a player CONCEDED** (verified against a box score in both
+  directions). Who *draws* exclusions — the opponent your defenders foul out on — is not recorded
+  anywhere in wpmatch.
 - **Nothing is written back.** This is read-only, and the app is not affiliated with
   wpmatch.ch or Swiss Aquatics.
