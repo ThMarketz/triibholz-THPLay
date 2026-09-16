@@ -41,7 +41,7 @@ const TEAMSYNC = (() => {
   const LICENCE = /^\d{3,6}$/;
   const LOCAL_ID = /^[A-Za-z0-9_-]{1,40}$/;
   /* never stored, never echoed: a field whose presence means the client and this file disagree */
-  const REFUSED = ['availability', 'sheets', 'sheet', 'status', 'date', 'dob', 'birthDate', 'birthdate', 'meta', 'notes', 'wpId', 'checkedAt', 'email', 'phone', 'address'];
+  const REFUSED = ['availability', 'sheets', 'sheet', 'status', 'date', 'dob', 'birthDate', 'birthdate', 'meta', 'notes', 'wpId', 'checkedAt', 'email', 'phone', 'address', 'scouted', 'squad'];
 
   const TEAM_KEYS = ['localId', 'teamId', 'name', 'category', 'season', 'leagueLabel', 'rev', 'players'];
   const TEAM_ID = /^ct_[A-Za-z0-9_-]{22}$/;

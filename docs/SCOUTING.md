@@ -49,6 +49,40 @@ date order, with no match id); any per-minute rate (`eventminutes` is exactly 32
 nominal game length multiplied out, never measured); positions or handedness (the taxonomy is
 empty, and inferring a goalkeeper from a cap number is wrong in both directions).
 
+## Where it is in the app
+
+| What | Where |
+|---|---|
+| **Our own season figures** | Teams → the team → **Our season figures** → *Show season figures* |
+| **One player's own line** | the **ⓘ** beside any name, on the roster and on the availability list |
+| **The opponent** | Teams → the team → a match sheet → **📋 Scout the opponent** |
+| Per-match figures | Season → a played fixture → the box score |
+| Your club's own test results | My Development |
+
+Scouting an opponent needs the opponent's name first: pick the fixture, or type it into the
+**Opponent** field. Pressing the button with that field empty used to search *our own* team's name
+and hand back our own squad — which reads as wpmatch being broken rather than as a field not filled
+in. It now says which one to do.
+
+A squad that has been looked up can be **kept under a name of the coach's own** ("Saturday — Other
+Town") and comes back as a button beside *Scout the opponent*. Five at most, nothing older than a
+week, and the limit is printed beside the name box rather than left implicit.
+
+The **ⓘ** is a resting panel under the heading, never a card over the rows — a floating card would
+cover the two rows being compared on a phone. It is bound to hover, focus **and** tap, because
+hover does not exist on the device this app is used on. It fetches nothing: it reads the squad
+already loaded by *Show season figures*, and says so when that has not been pressed.
+
+The join is the wpmatch player id and nothing else. Not the cap number — three players in one live
+squad wear '1', so a cap join would print the keeper's record under another child's name on a sheet
+that gets handed to the officials' table. Not the name either. A player added by hand has no id and
+is told so, rather than shown zeros that read as "never scores".
+
+It is deliberately **not** on the name in the line-up editor (that is `<option>` text inside a
+native select, which cannot carry a card in any browser), not over the roster's name boxes (a card
+would cover the field being typed in), and not in the printed sheet — `sheetdoc.js` is untouched,
+so no stray glyph reaches the official form.
+
 ## Other clubs' children
 
 The rows are about minors — the sample used while building this was ten years old. wpmatch
@@ -59,6 +93,12 @@ publishes `age`, `yearofbirth`, `gender`, `eligibility` (a nationality statement
 emits the name, matches played and the nine playing figures, and nothing else — so no later code
 has to remember not to store them. A scouted squad is cached on the device only, is never sent to
 the club's own server, and is wiped with everything else on sign-out.
+
+It lives in its own store and is **never** a row in `db.teams` or in the shared player map. The
+sync uploads every team on the device, so an opponent's children would otherwise land on our own
+club's server — and a scouted player in the shared map could be tapped onto an official team sheet.
+`scouted` and `squad` are refused by name in `js/teamsync.js` as well, so a team carrying either is
+a hard refusal at the server too.
 
 That this data is already public is not permission from those children's clubs. Re-displaying a
 squad's published totals is one thing; compiling and keeping them is another, which is why one

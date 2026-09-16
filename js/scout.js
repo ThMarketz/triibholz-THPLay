@@ -87,7 +87,23 @@ const SCOUT = (() => {
     };
   }
 
-  return { MIN_MATCHES, TOP, report, per, rank, sum };
+  /* One player's own line, for the card behind a name on a team sheet. The join is the wpmatch
+     player id and nothing else: a cap number is not unique within a squad (three players can wear
+     '1'), and a name match would print the keeper's record under another child's name on a sheet
+     that gets printed and handed to the officials' table. */
+  function lineFor(squad, wpId) {
+    const r = ((squad && squad.players) || []).find(x => +x.wpId === +wpId);
+    if (!r) return null;
+    return {
+      wpId: r.wpId, name: r.name, played: r.played, goals: r.goals,
+      goalon: r.goalon, goalextraplayer: r.goalextraplayer, penaltygoals: r.penaltygoals,
+      exclusionfoul: r.exclusionfoul,
+      perMatch: per(r.goals, r.played),          // null below the floor: a rate on two matches is noise
+      thin: r.played < MIN_MATCHES,
+    };
+  }
+
+  return { MIN_MATCHES, TOP, report, per, rank, sum, lineFor };
 })();
 
 // Node/CommonJS interop (no-op in the browser)

@@ -367,7 +367,7 @@ const TEAMS = (() => {
   const stale = since => since !== wipedAt;
   function wipeDevice() {
     wipedAt++;
-    [KEY, MIRROR_KEY, SYNC_KEY, CARD_KEY].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+    [KEY, MIRROR_KEY, SYNC_KEY, CARD_KEY, SCOUT_KEY].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
     db = blank();
     ui.teamId = null; ui.sheetId = null; ui.tplId = null; ui.tab = 'teams'; ui.notice = ''; ui.progress = '';
     return true;
@@ -385,7 +385,7 @@ const TEAMS = (() => {
 
   /* ------------------------------------------------------------- screens */
   let root = null, ctx = {}, db = blank();
-  const ui = { tab: 'teams', teamId: null, sheetId: null, tplId: null, busy: '', progress: '', notice: '', scout: null };
+  const ui = { tab: 'teams', teamId: null, sheetId: null, tplId: null, busy: '', progress: '', notice: '', scout: null, ours: null };
 
   function render(container, context) {
     root = container; ctx = context || {}; db = load();
@@ -446,7 +446,8 @@ const TEAMS = (() => {
     const rate = p.perMatch === null ? '' : ' ' + T('sc.aMatch', { n: p.perMatch });
     return `<li><strong>${esc(p.name)}</strong> — ${T('sc.nInMatches', { n: p.n, matches: p.played })}${rate}${p.share ? ` <span class="muted">${T('sc.ofSquad', { share: esc(p.share) })}</span>` : ''}</li>`;
   }
-  function scoutHtml(sc) {
+  function scoutHtml(sc, opts) {
+    const own = !!(opts && opts.own);
     const r = sc.report;
     if (r.empty) {
       return `<div class="film-panel tm-scout"><h3>${T('sc.title', { name: esc(sc.name) })}</h3>
@@ -469,8 +470,68 @@ const TEAMS = (() => {
           <tbody>${r.table.map(p => `<tr><td>${esc(p.name)}</td>${cols.map(c => `<td>${p[c[0]] || 0}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>
       <p class="fa-note">${T('sc.limits')}</p>
       <p class="fa-note">${T('sc.source')} ${sc.url ? `<a href="${esc(sc.url)}" target="_blank" rel="noopener noreferrer">wpmatch.ch</a>` : 'wpmatch.ch'}</p>
-      <div class="tm-actions"><button class="btn-ghost sm" id="tm-scout-x">${T('sc.close')}</button></div></div>`;
+      ${own ? '' : `<div class="tm-scout-keep">
+        <label class="auth-field"><span>${T('sc.keepAs')}</span>
+          <input type="text" id="tm-scout-label" maxlength="60" value="${esc(sc.label || '')}" placeholder="${esc(sc.name)}"></label>
+        <button class="btn-primary sm" id="tm-scout-keep">${T('sc.keep')}</button>
+        <p class="fa-note">${T('sc.keepNote', { n: SCOUT_MAX })}</p></div>`}
+      <div class="tm-actions"><button class="btn-ghost sm" id="tm-scout-x">${T(own ? 'sc.hide' : 'sc.close')}</button></div></div>`;
   }
+
+  /* Our OWN squad's season figures, from the same source and the same judging as an opponent's.
+     A coach should not have to scout their own team to see what their players have done, so this
+     is a button on the team itself — and it is the only place a player's own card can come from,
+     because the join is the wpmatch player id that the roster crawl already stored. */
+  async function ourSquad(t) {
+    if (!t || !t.wpmatch) return { error: 'not-linked' };
+    return scoutSquad({ id: t.wpmatch.id, name: t.wpmatch.name, slug: t.wpmatch.slug || '' });
+  }
+  /* one player's line, or the reason there is none — four different answers, never one vague
+     "wpmatch is down", because "he has no record" and "we could not ask" are different facts */
+  function playerLine(squad, p) {
+    if (!p) return { why: 'no-player' };
+    if (!p.wpId) return { why: 'not-matched' };            // added by hand: nothing to join on
+    if (!squad) return { why: 'not-loaded' };
+    const line = SCOUT.lineFor(squad, p.wpId);
+    return line ? { line } : { why: 'not-in-squad' };
+  }
+
+  /* ---- keeping a squad a coach has looked up.
+
+     A scouted squad is NOT a team. It never goes in db.teams and never into the shared db.players
+     map, for two reasons: syncAll uploads every team on the device, so an opponent's children would
+     land on our own club's server; and a scouted player in db.players could be picked onto an
+     official team sheet, where one wrong tap puts another club's child on a Swiss Aquatics form.
+
+     It lives in its own small store with the coach's own name on it, five squads at most, and
+     nothing older than a week. That cap is the difference between a lookup before a match and a
+     standing file on other clubs' children. */
+  const SCOUT_KEY = 'thplay.scout.v1';
+  const SCOUT_MAX = 5, SCOUT_KEEP_MS = 7 * 24 * 3600e3;
+  const loadScouts = () => {
+    const all = readJson(SCOUT_KEY, {});
+    const now = Date.now(), out = {};
+    // a week is the whole retention policy, applied on every read so it cannot be forgotten
+    Object.keys(all).forEach(k => { if (all[k] && now - (all[k].at || 0) < SCOUT_KEEP_MS) out[k] = all[k]; });
+    if (Object.keys(out).length !== Object.keys(all).length) writeJson(SCOUT_KEY, out);
+    return out;
+  };
+  const scoutList = () => Object.values(loadScouts()).sort((a, b) => b.at - a.at);
+  function saveScout(sc, label) {
+    const all = loadScouts();
+    const key = String(sc.listId);
+    /* strictly increasing, because two squads kept in the same millisecond would tie and then
+       "drop the oldest" would drop whichever the sort happened to put last */
+    const newest = Object.values(all).reduce((n, x) => Math.max(n, x.at || 0), 0);
+    const at = Math.max(Date.now(), newest + 1);
+    all[key] = { listId: sc.listId, name: sc.name, url: sc.url, at,
+                 label: TEAMSYNC.clean(label || (all[key] && all[key].label) || '', 60), squad: sc.squad };
+    const keys = Object.keys(all).sort((a, b) => all[b].at - all[a].at);
+    keys.slice(SCOUT_MAX).forEach(k => { delete all[k]; });     // oldest out, so five is really five
+    writeJson(SCOUT_KEY, all);
+    return all[key];
+  }
+  const forgetScout = listId => { const all = loadScouts(); delete all[String(listId)]; writeJson(SCOUT_KEY, all); };
 
   /* One opponent, on an explicit press. Nothing is fetched by hovering and nothing is crawled:
      the index is cached for the device, so a second opponent costs a single request. */
@@ -483,7 +544,8 @@ const TEAMS = (() => {
     const hit = WPMATCH.cacheGet('scout.' + found.list.id, SQUAD_TTL);
     let squad = hit && !hit.stale ? hit.data : null;
     if (!squad) { squad = await WPMATCH.fetchSquad(found.list.id); WPMATCH.cachePut('scout.' + found.list.id, squad); }
-    return { name: squad.name || team.name, url: squad.url, at: (hit && hit.at) || Date.now(), report: SCOUT.report(squad) };
+    return { listId: found.list.id, name: squad.name || team.name, url: squad.url,
+             at: (hit && hit.at) || Date.now(), squad, report: SCOUT.report(squad) };
   }
 
   /* ---------- the club's copy: one button, and what it last said.
@@ -552,7 +614,8 @@ const TEAMS = (() => {
     const players = roster(db, t);
     const rows = players.map(p => `<tr>
         <td><input type="text" class="tm-cap" data-cap="${esc(p.pid)}" value="${esc(p.cap)}" inputmode="numeric" maxlength="2" aria-label="${T('tm.capNo')}"></td>
-        <td>${p.licence ? esc(p.licence) : `<span class="tm-status tm-bad">${T('tm.noLicence')}</span>`}</td>
+        <td>${p.licence ? esc(p.licence) : `<span class="tm-status tm-bad">${T('tm.noLicence')}</span>`}
+          <button class="btn-ghost xs tm-inf" data-pinfo="${esc(p.pid)}" aria-label="${T('sc.playerFigures')}" title="${T('sc.playerFigures')}">ⓘ</button></td>
         <td><input type="text" data-pname="${esc(p.pid)}" value="${esc(p.name)}" aria-label="${T('tm.surname')}">${p.nameGuessed ? `<span class="tm-guess" title="${T('tm.nameGuessedTip')}">?</span>` : ''}</td>
         <td><input type="text" data-pfirst="${esc(p.pid)}" value="${esc(p.firstName)}" aria-label="${T('tm.firstName')}"></td>
         <td>${esc(p.birthYear) || '—'}</td>
@@ -584,8 +647,17 @@ const TEAMS = (() => {
           <button class="btn-ghost sm danger" id="tm-delete-team">${T('tm.deleteTeam')}</button></div>
       </details>
 
+      <div class="film-panel tm-ours">
+        <h3>${T('sc.ourFigures')} ${t.wpmatch ? `<span class="rightbar-hint">${esc(t.wpmatch.name)}</span>` : ''}</h3>
+        <p class="fa-note">${T('sc.ourFiguresNote')}</p>
+        ${t.wpmatch ? `<button class="btn-ghost sm" id="tm-ours" ${ui.busy ? 'disabled' : ''}>${ui.ours ? T('sc.refresh') : T('sc.showFigures')}</button>`
+          : `<p class="muted">${T('sc.linkFirst')}</p>`}
+        <div id="tm-ours-out">${ui.ours ? scoutHtml(ui.ours, { own: true }) : ''}</div>
+      </div>
+
       <div class="film-panel">
         <h3>${T('tm.roster')} <span class="rightbar-hint">${T('tm.nPlayers', { n: players.length })}</span></h3>
+        <div class="tm-pinfo" id="tm-pinfo-roster"></div>
         <div class="tm-add">
           <label class="tm-lic">${T('tm.addByLicence')}<textarea id="tm-lic" rows="2" placeholder="${T('tm.addByLicencePh')}"></textarea></label>
           <div class="tm-add-btns">
@@ -661,6 +733,7 @@ const TEAMS = (() => {
         ${t.wpmatch ? `<button class="btn-ghost sm" id="tm-fixtures" ${ui.busy ? 'disabled' : ''}>${T('tm.pickFixture')}</button><div id="tm-fixture-list"></div>` : ''}
         <div class="tm-scout-host">
           <button class="btn-ghost sm" id="tm-scout" ${ui.busy ? 'disabled' : ''}>${T('sc.scoutOpponent')}</button>
+          ${scoutList().map(x => `<button class="btn-ghost sm" data-scout-open="${esc(String(x.listId))}">${esc(x.label || x.name)}</button>`).join('')}
           <div id="tm-scout-out">${ui.scout ? scoutHtml(ui.scout) : ''}</div>
         </div>
       </div>
@@ -668,9 +741,11 @@ const TEAMS = (() => {
       <div class="film-panel tm-avail">
         <h3>${T('tm.availability')} <span class="rightbar-hint">${T('tm.availabilityCounts', counts)}</span></h3>
         <p class="fa-note">${T('tm.availabilityNote')}</p>
+        <div class="tm-pinfo" id="tm-pinfo-avail">${ui.pinfo ? '' : ''}</div>
         <div class="tm-avail-grid">${players.map(p => {
           const st = availOf(s, p.pid);
           return `<div class="tm-avail-row ${st}"><span class="tm-avail-name">${esc([p.name, p.firstName].filter(Boolean).join(' '))}</span>
+            <button class="btn-ghost xs tm-inf" data-pinfo="${esc(p.pid)}" aria-label="${T('sc.playerFigures')}" title="${T('sc.playerFigures')}">ⓘ</button>
             <span class="tm-avail-btns">${[['in', '✓'], ['out', '✕'], ['unknown', '?']].map(([v, sym]) =>
               `<button class="btn-ghost xs ${st === v ? 'on' : ''}" data-avail="${esc(p.pid)}" data-availstate="${v}" title="${T('tm.avail.' + v)}" aria-pressed="${st === v}">${sym}</button>`).join('')}</span></div>`;
         }).join('') || `<p class="muted">${T('tm.noPlayersYet')}</p>`}</div>
@@ -834,7 +909,45 @@ const TEAMS = (() => {
      name away without a word — which made naming a team feel impossible, because it was. */
   const keepTeamForm = t => { if ($('#tm-name')) { readTeamForm(t); persist(); } };
 
+  /* Both screens carry these: the team page has the roster and the figures button, the sheet has
+     the availability list. Wiring them in one place is why an ⓘ behaves the same on both. */
+  function wireOurFigures(t) {
+    /* our own squad, from the same source and the same judging as an opponent's */
+    on('#tm-ours', 'click', async () => {
+      const out = $('#tm-ours-out');
+      out.innerHTML = `<p class="muted">${T('sc.looking')}</p>`;
+      try {
+        const r = await ourSquad(t);
+        if (r.error) { out.innerHTML = `<p class="muted">${T(r.error === 'not-linked' ? 'sc.linkFirst' : 'sc.noList', { name: esc(t.name) })}</p>`; return; }
+        ui.ours = r; draw();
+      } catch (e) { out.innerHTML = `<p class="muted">${T('tm.wpmatchDown')}</p>`; }
+    });
+    /* a player's own line, in a resting panel under the heading — never a card over the rows,
+       and reachable by mouse, by keyboard and by tapping, because this is used on a phone */
+    $$('[data-pinfo]').forEach(b => {
+      const show = async () => {
+        const host = b.closest('.tm-avail') ? $('#tm-pinfo-avail') : $('#tm-pinfo-roster');
+        if (!host) return;
+        const p2 = db.players[b.dataset.pinfo];
+        const squad = (ui.ours && ui.ours.squad) || null;
+        const r = playerLine(squad, p2);
+        const who = esc([p2 && p2.name, p2 && p2.firstName].filter(Boolean).join(' '));
+        if (r.line) {
+          const L = r.line;
+          host.innerHTML = `<div class="tm-pinfo-card"><strong>${who}</strong> — ${T('sc.playerLine', {
+            goals: L.goals, matches: L.played, six: L.goalon, extra: L.goalextraplayer, pen: L.penaltygoals, excl: L.exclusionfoul })}
+            ${L.thin ? ` <span class="muted">${T('sc.thinNote')}</span>` : ''}
+            <span class="muted">${T('sc.inSquad', { name: esc((ui.ours && ui.ours.name) || '') })}</span></div>`;
+        } else {
+          host.innerHTML = `<div class="tm-pinfo-card"><strong>${who}</strong> — <span class="muted">${T('sc.why.' + r.why)}</span></div>`;
+        }
+      };
+      b.onmouseenter = show; b.onfocus = show; b.onclick = e => { e.preventDefault(); show(); };
+    });
+  }
+
   function wireTeam(t) {
+    wireOurFigures(t);
     on('#tm-back', 'click', () => { keepTeamForm(t); ui.teamId = null; ui.notice = ''; ui.progress = ''; draw(); });
     // and as soon as a field is left, so a name survives anything else that redraws the screen
     $$('#tm-name, #tm-cat, #tm-club, #tm-league, #tm-tpl, #tm-coach, #tm-a1, #tm-a2').forEach(el => el.addEventListener('change', () => keepTeamForm(t)));
@@ -967,12 +1080,16 @@ const TEAMS = (() => {
     on('#tm-invite', 'click', () => { const m = $('#tm-invite-modal'); if (m) { m.hidden = false; if (ctx.bindInvite) ctx.bindInvite(m); } });
     on('#tm-invite-x', 'click', () => { const m = $('#tm-invite-modal'); if (m) m.hidden = true; });
 
+    wireOurFigures(t);
     on('#tm-scout', 'click', async () => {
       const out = $('#tm-scout-out');
-      const who = (s.match && s.match.opponent) || '';
+      const who = TEAMSYNC.clean((s.match && s.match.opponent) || '', 60);
+      /* Without an opponent this used to search our OWN team's name and hand back our own squad
+         list, which looks like a bug in wpmatch rather than a missing field. Say what is needed. */
+      if (!who) { out.innerHTML = `<p class="muted">${T('sc.needOpponent')}</p>`; return; }
       out.innerHTML = `<p class="muted">${T('sc.looking')}</p>`;
       try {
-        const hits = await WPMATCH.searchTeams(who || (t.wpmatch && t.wpmatch.name) || t.name);
+        const hits = await WPMATCH.searchTeams(who);
         const them = hits.filter(x => !t.wpmatch || x.id !== t.wpmatch.id);
         if (!them.length) { out.innerHTML = `<p class="muted">${T('sc.noSquad', { name: esc(who) })}</p>`; return; }
         if (them.length > 1) {
@@ -992,7 +1109,21 @@ const TEAMS = (() => {
         ui.scout = sc; draw();
       } catch (e) { out.innerHTML = `<p class="muted">${T('tm.wpmatchDown')}</p>`; }
     }
-    on('#tm-scout-x', 'click', () => { ui.scout = null; draw(); });
+    on('#tm-scout-x', 'click', () => { ui.scout = null; ui.ours = null; draw(); });
+    on('#tm-scout-keep', 'click', () => {
+      if (!ui.scout) return;
+      const kept = saveScout(ui.scout, ($('#tm-scout-label') && $('#tm-scout-label').value) || '');
+      ui.scout = Object.assign({}, ui.scout, { label: kept.label });
+      toast(T('sc.kept', { name: kept.label || kept.name }));
+      draw();
+    });
+    $$('[data-scout-open]').forEach(b => b.onclick = () => {
+      const kept = loadScouts()[b.dataset.scoutOpen];
+      if (!kept) return;
+      ui.scout = { listId: kept.listId, name: kept.label || kept.name, url: kept.url, at: kept.at, label: kept.label, squad: kept.squad, report: SCOUT.report(kept.squad) };
+      draw();
+    });
+
     on('#tm-fixtures', 'click', async () => {
       const out = $('#tm-fixture-list'); out.innerHTML = `<p class="muted">${T('tm.searching')}</p>`;
       try {
@@ -1154,7 +1285,8 @@ const TEAMS = (() => {
   return { KEY, CARD_KEY, MIRROR_KEY, SYNC_KEY, CATEGORY_ORDER, render, renderPlayerCard, load, save, upsertPlayers, autoOrder, lineupOf, allTemplates,
            availOf, setAvailability, availabilityCounts, availablePool,
            syncClub, maySync, payloadFor, forUpload, syncTeam, syncAll, loadMirror, syncStateOf, wipeDevice,
-           removeAtClub, deleteAtClub, serverIdOf, seasonOf, pullTeam, scoutSquad, scoutHtml };
+           removeAtClub, deleteAtClub, serverIdOf, seasonOf, pullTeam, scoutSquad, scoutHtml,
+           SCOUT_KEY, SCOUT_MAX, loadScouts, scoutList, saveScout, forgetScout, ourSquad, playerLine };
 })();
 
 // Node/CommonJS interop (no-op in the browser)

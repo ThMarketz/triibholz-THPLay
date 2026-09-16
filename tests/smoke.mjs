@@ -2177,6 +2177,47 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('a squad three matches into a season gets no "expect this many a match" line', early.team.perMatch === null && early.team.exclusions === 6);
   }
 
+  console.log('\n[14d] Keeping a squad, and a player\u2019s own line');
+  {
+    const TM = window.__T.TEAMS, SC = window.__T.SCOUT;
+    const squadOf = (n, extra) => ({ id: n, name: 'Squad ' + n, url: 'https://example.invalid/list/' + n + '/', matches: 10,
+      players: [Object.assign({ wpId: 900 + n, name: 'Player ' + n, played: 10, goals: 10, goalon: 7, goalextraplayer: 2,
+        penaltygoals: 1, exclusionfoul: 4, penaltyfouls: 0, misconductfoul: 0, brutalityfoul: 0 }, extra || {})] });
+    try { window.localStorage.removeItem(TM.SCOUT_KEY); } catch (e) {}
+
+    const kept = TM.saveScout({ listId: 1, name: 'Squad 1', url: 'https://example.invalid/list/1/', squad: squadOf(1) }, 'Saturday — Other Town');
+    ok('a coach can keep a squad under a name of their own', kept.label === 'Saturday — Other Town' && TM.scoutList().length === 1);
+    ok('…and it is not a team, so a sync can never carry it to the club', !(TM.load().teams || []).some(t => t.name === 'Saturday — Other Town'));
+    ok('…nor does it land in the shared player map a sheet is built from', !Object.keys(TM.load().players || {}).some(k => /^9\d\d$/.test(k)));
+
+    for (let i = 2; i <= TM.SCOUT_MAX + 2; i++) TM.saveScout({ listId: i, name: 'Squad ' + i, url: '', squad: squadOf(i) }, 'Kept ' + i);
+    ok('only a handful are kept — this is a lookup before a match, not a file on other clubs', TM.scoutList().length === TM.SCOUT_MAX);
+    ok('…and the oldest is the one that goes', !TM.loadScouts()['1']);
+
+    const old = TM.loadScouts();
+    const one = Object.keys(old)[0];
+    old[one].at = Date.now() - 8 * 24 * 3600e3;                       // a week and a day ago
+    window.localStorage.setItem(TM.SCOUT_KEY, JSON.stringify(old));
+    ok('nothing older than a week survives being read', !TM.loadScouts()[one]);
+    TM.forgetScout(Object.keys(TM.loadScouts())[0]);
+    ok('a coach can drop one on purpose too', TM.scoutList().length === TM.SCOUT_MAX - 2);
+
+    /* a player's own line: joined on the wpmatch id and nothing else, because a cap number is not
+       unique in a squad and a name match would print the wrong child's record on a sheet */
+    const squad = squadOf(7);
+    ok('a player the club crawled from wpmatch gets their own line', (() => {
+      const r = TM.playerLine(squad, { pid: 'L50101', licence: '50101', wpId: 907 });
+      return r.line && r.line.goals === 10 && r.line.goalon === 7 && r.line.exclusionfoul === 4;
+    })());
+    ok('a player added by hand says so, instead of showing zeros', TM.playerLine(squad, { pid: 'm1', licence: '' }).why === 'not-matched');
+    ok('…and zeros never stand in for "we do not know"', !TM.playerLine(squad, { pid: 'm1' }).line);
+    ok('before the figures are loaded, the card says which button to press', TM.playerLine(null, { pid: 'L1', wpId: 907 }).why === 'not-loaded');
+    ok('a player wpmatch does not list in this squad is its own answer', TM.playerLine(squad, { pid: 'L2', wpId: 4242 }).why === 'not-in-squad');
+    ok('a line below the floor is marked as too few matches to read', SC.lineFor(squadOf(8, { wpId: 908, played: 2 }), 908).thin === true);
+    ok('…and carries no rate', SC.lineFor(squadOf(9, { wpId: 909, played: 2 }), 909).perMatch === null);
+    try { window.localStorage.removeItem(TM.SCOUT_KEY); } catch (e) {}
+  }
+
   console.log('\n[15] Teams & team sheets — the coach flow, end to end in the DOM');
   {
     const { TEAMS: TM, ELIGIBILITY: E } = window.__T;
@@ -2288,7 +2329,17 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
       ok('the coach is offered a scouting report while preparing the sheet', !!btn);
       ok('…and nothing has been asked of wpmatch before they press it', fetched === 0);
       if (btn) {
+        // with no opponent named, this used to search OUR OWN team's name and hand back our own
+        // squad — which reads as wpmatch being broken rather than as a field not filled in
         btn.click();
+        await wait(120);
+        ok('pressing it with no opponent asks for one instead of searching our own name',
+          /Pick a fixture/i.test(q('#view-teams #tm-scout-out').textContent) && fetched === 0);
+        const oppBox = q('#view-teams #tm-m-opp');
+        oppBox.value = 'Other Town U14';
+        oppBox.dispatchEvent(new window.Event('change', { bubbles: true }));
+        await wait(120);
+        q('#view-teams #tm-scout').click();
         await wait(400);
         const panel = q('#view-teams .tm-scout');
         ok('pressing it reports on the opposing squad', !!panel && /Other Town U14/.test(panel.textContent));
@@ -2303,6 +2354,52 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
         ok('the report closes again', !q('#view-teams .tm-scout'));
       }
       W.searchTeams = realSearch; W.fetchListIndex = realIndex; W.fetchSquad = realSquad;
+    }
+    {
+      // our own squad's figures, in the same shape as an opponent's, on the team itself
+      const W = window.__T.WPMATCH;
+      const realSearch = W.searchTeams, realIndex = W.fetchListIndex, realSquad = W.fetchSquad;
+      try { window.localStorage.removeItem('thplay.wpmatch.cache.lists.index'); } catch (e) {}
+      W.fetchListIndex = async () => [{ id: 9200, slug: 'ours-u14-team', name: 'Ours U14 – Team' }];
+      // join on the wpmatch id the roster crawl already stored for our first player
+      const firstPid = Object.keys(TM.load().players)[0];
+      const ourWpId = TM.load().players[firstPid].wpId || 3400;
+      W.fetchSquad = async () => ({ id: 9200, name: 'Ours U14 – Team', url: 'https://example.invalid/list/o/', matches: 11, players: [
+        { wpId: ourWpId, name: 'Rossi', played: 11, goals: 18, goalon: 14, goalextraplayer: 3, penaltygoals: 1, exclusionfoul: 5, penaltyfouls: 0, misconductfoul: 0, brutalityfoul: 0 },
+      ] });
+      // the team as a coach would really have it: linked to its squad on wpmatch. TEAMS caches the
+      // store in memory, so leave the view and come back rather than just redrawing.
+      const st = TM.load(); st.teams[0].wpmatch = { id: 77, name: 'Ours U14', slug: 'ours-u14' };
+      const p0 = Object.keys(st.players)[0]; if (!st.players[p0].wpId) st.players[p0].wpId = 3400;
+      TM.save(st);
+      q('#view-teams #tm-sheet-back').click(); await wait(80);    // leave the sheet: the panel is on the team
+      q('.nav-btn[data-view="playbook"]').click(); await wait(60);
+      q('.nav-btn[data-view="teams"]').click(); await wait(80);
+      const card = q('#view-teams .tm-card'); if (card) { card.click(); await wait(80); }
+      ok('a coach can see their own team’s season figures without scouting themselves', !!q('#view-teams .tm-ours'));
+      const oursBtn = q('#view-teams #tm-ours');
+      ok('…once the team is linked to its wpmatch squad', !!oursBtn);
+      if (!oursBtn) console.log('   (skipped the rest: no #tm-ours button)');
+      if (oursBtn) {
+        oursBtn.click(); await wait(400);
+        const panel = q('#view-teams .tm-ours .tm-scout');
+        ok('pressing it shows our own squad, judged exactly like an opponent’s', !!panel && /Rossi/.test(panel.textContent));
+        ok('…and our own squad is never offered a "keep as" name — it is not a scouting file', !q('#view-teams .tm-ours #tm-scout-keep'));
+        const inf = q('#view-teams [data-pinfo]');
+        ok('every name on the roster has a way to ask for that player’s figures', !!inf);
+        if (inf) {
+          inf.dispatchEvent(new window.Event('mouseenter'));
+          await wait(80);
+          const card = q('#view-teams .tm-pinfo-card');
+          ok('hovering it shows that player’s own line, with the split the coach asked for',
+            !!card && /18 goals in 11 matches/.test(card.textContent) && /14 at 6-on-6/.test(card.textContent));
+          ok('…including exclusions conceded', /5 exclusions conceded/.test(card.textContent));
+          ok('…and it rests under the heading rather than covering the rows', !!q('#view-teams .tm-pinfo'));
+        }
+      }
+      W.searchTeams = realSearch; W.fetchListIndex = realIndex; W.fetchSquad = realSquad;
+      const back = q('#view-teams [data-sheet]');                 // back to the sheet the rest of this section is on
+      if (back) { back.click(); await wait(80); }
     }
     const fs = qa('#view-teams .tm-findings li').map(li => li.textContent);
     ok('the check flags the inactive licence by name', fs.some(t => /Inactive licence/.test(t) && /Mia Huber/.test(t)));
@@ -2382,9 +2479,11 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     window.localStorage.setItem(TM.MIRROR_KEY, JSON.stringify({ clubs: { c_x: { syncedAt: 1, teams: [] } } }));
     window.localStorage.setItem(TM.SYNC_KEY, JSON.stringify({ 'c_x:t1': { state: 'confirmed' } }));
     window.localStorage.setItem(TM.CARD_KEY, JSON.stringify({ player: { licence: '50101' } }));
-    ok('there is something to lose before signing out', !!window.localStorage.getItem(TM.KEY) && !!window.localStorage.getItem(TM.CARD_KEY));
+    TM.saveScout({ listId: 4242, name: 'Some Squad', url: '', squad: { players: [], matches: 0 } }, 'Saturday');
+    ok('there is something to lose before signing out', !!window.localStorage.getItem(TM.KEY) && !!window.localStorage.getItem(TM.CARD_KEY) && !!window.localStorage.getItem(TM.SCOUT_KEY));
     TM.wipeDevice();
     ok('signing out leaves no roster, no club copy, no sync log and no player card', [TM.KEY, TM.MIRROR_KEY, TM.SYNC_KEY, TM.CARD_KEY].every(k => !window.localStorage.getItem(k)));
+    ok('…and no squad the coach had looked up either', !window.localStorage.getItem(TM.SCOUT_KEY) && TM.scoutList().length === 0);
     ok('…and the module is not still holding the last team it drew', TM.load().teams.length === 0);
   }
 
