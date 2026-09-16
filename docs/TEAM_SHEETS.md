@@ -63,22 +63,51 @@ its QR: the player scans it, lands in the app and joins the team. The code now t
 `#`**, which a browser never sends to a server, so it stays out of server, proxy and tunnel logs —
 and each install makes its own code once instead of every install sharing one built into the app.
 
-## Where the data is stored — on the device
+## Where the data is stored — on the device, and nowhere else unless a coach says so
 
 Rosters are licence numbers, names, birth years and nationality status, much of it for minors.
-The app's analysis backend has **no authentication** (sign-in is simulated in this build), so
-anything stored there is readable by whoever knows a team code. Nothing in this feature is sent
-to it:
+Everything lives on the device that made it:
 
 - the coach's teams, rosters, templates and sheets: `localStorage['thplay.teams.v1']`;
 - the player's card: `localStorage['thplay.mycard.v1']`, on the player's own device, read live
   from wpmatch by licence number.
 
-A test spies on `fetch` while a sheet is built and fails if a licence number or a name leaves
-the device (fault-injected: posting the roster on save fails it).
+**Nothing is sent anywhere automatically.** A test spies on `fetch` while a sheet is built and
+fails if a licence number or a name leaves the device (fault-injected: posting the roster on save
+fails it).
 
-**Consequence:** a coach's rosters do not follow them to a second device yet. That needs real
-authentication first — not a shortcut around it.
+### Sending a team to the club, on purpose
+
+Once the club runs a server with accounts on — real passkeys, real memberships, every endpoint
+authorized (slice 5 of [ACCOUNTS.md](ACCOUNTS.md)) — a coach can press **Sync with the club** and
+put their teams there, so a roster survives a lost phone and follows the coach to a second device.
+It is a button, pressed by a person, every time. There is no background sync and no "on by default".
+
+What travels is fixed by `js/teamsync.js`, which the **server enforces on the same payload**, so a
+rule cannot be kept on one side and forgotten on the other. It is a whitelist — anything else is
+refused rather than dropped:
+
+| Sent | Kept on the device |
+|---|---|
+| surname, first name, licence number, cap number, goalkeeper flag | a **date of birth** — never fetched, never stored, and refused by name and by a SQLite `typeof` CHECK |
+| the team's name, category, season and league label | a licensed player's **birth year and gender** — wpmatch supplies both here, from a licence that is already public |
+| | **nationality status** ("Ausländer-Étranger", "Inactive License") — a statement about a named child that anyone holding the public licence can re-derive in one request |
+| | **availability** — an opinion about a child's body |
+| | **the sheets themselves**, so the sheet builder keeps working at a pool with no signal |
+
+A player whose licence is still pending is the one exception: their birth year and gender do travel,
+because nothing else can supply them.
+
+Three stores, kept apart on purpose: `thplay.teams.v1` is the coach's own, still fully editable
+offline; `thplay.teams.mirror.v1` is what the club's server said, read-only; `thplay.teams.sync.v1`
+records which team reached the club and when. The mirror is never merged into the coach's own
+store — two editable copies of one roster is how a child ends up on the wrong sheet at a pool.
+
+**Signing out wipes all four keys** (including the player card), whether or not the server could be
+reached. A shared laptop at a club is the ordinary case, not the exotic one.
+
+**Consequence:** a coach's rosters follow them to a second device once the club's server is on and
+they have synced. Their past sheets do not — those stay where they were made.
 
 ## The eligibility check
 

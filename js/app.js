@@ -3730,7 +3730,7 @@
     $('ed-phase').onchange = (e)=>{ edit.scenario.phase=e.target.value; };
     if ($('ed-visibility')) $('ed-visibility').onchange = (e)=>{ edit.scenario.visibility=e.target.value; };
 
-    $('logout-btn').onclick = (e)=>{ e.stopPropagation(); if (realAccounts && typeof SESSION!=='undefined') SESSION.signOut().catch(()=>{}); clearSession(); state.user=null; if (typeof SHARE!=='undefined' && $('auth-share-note')) $('auth-share-note').hidden = !SHARE.fromHash(location.hash); show('auth-screen'); };
+    $('logout-btn').onclick = (e)=>{ e.stopPropagation(); if (realAccounts && typeof SESSION!=='undefined') SESSION.signOut().catch(()=>{}); if (typeof TEAMS!=='undefined') TEAMS.wipeDevice(); clearSession(); state.user=null; if (typeof SHARE!=='undefined' && $('auth-share-note')) $('auth-share-note').hidden = !SHARE.fromHash(location.hash); show('auth-screen'); };
     $('editor-modal').onclick = (e)=>{ if(e.target===$('editor-modal')) closeEditor(); };
   }
 

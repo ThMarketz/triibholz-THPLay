@@ -1376,3 +1376,11 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 .ann-marks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
 .film-send .modal-body textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font:inherit}
 .film-send .modal-body select{width:100%}
+
+/* the club's copy of a coach's teams (slice 5): one button, what it last said, and the read-only
+   list of teams that came back from the club's server */
+.tm-sync-head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.tm-sync-head p{margin:2px 0 0}
+.tm-sync-said{margin:8px 0 0;padding:8px 10px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);font-size:13px}
+.tm-mirror-list{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.tm-mirror-list li{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-radius:10px;background:var(--panel2);border:1px solid var(--line)}

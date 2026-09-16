@@ -23,7 +23,7 @@ the rules below, not a footnote.
 | 2 | Passkey registration and sign-in, sessions, behind `ACCOUNTS=1`; nothing depends on it yet | **done** — server only; the app still signs in the simulated way |
 | 3 | Clubs and memberships: invites, join codes, approvals, roles, removal, step-up, UV for staff | **done** — server only |
 | 4 | The switch, in one release: the app signs in for real; every existing endpoint authorized | **done** — server (5d7733d), app (e366672), the Film Room moment (faf789a), the announcement composer (2d9c24c), the operator's legacy-data commands (bf5df87) and the sandbox club |
-| 5 | Teams and rosters on the server, per club; team staff and members; the narrowed addressee list | **done** — server; sheets and templates stay on the device on purpose (see below) |
+| 5 | Teams and rosters on the server, per club; team staff and members; the narrowed addressee list | **done** — server and app; sheets and templates stay on the device on purpose (see below) |
 | 6 | Devices: QR pairing with approval on the old device, devices page, revocation | |
 | 7 | Recovery with a hold period; player and guardian links | |
 | 8 | Release hardening: chunked uploads through the tunnel, FADP package, backups, staging rehearsal | |
@@ -531,13 +531,27 @@ an empty list and is told so — never a quiet fall back to everybody.
 per team, 60 syncs per hour and 200 new licences per day per person. Audit details carry counts and
 server ids only — never a licence, a name or a device id.
 
-### Still to do in slice 5
+### The app half
 
-- The app half: the upload flow, the read-only offline copy of the teams a coach is staff of, when
-  it was last synced, and wiping every roster key on sign-out. Until that ships the app still keeps
-  rosters only on the device, and `docs/TEAM_SHEETS.md` is still accurate as written.
-- Shared-device mode does not exist in the app yet; the offline copy has to know about it when it
-  does.
+**Sync with the club** sits on the Teams screen for staff when accounts are on, and says in the
+same breath what it sends and what it keeps back. Nothing syncs by itself, ever: a roster leaves
+the device when a coach presses a button and not a moment before.
+
+One team at a time. The device writes "sending" before it asks and "confirmed" only once the
+answer accounts for everything it sent (`TEAMSYNC.manifestOk`) — so a proxy that truncated the
+list, a server that stored half of it, or an answer meant for another team all leave the local copy
+exactly as it was, and the coach is told it did not go. Every refusal is a sentence a coach can act
+on ("no connection", "somebody else changed it first"), never a status code.
+
+Three stores, kept apart: `thplay.teams.v1` (the coach's own, still fully editable offline),
+`thplay.teams.mirror.v1` (what the club's server said — read-only, so teams a colleague uploaded
+show up without becoming a second editable copy) and `thplay.teams.sync.v1` (which team reached the
+club, and when). **Sign-out wipes all four roster keys**, including the player card, whether or not
+the server could be reached.
+
+Still to do: shared-device mode does not exist in the app yet; the offline copy has to know about
+it when it does. And the offline copy is currently the team *list* — opening a full roster with no
+signal comes with slice 6, when a device is a thing the server knows about.
 
 ### Questions for the club before this is switched on
 

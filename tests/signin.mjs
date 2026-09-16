@@ -77,10 +77,10 @@ window.navigator.credentials = {
 };
 
 const files = ['js/theme.js', 'js/i18n.js', 'js/help.js', 'js/draft.js', 'js/commands.js', 'js/solver.js', 'js/qr.js', 'js/fx.js', 'js/pool.js', 'js/data.js', 'js/animate.js',
-  'js/vision.js', 'js/field.js', 'js/shot.js', 'js/testlog.js', 'js/chart.js', 'js/sheetdoc.js', 'js/eligibility.js', 'js/teamsheet.js', 'js/teams.js', 'js/manikin.js', 'js/track.js',
+  'js/vision.js', 'js/field.js', 'js/shot.js', 'js/testlog.js', 'js/chart.js', 'js/sheetdoc.js', 'js/eligibility.js', 'js/teamsheet.js', 'js/teamsync.js', 'js/teams.js', 'js/manikin.js', 'js/track.js',
   'js/bytetrack.js', 'js/events.js', 'js/webdetector.js', 'js/videogen.js', 'js/calendar.js', 'js/planner.js', 'js/privacy.js', 'js/tactics.js', 'js/gameplan.js', 'js/share.js',
   'js/announce.js', 'js/wpmatch.js', 'js/api.js', 'js/session.js', 'js/analysis.js', 'js/film.js', 'js/app.js'];
-window.eval(files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n') + '\n;\nwindow.__T = { SESSION, API, DATA };');
+window.eval(files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n') + '\n;\nwindow.__T = { SESSION, API, DATA, TEAMS, TEAMSYNC };');
 
 const q = s => document.querySelector(s);
 const wait = ms => new Promise(r => window.setTimeout(r, ms));
@@ -197,10 +197,46 @@ await section('[3c] Writing to one player, picked by name from the club', async 
   ok('another club sees nothing of it', !((await asApp(outsider, '/api/announcements')).json.announcements || []).some(a => a.title === 'Your 2-metre position'));
 });
 
+await section('[3d] The coach sends a team to the club, and the club has it', async () => {
+  const { TEAMS: TM } = window.__T;
+  // a team as this device would hold it: one licensed player, one signing whose licence is pending
+  TM.save({ version: 1, templates: [], sheets: [], teams: [{ id: 'tlocal1', name: 'U14 blue', category: 'U14', club: '', leagueLabel: '', templateId: 'sa-2025', staff: {}, rules: {}, players: ['L50401', 'mq8'], wpmatch: null }],
+    players: {
+      L50401: { pid: 'L50401', licence: '50401', name: 'Beispiel', firstName: 'Nora', birthYear: '2013', gender: 'F', status: 'Inactive License', cap: '4', gk: false, edited: true },
+      mq8: { pid: 'mq8', licence: '', name: 'Neue', firstName: 'Spielerin', birthYear: '2014', gender: 'F', status: '', cap: '', gk: true },
+    } });
+  q('.nav-btn[data-view="teams"]').click();
+  await settle(30);
+  ok('a coach is offered the club’s copy, and told what it does and does not send', !!q('#tm-sync') && /licence numbers/i.test(q('.tm-sync').textContent) && /stay on this device/i.test(q('.tm-sync').textContent));
+  ok('…and that nothing has gone yet', /yet/i.test(q('.tm-sync').textContent));
+  q('#tm-sync').click();
+  await settle(80);
+  ok('the club’s server now has the team', db.prepare('SELECT count(*) AS n FROM club_teams WHERE club_id = ?').get(clubId).n === 1);
+  const rows = db.prepare('SELECT * FROM club_players WHERE club_id = ? ORDER BY name').all(clubId);
+  ok('…with both players', rows.length === 2 && rows.some(r => r.licence === '50401'));
+  ok('the licensed player’s birth year and nationality status never arrived', (() => {
+    const lic = rows.find(r => r.licence === '50401');
+    return lic.birth_year === null && lic.gender === '' && !JSON.stringify(rows).includes('Inactive');
+  })());
+  ok('…while the signing with no licence kept the year only the device could supply', rows.find(r => !r.licence).birth_year === 2014);
+  ok('the device remembers it reached the club, and which team it is there', (() => {
+    const st = TM.syncStateOf(clubId, 'tlocal1');
+    return st && st.state === 'confirmed' && /^ct_/.test(st.serverId);
+  })());
+  await settle(20);
+  ok('and the screen now says when it last synced', /last synced/i.test(q('.tm-sync').textContent.toLowerCase()) || /synced/i.test(q('.tm-sync').textContent.toLowerCase()));
+  const again = db.prepare('SELECT count(*) AS n FROM club_teams WHERE club_id = ?').get(clubId).n;
+  q('#tm-sync').click();
+  await settle(80);
+  ok('pressing it again changes nothing at the club', db.prepare('SELECT count(*) AS n FROM club_teams WHERE club_id = ?').get(clubId).n === again);
+});
+
 await section('[4] Signing out and back in with the passkey alone', async () => {
   q('#logout-btn').click();
   await settle(30);
   ok('signing out returns to the sign-in screen', q('#auth-screen').classList.contains('active'));
+  ok('…and takes the club’s children off this device with it', !window.localStorage.getItem(window.__T.TEAMS.KEY) && !window.localStorage.getItem(window.__T.TEAMS.MIRROR_KEY));
+  ok('…while the club still has its own copy', db.prepare('SELECT count(*) AS n FROM club_players WHERE club_id = ?').get(clubId).n === 2);
   ok('…and the server has ended the session', (await window.fetch('/api/auth/me')).status === 401);
   q('#signin-passkey').click();
   await settle(40);

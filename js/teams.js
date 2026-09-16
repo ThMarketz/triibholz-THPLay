@@ -6,12 +6,20 @@
    players, a sheet template and staff; for every match the coach builds
    the official line-up, checks it, and downloads it as Word or PDF.
 
-   WHERE THE DATA LIVES — on this device, in localStorage, deliberately.
-   A roster is licence numbers, names, birth years and eligibility status,
-   much of it for minors, and the analysis backend has no authentication:
-   anything stored there is readable by whoever knows a team code. So
-   nothing here is sent to it. Player data comes from wpmatch.ch, which
-   publishes it; `date` (a date of birth) is never fetched — see wpmatch.js.
+   WHERE THE DATA LIVES — on this device, in localStorage, and nowhere else
+   unless a coach says so. A roster is licence numbers, names, birth years
+   and eligibility status, much of it for minors. Nothing is sent anywhere
+   automatically, ever.
+
+   When the club runs a server with accounts on (docs/ACCOUNTS.md slice 5)
+   a coach can press "Sync with the club" and send their teams to it, so
+   they survive a lost phone and follow the coach to a second device. Even
+   then the device keeps the parts the club has no use for: birth years and
+   eligibility status for a licensed player (wpmatch supplies both here,
+   from a public licence), availability, and the sheets themselves. What
+   travels is fixed by js/teamsync.js, which the server enforces on the
+   same payload. Player data comes from wpmatch.ch, which publishes it;
+   `date` (a date of birth) is never fetched — see wpmatch.js.
 
    The pure parts live elsewhere and are tested there: SHEETDOC draws,
    TEAMSHEET lays out, ELIGIBILITY judges, WPMATCH fetches. This file is
@@ -118,6 +126,116 @@ const TEAMS = (() => {
     return marked.length ? marked : players.filter(p => availOf(s, p.pid) !== 'out');
   }
 
+  /* ------------------------------------------------------------- the club's copy (slice 5)
+
+     A coach's teams are theirs, on their device. When the club runs a server with accounts on,
+     they can also put them THERE — so they survive a lost phone and follow the coach to a second
+     device. What that costs is that children's names and licence numbers leave the device, so
+     nothing here happens on its own: a coach presses a button, every time.
+
+     Three stores, and each has a reason to be separate:
+       · thplay.teams.v1      the coach's own teams — the source, still fully editable offline
+       · thplay.teams.mirror  what the club's server says, read-only, for a pool with no signal
+       · thplay.teams.sync    which local team reached the server, and when
+
+     The mirror is never merged into the coach's own store. A roster that came back from the server
+     is the club's copy of it, and quietly mixing the two would leave nobody able to say which is
+     which — least of all a coach at a pool deciding who may play.
+
+     js/teamsync.js is the contract the server enforces on the same payload, so anything refused
+     here is refused there too. */
+  const MIRROR_KEY = 'thplay.teams.mirror.v1';
+  const SYNC_KEY = 'thplay.teams.sync.v1';
+  const readJson = (k, fallback) => { try { const v = JSON.parse(localStorage.getItem(k)); return v && typeof v === 'object' ? v : fallback; } catch (e) { return fallback; } };
+  const writeJson = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
+  const loadMirror = () => readJson(MIRROR_KEY, { clubs: {} });
+  const loadSyncLog = () => readJson(SYNC_KEY, {});
+  const syncStateOf = (clubId, localId) => (loadSyncLog()[clubId + ':' + localId] || null);
+
+  /* accounts on, signed in, staff of a club — the only state in which any of this is offered */
+  function syncClub() {
+    if (typeof SESSION === 'undefined' || !SESSION.on || !SESSION.on()) return null;
+    const who = SESSION.appUser && SESSION.appUser();
+    if (!who || !['coach', 'trainer', 'super-admin'].includes(who.role) || !who.clubId) return null;
+    return { id: who.clubId, name: who.clubName, origin: (SESSION.cached() && SESSION.cached().session || {}).origin || 'legacy' };
+  }
+  /* a session opened by following somebody's link may not upload — the server refuses it too, and
+     this is only so the app does not offer a button that would be turned down */
+  const maySync = club => !!club && ['login', 'club-admin', 'staff-invite'].includes(club.origin);
+
+  /* one local player as the payload contract allows them. A licensed player's birth year, gender
+     and eligibility status are NOT sent: wpmatch supplies all three on this device, from a licence
+     that is already public, and the club's server has no use for a nationality note about a child. */
+  function forUpload(p) {
+    const o = { name: p.name || '', firstName: p.firstName || '', nameEdited: !!p.edited, nameGuessed: !!p.nameGuessed, cap: p.cap || '', gk: !!p.gk };
+    if (p.licence) o.licence = p.licence;
+    else {
+      o.localId = p.pid;
+      if (/^\d{4}$/.test(String(p.birthYear || ''))) o.birthYear = +p.birthYear;
+      if (p.gender === 'M' || p.gender === 'F') o.gender = p.gender;
+    }
+    return o;
+  }
+  const payloadFor = (d, t) => ({
+    localId: t.id, name: t.name || '', category: t.category, leagueLabel: t.leagueLabel || '',
+    season: (typeof ELIGIBILITY !== 'undefined' ? ELIGIBILITY.seasonOf(new Date().toISOString()).start : new Date().getFullYear()),
+    players: roster(d, t).map(forUpload),
+  });
+
+  /* Send one team. The device writes "sending" before it asks and "confirmed" only after the
+     answer accounts for everything it sent (TEAMSYNC.manifestOk) — so a proxy that truncated the
+     list, a server that stored half of it, or an answer meant for another team all leave the local
+     copy exactly as it was, and the coach is told it did not go. */
+  async function syncTeam(clubId, t) {
+    const d = load();
+    const payload = payloadFor(d, t);
+    const checked = TEAMSYNC.sanitizeTeam(payload);
+    if (!checked.ok) return { ok: false, error: checked.error, localId: t.id };
+    const log = loadSyncLog();
+    log[clubId + ':' + t.id] = { state: 'sending', at: Date.now() };
+    if (!writeJson(SYNC_KEY, log)) return { ok: false, error: 'no-room', localId: t.id };
+    let answer;
+    try { answer = await SESSION.api(`/api/clubs/${clubId}/teams`, { method: 'POST', body: payload }); }
+    catch (e) { return { ok: false, error: e.error || 'failed', status: e.status, localId: t.id }; }
+    if (!TEAMSYNC.manifestOk(checked.value, answer)) return { ok: false, error: 'manifest-mismatch', localId: t.id };
+    const log2 = loadSyncLog();
+    log2[clubId + ':' + t.id] = { state: 'confirmed', at: answer.at, serverId: answer.team.id, rev: answer.team.rev };
+    writeJson(SYNC_KEY, log2);
+    return { ok: true, localId: t.id, manifest: answer };
+  }
+
+  /* Every team this device holds, then the club's own list back — so the coach sees the teams a
+     colleague uploaded as well, read-only, with the moment the server said it was. */
+  async function syncAll(clubId, onStep) {
+    const d = load();
+    const out = { sent: 0, failed: 0, conflicts: [], errors: [] };
+    for (const t of d.teams) {
+      if (onStep) onStep(t.name);
+      const r = await syncTeam(clubId, t);
+      if (r.ok) { out.sent++; (r.manifest.conflicts || []).forEach(c => out.conflicts.push(c)); }
+      else { out.failed++; out.errors.push(r); }
+    }
+    try {
+      const list = await SESSION.api(`/api/clubs/${clubId}/teams`);
+      const m = loadMirror();
+      m.clubs[clubId] = { syncedAt: list.at, scope: list.scope, teams: list.teams };
+      writeJson(MIRROR_KEY, m);
+      out.syncedAt = list.at;
+    } catch (e) { out.errors.push({ error: e.error || 'failed', status: e.status }); }
+    return out;
+  }
+
+  /* Sign-out leaves nothing behind. Everything a roster touches, plus the module's own state — a
+     shared laptop at a club is the ordinary case, not the exotic one. The server is asked to end
+     the session separately; this runs either way, because a wipe that depends on the network is
+     not a wipe. */
+  function wipeDevice() {
+    [KEY, MIRROR_KEY, SYNC_KEY, CARD_KEY].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+    db = blank();
+    ui.teamId = null; ui.sheetId = null; ui.tplId = null; ui.tab = 'teams'; ui.notice = ''; ui.progress = '';
+    return true;
+  }
+
   /* A sheet's rows → the shape ELIGIBILITY and TEAMSHEET both read. */
   function lineupOf(d, sheet) {
     return (sheet.rows || []).map(r => {
@@ -161,6 +279,60 @@ const TEAMS = (() => {
     return `<span class="tm-status tm-${cls}">${esc(T('tm.status.' + s))}</span>`;
   };
 
+  /* A refusal in the coach's words. Never the raw code: "409" tells a coach nothing they can act on. */
+  function syncWhy(e) {
+    if (!e) return T('tm.whyUnknown');
+    if (e.status === 0 || e.error === 'offline') return T('tm.whyOffline');
+    if (e.status === 403 && e.error === 'full-sign-in-required') return T('tm.whyNeedsSignIn');
+    if (e.status === 403) return T('tm.whyNeedsPasskey');
+    if (e.status === 409 && e.error === 'too-many-teams') return T('tm.whyTooManyTeams');
+    if (e.status === 409) return T('tm.whyChanged');
+    if (e.status === 429) return T('tm.whyTooOften');
+    if (e.error === 'manifest-mismatch') return T('tm.whyNotConfirmed');
+    if (e.error === 'no-room') return T('tm.whyNoRoom');
+    if (String(e.error || '').startsWith('bad-') || e.error === 'too-many-players' || e.error === 'duplicate-player') return T('tm.whyRefused', { what: String(e.error) });
+    return T('tm.whyUnknown');
+  }
+
+  /* ---------- the club's copy: one button, and what it last said.
+     Nothing syncs by itself. A roster is children's names, so it leaves this device when a coach
+     decides it does and not a moment before. */
+  function syncBar() {
+    const club = syncClub();
+    if (!club) return '';
+    const m = loadMirror().clubs[club.id] || null;
+    const when = m && m.syncedAt ? new Date(m.syncedAt).toLocaleString() : null;
+    if (!maySync(club)) {
+      return `<div class="film-panel tm-sync"><p class="muted">${T('tm.syncNeedsSignIn')}</p></div>`;
+    }
+    return `<div class="film-panel tm-sync">
+      <div class="tm-sync-head">
+        <div><strong>${T('tm.syncTitle', { club: esc(club.name || '') })}</strong>
+          <p class="muted">${when ? T('tm.syncLast', { date: esc(when) }) : T('tm.syncNever')}</p></div>
+        <button class="btn-primary sm" id="tm-sync" ${ui.busy ? 'disabled' : ''}>${ui.busy ? esc(ui.busy) : T('tm.syncNow')}</button>
+      </div>
+      <p class="fa-note">${T('tm.syncWhat')}</p>
+      ${ui.notice ? `<p class="tm-sync-said">${esc(ui.notice)}</p>` : ''}</div>`;
+  }
+
+  /* Teams the club's server has that this device did not make — a colleague's, or this coach's own
+     from another device. Read-only on purpose: the copy that may be edited is the one on the
+     device that owns it, and two editable copies of a roster is how a child ends up on the wrong
+     sheet at a pool. */
+  function mirrorList() {
+    const club = syncClub();
+    if (!club) return '';
+    const m = loadMirror().clubs[club.id];
+    if (!m || !m.teams || !m.teams.length) return '';
+    const mine = new Set(db.teams.map(t => syncStateOf(club.id, t.id)).filter(Boolean).map(x => x.serverId));
+    const others = m.teams.filter(t => !mine.has(t.id));
+    if (!others.length) return '';
+    return `<details class="film-panel tm-mirror"><summary><h3>${T('tm.mirrorTitle', { n: others.length })}</h3></summary>
+      <p class="fa-note">${T('tm.mirrorNote')}</p>
+      <ul class="tm-mirror-list">${others.map(t => `<li><strong>${esc(t.name)}</strong> <span class="tag">${esc(catLabel(t.category))}</span>
+        <span class="muted">${T('tm.nPlayers', { n: t.players })}${t.mine ? '' : ' · ' + T('tm.mirrorTheirs')}</span></li>`).join('')}</ul></details>`;
+  }
+
   /* ---------- team list */
   function drawTeamList() {
     const cards = db.teams.map(t => {
@@ -172,7 +344,9 @@ const TEAMS = (() => {
     return `<div class="dash-head"><div><h1>${T('tm.title')}</h1><p class="dash-sub">${T('tm.sub')}</p></div></div>
       ${tabs()}
       <div class="tm-actions"><button class="btn-primary sm" id="tm-new-team">${T('tm.newTeam')}</button></div>
-      ${cards ? `<div class="tm-grid">${cards}</div>` : `<div class="film-panel"><p class="muted">${T('tm.noTeams')}</p></div>`}`;
+      ${syncBar()}
+      ${cards ? `<div class="tm-grid">${cards}</div>` : `<div class="film-panel"><p class="muted">${T('tm.noTeams')}</p></div>`}
+      ${mirrorList()}`;
   }
   const tabs = () => `<div class="tm-tabs">
       <button class="phase-btn ${ui.tab === 'teams' ? 'active' : ''}" data-tab="teams">${T('tm.tabTeams')}</button>
@@ -401,6 +575,21 @@ const TEAMS = (() => {
 
   function wire() {
     $$('[data-tab]').forEach(b => b.onclick = () => { ui.tab = b.dataset.tab; draw(); });
+    on('#tm-sync', 'click', async () => {
+      const club = syncClub();
+      if (!club || ui.busy) return;
+      ui.busy = T('tm.syncing'); ui.notice = ''; draw();
+      const r = await syncAll(club.id, name => { ui.busy = T('tm.syncingTeam', { name }); draw(); });
+      ui.busy = '';
+      const said = [];
+      if (r.sent) said.push(T('tm.syncSent', { n: r.sent }));
+      if (r.failed) said.push(T('tm.syncFailed', { n: r.failed, why: syncWhy(r.errors[0]) }));
+      r.conflicts.forEach(c => said.push(c.team
+        ? T('tm.syncConflictNamed', { players: c.players.join(', '), team: c.team })
+        : T('tm.syncConflict', { players: c.players.join(', ') })));
+      ui.notice = said.join(' · ') || T('tm.syncNothing');
+      draw();
+    });
     on('#tm-new-team', 'click', () => {
       const t = { id: uid('t'), name: T('tm.newTeamName'), category: 'U14', club: '', leagueLabel: '', templateId: 'sa-2025', staff: {}, rules: {}, players: [], wpmatch: null };
       db.teams.push(t); persist(); ui.teamId = t.id; ui.notice = ''; draw();
@@ -713,8 +902,9 @@ const TEAMS = (() => {
     .ts-t{width:100%;border-collapse:collapse;margin:0 0 16pt}.ts-t td,.ts-t th{border:1px solid #000;padding:3pt 5pt;text-align:left;vertical-align:top;font-weight:400}
     .ts-roster td{height:14pt}.ts-sign td{height:30pt}.ts-2nd{color:#555}.ts-note p{margin:2pt 0;font-weight:700}.ts-lead{color:#e4002b}.ts-i{font-style:italic}`;
 
-  return { KEY, CARD_KEY, CATEGORY_ORDER, render, renderPlayerCard, load, save, upsertPlayers, autoOrder, lineupOf, allTemplates,
-           availOf, setAvailability, availabilityCounts, availablePool };
+  return { KEY, CARD_KEY, MIRROR_KEY, SYNC_KEY, CATEGORY_ORDER, render, renderPlayerCard, load, save, upsertPlayers, autoOrder, lineupOf, allTemplates,
+           availOf, setAvailability, availabilityCounts, availablePool,
+           syncClub, maySync, payloadFor, forUpload, syncTeam, syncAll, loadMirror, syncStateOf, wipeDevice };
 })();
 
 // Node/CommonJS interop (no-op in the browser)

@@ -336,9 +336,11 @@ function createAuth({ db, cfg, now = Date.now }) {
       storeCredential(user.id, v, t, ch.club_id);
       if (previous) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(previous.tokenHash);   // this browser is someone new now
       // payload.kind comes from the challenge row, never from the request body
-      return { userId: user.id, cookie: createSession(user.id, v.credentialId, v.uv, t, payload.kind) };
+      return { userId: user.id, uv: !!v.uv, origin: payload.kind, cookie: createSession(user.id, v.credentialId, v.uv, t, payload.kind) };
     });
-    send(res, 200, whoami(out.userId), out.cookie);
+    // the app is told about the session it now has, not just who it belongs to: how a session began
+    // decides what it may do (server/teams.js), and /api/auth/me is not asked again until a reload
+    send(res, 200, whoami(out.userId, { uv: out.uv, origin: out.origin }), out.cookie);
   }
 
   async function loginOptions(req, res) {
@@ -400,7 +402,7 @@ function createAuth({ db, cfg, now = Date.now }) {
       ID.audit(db, { actor: cred.user_id, action: 'session.start', subject: cred.user_id, detail: { credential: cred.id.slice(0, 12), uv: v.uv } }, t);
       return createSession(cred.user_id, cred.id, v.uv, t, 'login');
     });
-    send(res, 200, whoami(cred.user_id), cookie);
+    send(res, 200, whoami(cred.user_id, { uv: !!v.uv, origin: 'login' }), cookie);
   }
 
   async function logout(req, res) {

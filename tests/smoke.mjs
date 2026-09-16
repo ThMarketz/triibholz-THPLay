@@ -19,9 +19,9 @@ window.Response = window.Response || globalThis.Response;
 if (!window.Blob.prototype.text) window.Blob.prototype.text = function () { return new Promise((res, rej) => { const r = new window.FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsText(this); }); };
 if (!window.Blob.prototype.arrayBuffer) window.Blob.prototype.arrayBuffer = function () { return new Promise((res, rej) => { const r = new window.FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsArrayBuffer(this); }); };
 
-const files = ['js/theme.js','js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/chart.js','js/sheetdoc.js','js/eligibility.js','js/teamsheet.js','js/teams.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/api.js','js/session.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/theme.js','js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/chart.js','js/sheetdoc.js','js/eligibility.js','js/teamsheet.js','js/teamsync.js','js/teams.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/api.js','js/session.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { THEME, CHART, API, SESSION, POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET , TEAMS };';
+  + '\n;\nwindow.__T = { THEME, CHART, API, SESSION, POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET , TEAMSYNC , TEAMS };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -2158,6 +2158,54 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('the spy really is listening (a fetch made now is recorded)', (() => { const n = netLog.length; window.fetch('/spy-probe').catch(() => {}); return netLog.length === n + 1; })());
     ok('no licence number or name left the device while building the sheet', !netLog.some(l => /5010[1-5]|Huber|Brunner/.test(l)));
     window.fetch = realFetch;
+  }
+
+  console.log('\n[15b] What a roster is allowed to send to the club, and what sign-out takes with it');
+  {
+    const { TEAMSYNC: TS, TEAMS: TM } = window.__T;
+    ok('the three lists of categories cannot drift apart', JSON.stringify(TS.CATEGORIES) === JSON.stringify(TM.CATEGORY_ORDER)
+      && TS.CATEGORIES.filter(c => c !== 'CUSTOM').every(c => !!window.__T.ELIGIBILITY.CATEGORIES[c]));
+
+    const licensed = { pid: 'L50101', licence: '50101', name: 'Huber', firstName: 'Mia', birthYear: '2013', gender: 'F', status: 'Ausländer-Étranger', cap: '4', gk: false, edited: true, wpId: 3400 };
+    const sent = TM.forUpload(licensed);
+    ok('a licensed player travels as a licence, a name and a cap — nothing else', JSON.stringify(Object.keys(sent).sort()) === JSON.stringify(['cap', 'firstName', 'gk', 'licence', 'name', 'nameEdited', 'nameGuessed'].sort()));
+    ok('…so their birth year never leaves the device', sent.birthYear === undefined && !('birthYear' in sent));
+    ok('…and neither does what wpmatch says about their nationality', !JSON.stringify(sent).includes('Ausl') && sent.status === undefined);
+    const pending = TM.forUpload({ pid: 'm7a', licence: '', name: 'Neue', firstName: 'Spielerin', birthYear: '2013', gender: 'F' });
+    ok('a signing with no licence yet takes the year only this device can supply', pending.localId === 'm7a' && pending.birthYear === 2013 && pending.gender === 'F');
+    ok('the server would accept exactly what this builds', TS.sanitizePlayer(sent).ok === true && TS.sanitizePlayer(pending).ok === true);
+
+    const store = { teams: [{ id: 't1', name: 'U14 blue', category: 'U14', leagueLabel: '', players: ['L50101'] }], players: { L50101: licensed }, templates: [], sheets: [] };
+    const payload = TM.payloadFor(store, store.teams[0]);
+    ok('a whole team is built into something the contract accepts', TS.sanitizeTeam(payload).ok === true && payload.players.length === 1);
+    ok('…carrying no availability and no sheets', payload.availability === undefined && payload.sheets === undefined);
+    ok('…and a season, so last season’s team is not this season’s', Number.isInteger(payload.season) && payload.season >= 2024);
+
+    // what the device does when the club's answer is not a confirmation, and what it never sends
+    const realApi = window.__T.SESSION.api;
+    let asked = 0, lastBody = null;
+    window.localStorage.setItem(TM.KEY, JSON.stringify({ version: 1, templates: [], sheets: [],
+      teams: [{ id: 'tX', name: 'U14 blue', category: 'U14', leagueLabel: '', players: ['L50101'] },
+              { id: 'tBad', name: 'Nonsense', category: 'U13', leagueLabel: '', players: [] }],
+      players: { L50101: licensed } }));
+    window.__T.SESSION.api = async (path, opts) => { asked++; lastBody = opts && opts.body; return { at: 1, team: { localId: 'tX', id: 'ct_stub' }, players: [] }; };
+    const dropped = await TM.syncTeam('c_stub', TM.load().teams[0]);
+    ok('an answer that quietly dropped a player is not a confirmation', dropped.ok === false && dropped.error === 'manifest-mismatch');
+    ok('…and the device does not mark that team as sent', (TM.syncStateOf('c_stub', 'tX') || {}).state !== 'confirmed');
+    ok('…while what it did send carried the licence and no birth year', !!lastBody && lastBody.players[0].licence === '50101' && lastBody.players[0].birthYear === undefined);
+    const before = asked;
+    const refused = await TM.syncTeam('c_stub', TM.load().teams[1]);
+    ok('a team the shared contract refuses never leaves the device at all', refused.ok === false && refused.error === 'bad-category' && asked === before);
+    window.__T.SESSION.api = realApi;
+    ok('the upload is not offered in a session opened by following somebody’s link', TM.maySync({ origin: 'join' }) === false && TM.maySync({ origin: 'recover' }) === false && TM.maySync({ origin: 'login' }) === true);
+
+    window.localStorage.setItem(TM.MIRROR_KEY, JSON.stringify({ clubs: { c_x: { syncedAt: 1, teams: [] } } }));
+    window.localStorage.setItem(TM.SYNC_KEY, JSON.stringify({ 'c_x:t1': { state: 'confirmed' } }));
+    window.localStorage.setItem(TM.CARD_KEY, JSON.stringify({ player: { licence: '50101' } }));
+    ok('there is something to lose before signing out', !!window.localStorage.getItem(TM.KEY) && !!window.localStorage.getItem(TM.CARD_KEY));
+    TM.wipeDevice();
+    ok('signing out leaves no roster, no club copy, no sync log and no player card', [TM.KEY, TM.MIRROR_KEY, TM.SYNC_KEY, TM.CARD_KEY].every(k => !window.localStorage.getItem(k)));
+    ok('…and the module is not still holding the last team it drew', TM.load().teams.length === 0);
   }
 
   console.log('\n[16] Service worker — the club server is never cached, and only good answers are');
