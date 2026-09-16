@@ -2116,6 +2116,23 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('the team list shows the team', qa('#view-teams [data-team]').length === 1 && /U14 A/.test(q('#view-teams').textContent));
     q('#view-teams [data-team="t1"]').click(); await wait(40);
     ok('its roster lists every player with their status', qa('#view-teams .tm-roster tbody tr').length === 4 && /Inactive licence/.test(q('#view-teams .tm-roster').textContent));
+    {
+      // naming a team used to work only if the coach found the Save button first
+      const nameBox = q('#view-teams #tm-name');
+      if (nameBox) {
+        nameBox.value = 'U14 Dolphins (ours)';
+        nameBox.dispatchEvent(new window.Event('change', { bubbles: true }));
+        await wait(20);
+        ok('a team name is kept as soon as the coach leaves the box', (JSON.parse(window.localStorage.getItem(TM.KEY)).teams[0] || {}).name === 'U14 Dolphins (ours)');
+        nameBox.value = 'U14 Dolphins';
+        q('#view-teams #tm-back').click();
+        await wait(40);
+        ok('…and pressing “all teams” keeps it too, instead of throwing it away', (JSON.parse(window.localStorage.getItem(TM.KEY)).teams[0] || {}).name === 'U14 Dolphins');
+        q('#view-teams .tm-card').click();
+        await wait(40);
+      }
+    }
+
     q('#tm-new-sheet').click(); await wait(40);
     ok('a new sheet has one row per line of the official form (14)', qa('#view-teams .tm-lineup tbody tr').length === 14);
     ok('the keeper is placed in cap 1', q('#view-teams [data-row="0"]').value === 'L50101' && q('#view-teams [data-rowgk="0"]').checked);

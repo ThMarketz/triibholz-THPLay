@@ -772,8 +772,15 @@ const TEAMS = (() => {
     else delete t.rules.foreigners;
   }
 
+  /* The settings form is read back whenever the coach leaves it, not only when they press Save.
+     Before this, typing a team name and then pressing "All teams" or "Find team players" threw the
+     name away without a word — which made naming a team feel impossible, because it was. */
+  const keepTeamForm = t => { if ($('#tm-name')) { readTeamForm(t); persist(); } };
+
   function wireTeam(t) {
-    on('#tm-back', 'click', () => { ui.teamId = null; ui.notice = ''; ui.progress = ''; draw(); });
+    on('#tm-back', 'click', () => { keepTeamForm(t); ui.teamId = null; ui.notice = ''; ui.progress = ''; draw(); });
+    // and as soon as a field is left, so a name survives anything else that redraws the screen
+    $$('#tm-name, #tm-cat, #tm-club, #tm-league, #tm-tpl, #tm-coach, #tm-a1, #tm-a2').forEach(el => el.addEventListener('change', () => keepTeamForm(t)));
     on('#tm-save-team', 'click', () => { readTeamForm(t); persist(); toast(T('tm.teamSaved')); draw(); });
     on('#tm-delete-team', 'click', async () => {
       if (!confirm(T('tm.confirmDeleteTeam', { name: t.name }))) return;
@@ -813,6 +820,7 @@ const TEAMS = (() => {
       ui.busy = ''; ui.progress = ''; draw();
     });
     on('#tm-crawl', 'click', async () => {
+      keepTeamForm(t);
       ui.busy = 'crawl'; ui.notice = ''; ui.progress = T('tm.crawlStart'); draw();
       try {
         const found = await WPMATCH.fetchTeamPlayers(t.wpmatch.id, { onProgress: (p, n) => { ui.progress = T('tm.crawlProgress', { page: p, pages: n }); const el = $('.tm-progress'); if (el) el.textContent = ui.progress; } });
