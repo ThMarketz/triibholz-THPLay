@@ -19,6 +19,7 @@ const DB = require('./db.js');
 const ID = require('./identity.js');
 const { loadConfig } = require('./config.js');
 const LEGACY = require('./legacy.js');
+const DEMO = require('./demo.js');
 
 const mb = n => n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} kB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
 
@@ -36,6 +37,9 @@ const HELP = `Triibholz operator commands
   legacy                           what was on the volume before accounts and now belongs to nobody
   adopt <club-id> [kind…]          give that to one club (default: everything but calendars)
   forget --yes [kind…]             delete it, permanently
+
+  demo                             a sandbox club with an invented squad, to look at (no sign-in of its own)
+  demo-remove <club-id>            delete a sandbox club and everything in it
 
   Database: $DATA_DIR/triibholz.db (DATA_DIR=${process.env.DATA_DIR || '(unset → server/data)'})`;
 
@@ -139,6 +143,21 @@ function main(argv, { now = Date.now(), out = console.log, err = console.error, 
         }
         const done = LEGACY.forget(db, dataDir, { kinds: chosen, now });
         out(`deleted ${Object.values(done).reduce((a, b) => a + b, 0)} item(s): ${JSON.stringify(done)}`);
+        return 0;
+      }
+      case 'demo': {
+        const d = DEMO.seed(db, dataDir, { now });
+        out(`sandbox club created: ${d.clubId}  "${d.name}"\n  ${d.members.length} invented members, one team note, one match review\n`);
+        out(`Nobody in it can sign in — they have no passkey, on purpose. Become its admin with your own:\n\n  ${d.code}\n`);
+        const url = link('invite', d.code); if (url) out(`  ${url}\n`);
+        out(`Valid until ${new Date(d.expiresAt).toISOString()}. When you are done: node admin.js demo-remove ${d.clubId}`);
+        return 0;
+      }
+      case 'demo-remove': {
+        const clubId = need(args[0], 'club id');
+        const club = ID.getClub(db, clubId); if (!club) throw Object.assign(new Error(`no club ${clubId}`), { code: 'not-found' });
+        const r = DEMO.remove(db, dataDir, { clubId });
+        out(`"${club.name}" is gone: ${r.files} record(s), ${r.people} invented person/people. Anyone who had signed in for real was left alone.`);
         return 0;
       }
       default:

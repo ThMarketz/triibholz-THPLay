@@ -22,7 +22,7 @@ the rules below, not a footnote.
 | 1 | Database, migrations, `tx()`, configuration checks, operator CLI, last-admin rule | **done** (02d9042) |
 | 2 | Passkey registration and sign-in, sessions, behind `ACCOUNTS=1`; nothing depends on it yet | **done** — server only; the app still signs in the simulated way |
 | 3 | Clubs and memberships: invites, join codes, approvals, roles, removal, step-up, UV for staff | **done** — server only |
-| 4 | The switch, in one release: the app signs in for real; every existing endpoint authorized | **done** — server (5d7733d), app (e366672), sending a cut moment from the Film Room (faf789a), the announcement composer (2d9c24c) and the operator's legacy-data commands; only the `DEMO=1` sandbox club is still to come |
+| 4 | The switch, in one release: the app signs in for real; every existing endpoint authorized | **done** — server (5d7733d), app (e366672), the Film Room moment (faf789a), the announcement composer (2d9c24c), the operator's legacy-data commands (bf5df87) and the sandbox club |
 | 5 | Teams, rosters, sheets, templates on the server; read-only offline copy for staff | |
 | 6 | Devices: QR pairing with approval on the old device, devices page, revocation | |
 | 7 | Recovery with a hold period; player and guardian links | |
@@ -387,10 +387,10 @@ becomes the club console: requests with their four-digit numbers, members and ro
 per-person invites, each sensitive action re-asking for the passkey. Every call carries the app's
 version, so a server that has moved on answers `426 update the app`.
 
-Still to do in this area: the announcement composer addressing one player by member ref (coaches
-cannot see the member list until slice 5, so they send club-wide notes for now), the `DEMO=1`
-sandbox club for the browser suite, and the operator tools for data written before accounts. (The hard-coded `TRII-2026` team code is already gone: each install makes its own code once,
-and the invite link carries it in the fragment — see [TEAM_SHEETS.md](TEAM_SHEETS.md).)
+The composer now addresses one player by member ref, the operator has commands for the data that
+predates accounts, and there is a sandbox club to look at — slice 4 is finished. (The hard-coded
+`TRII-2026` team code is already gone: each install makes its own code once, and the invite link
+carries it in the fragment — see [TEAM_SHEETS.md](TEAM_SHEETS.md).)
 
 ## The switch (slice 4)
 
@@ -438,7 +438,27 @@ One release, because half-authorized is worse than either state:
   operator deletes it on purpose. A feed the server itself issued is never listed as ownerless —
   it is a live subscription, and `forget --yes` must not touch it.
 - Old installed apps get `426 Update the app`.
-- Demo: a `DEMO=1` sandbox club with fictional users for tests; local-only on production.
+- Demo: a sandbox club to look at — `node admin.js demo`, and `demo-remove <club-id>` to undo it.
+
+  **This is not what the line above originally said, and the difference is the point.** The plan
+  asked for "a `DEMO=1` sandbox club with fictional users for tests". Fictional users a test can
+  *sign in as* is a sign-in backdoor by another name: a second way past the passkey, in the same
+  binary as the first, one environment variable away from production. So `server/demo.js` builds
+  the useful half and none of that:
+
+  - it is an **operator command, never a startup path and never an environment flag** — nothing
+    brings a demo club into being by being misconfigured;
+  - the invented squad has **no credentials at all**. Those people cannot sign in, here or
+    anywhere. They exist so the member list, the addressee list and a team note have someone in
+    them;
+  - a real person becomes the demo club's admin exactly like any other: with the invite the
+    command prints, and their own passkey;
+  - everything is obviously invented — the club is "Sandbox WPC (demo)" and the squad are
+    Alpha…Hotel, each name ending in "(demo)". No real person's name, licence number or date of
+    birth goes anywhere near it.
+
+  `demo-remove` deletes the club, its records and its invented people — and never anyone who has
+  a passkey or belongs to another club as well.
 
 ## Server-side teams (slice 5)
 
@@ -561,6 +581,8 @@ HTTP and sessions, transactions, hostile input), each finding reproduced with a 
   single use, expiry, revocation, a race between two connections, a failed grant returns the
   code), the last-admin rule (demote, remove, delete, raw SQL, pending admin), sessions and purge,
   the CLI as a real process, [8b] the legacy commands (what is listed, what adoption writes, what
-  it refuses to touch, a live feed left alone, `forget` without `--yes` deleting nothing), and
-  server startup refusing a bad configuration. Also run inside the
+  it refuses to touch, a live feed left alone, `forget` without `--yes` deleting nothing), [8c] the
+  sandbox club (invented names, no credentials anywhere in it, an ordinary invite for a real admin,
+  and a removal that never takes a real person with it), and server startup refusing a bad
+  configuration. Also run inside the
   production image (Node 22.23.2). Every protection was fault-injected: removing it fails a check.

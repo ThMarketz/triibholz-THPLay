@@ -67,6 +67,9 @@ answer.
 - **Env**: `PORT` `DATA_DIR` `CONCURRENCY` `MAX_BODY` `MAX_UPLOAD` `FFMPEG` `MODEL_ENDPOINT`.
 - **Accounts** (off unless `ACCOUNTS=1`): `RP_ID` `APP_ORIGINS` `DEV` — checked at startup;
   `node admin.js help` for the operator commands. See `docs/ACCOUNTS.md`.
+- **Something to look at**: `node admin.js demo` seeds a sandbox club with an invented squad (no
+  passkeys — it is not a way in) and prints an invite so a real person can be its admin;
+  `demo-remove <club-id>` undoes it. See `server/demo.js`.
 - **Turning accounts on for a volume that already has data**: everything already there belongs to
   nobody and is served to nobody. `node admin.js legacy` shows it, `adopt <club-id>` gives it to a
   club, `forget --yes` deletes it. Nothing happens automatically — see `server/legacy.js`.

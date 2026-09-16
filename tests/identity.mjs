@@ -16,6 +16,7 @@ const { loadConfig, assertConfig } = require('../server/config.js');
 const DB = require('../server/db.js');
 const ID = require('../server/identity.js');
 const LEGACY = require('../server/legacy.js');
+const DEMO = require('../server/demo.js');
 
 let pass = 0, fail = 0;
 const ok = (n, c) => { if (c) { pass++; console.log('  ✓', n); } else { fail++; console.log('  ✗ FAIL:', n); } };
@@ -301,6 +302,57 @@ section('[8b] What was on the volume before accounts: see it, adopt it, or delet
     return threw && !JSON.parse(readFileSync(join(dir, 'debriefs', 'd2.json'), 'utf8')).clubId;
   })());
   db2.close();
+});
+
+section('[8c] A sandbox club to look at — with no way in of its own', () => {
+  const dir = tmp();
+  const env = { ...process.env, DATA_DIR: dir, ACCOUNTS: '1', RP_ID: 'localhost', DEV: '1', APP_ORIGINS: 'http://localhost:8088', NODE_NO_WARNINGS: '1' };
+  const cli = (...args) => { const r = spawnSync(process.execPath, [join(SERVER, 'admin.js'), ...args], { env, encoding: 'utf8' }); return { code: r.status, out: r.stdout, err: r.stderr }; };
+
+  const made = cli('demo');
+  const clubId = (made.out.match(/sandbox club created: (c_[\w-]+)/) || [])[1];
+  const code = (made.out.match(/\b([0-9A-Z]{5}(?:-[0-9A-Z]{5}){4}-[0-9A-Z])\b/) || [])[1];
+  ok('demo makes a club, an invented squad and something to read', made.code === 0 && !!clubId && /8 invented members/.test(made.out));
+  const db3 = DB.open(join(dir, 'triibholz.db'));
+  ok('…everyone in it is marked as invented, so nobody mistakes them for a player', db3.prepare('SELECT display_name FROM users').all().every(u => /\(demo\)$/.test(u.display_name)));
+  ok('…and not one of them has a passkey: the squad is not a way in', db3.prepare('SELECT count(*) AS n FROM credentials').get().n === 0);
+  ok('…the club is named so it cannot be confused with a real one', /\(demo\)/.test(ID.getClub(db3, clubId).name));
+  ok('…a real person becomes its admin with their own passkey, through an ordinary invite', !!code && (() => {
+    const row = ID.consumeCode(db3, { code, kind: 'club-admin' }, Date.now());
+    return row && row.club_id === clubId && row.role === 'admin';
+  })());
+  ok('…its note and its review belong to that club, like any other record', (() => {
+    const a = JSON.parse(readFileSync(join(dir, 'announcements', readdirSync(join(dir, 'announcements'))[0]), 'utf8'));
+    return a.clubId === clubId && a.scope === 'team';
+  })());
+  ok('…and it is not ownerless data: nothing for the operator to adopt', !/announcements/.test(cli('legacy').out));
+
+  // somebody who signed in for real, and somebody who is also in another club
+  const realUser = ID.createUser(db3, { displayName: 'Real Person' }, Date.now()).id;
+  ID.addMember(db3, { clubId, userId: realUser, role: 'player', status: 'approved', actor: 'operator', action: 'member.add' }, Date.now());
+  db3.prepare("INSERT INTO credentials (id, user_id, public_key_jwk, alg, created_at) VALUES ('cred1', ?, '{}', -7, ?)").run(realUser, Date.now());
+  const otherClub = ID.createClub(db3, { name: 'Real WPC', actor: 'operator' }, Date.now());
+  const shared = ID.createUser(db3, { displayName: 'Two Clubs' }, Date.now()).id;
+  ID.addMember(db3, { clubId, userId: shared, role: 'player', status: 'approved', actor: 'operator', action: 'member.add' }, Date.now());
+  ID.addMember(db3, { clubId: otherClub, userId: shared, role: 'player', status: 'approved', actor: 'operator', action: 'member.add' }, Date.now());
+  db3.close();
+
+  const gone = cli('demo-remove', clubId);
+  ok('demo-remove takes the club and its records with it', gone.code === 0 && !readdirSync(join(dir, 'announcements')).length && !readdirSync(join(dir, 'debriefs')).length);
+  const db4 = DB.open(join(dir, 'triibholz.db'));
+  ok('…and the invented people', !ID.getClub(db4, clubId) && db4.prepare("SELECT count(*) AS n FROM users WHERE display_name LIKE '%(demo)'").get().n === 0);
+  ok('…but never someone who had signed in for real', !!ID.getUser(db4, realUser));
+  ok('…nor someone who belongs to another club too', !!ID.getUser(db4, shared) && !!db4.prepare('SELECT 1 FROM club_members WHERE user_id = ? AND club_id = ?').get(shared, otherClub));
+  ok('removing a club that is not there fails, rather than deleting something else', cli('demo-remove', 'c_nope').code === 1 && !!ID.getClub(db4, otherClub));
+  // called directly, not through the CLI: remove() must refuse an unknown club rather than sweep
+  // every record and person that happens to match nothing
+  ok('remove() itself refuses an unknown club, and touches nobody', (() => {
+    const before = db4.prepare('SELECT count(*) AS n FROM users').get().n;
+    let threw = false;
+    try { DEMO.remove(db4, dir, { clubId: 'c_doesnotexist' }); } catch (e) { threw = e.code === 'not-found'; }
+    return threw && db4.prepare('SELECT count(*) AS n FROM users').get().n === before;
+  })());
+  db4.close();
 });
 
 section('[9] Server startup', () => {
