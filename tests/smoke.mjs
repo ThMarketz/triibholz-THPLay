@@ -2377,6 +2377,10 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
       q('.nav-btn[data-view="teams"]').click(); await wait(80);
       const card = q('#view-teams .tm-card'); if (card) { card.click(); await wait(80); }
       ok('a coach can see their own team’s season figures without scouting themselves', !!q('#view-teams .tm-ours'));
+      /* and an opponent can be looked up from the team itself. A sheet cannot be made until the
+         team has players, so putting this only on the sheet hid it behind filling in a roster. */
+      ok('…and can scout an opponent from the team page too, not only from a sheet',
+        !!q('#view-teams .tm-scout-panel') && !!q('#view-teams #tm-scout-who') && !!q('#view-teams #tm-scout'));
       const oursBtn = q('#view-teams #tm-ours');
       ok('…once the team is linked to its wpmatch squad', !!oursBtn);
       if (!oursBtn) console.log('   (skipped the rest: no #tm-ours button)');

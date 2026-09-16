@@ -55,12 +55,14 @@ empty, and inferring a goalkeeper from a cap number is wrong in both directions)
 |---|---|
 | **Our own season figures** | Teams → the team → **Our season figures** → *Show season figures* |
 | **One player's own line** | the **ⓘ** beside any name, on the roster and on the availability list |
-| **The opponent** | Teams → the team → a match sheet → **📋 Scout the opponent** |
+| **The opponent** | Teams → the team → **Scout an opponent** (type the name) — or from a match sheet, where the fixture fills it in |
 | Per-match figures | Season → a played fixture → the box score |
 | Your club's own test results | My Development |
 
-Scouting an opponent needs the opponent's name first: pick the fixture, or type it into the
-**Opponent** field. Pressing the button with that field empty used to search *our own* team's name
+Scouting an opponent needs the opponent's name first. It sits on the team page with its own
+**Opponent** box, and also on a match sheet, where picking the fixture fills the name in. It was
+originally only on the sheet — which hid it completely, because **New team sheet is disabled until
+the team has players**, so a coach setting a team up could not reach it at all. Pressing the button with that field empty used to search *our own* team's name
 and hand back our own squad — which reads as wpmatch being broken rather than as a field not filled
 in. It now says which one to do.
 

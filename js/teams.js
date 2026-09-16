@@ -385,7 +385,7 @@ const TEAMS = (() => {
 
   /* ------------------------------------------------------------- screens */
   let root = null, ctx = {}, db = blank();
-  const ui = { tab: 'teams', teamId: null, sheetId: null, tplId: null, busy: '', progress: '', notice: '', scout: null, ours: null };
+  const ui = { tab: 'teams', teamId: null, sheetId: null, tplId: null, busy: '', progress: '', notice: '', scout: null, ours: null, scoutWho: '' };
 
   function render(container, context) {
     root = container; ctx = context || {}; db = load();
@@ -533,6 +533,19 @@ const TEAMS = (() => {
   }
   const forgetScout = listId => { const all = loadScouts(); delete all[String(listId)]; writeJson(SCOUT_KEY, all); };
 
+  /* The same control on both screens. On a match sheet the opponent is already named by the
+     fixture; on the team page the coach types it, because a sheet cannot be made until the team
+     has players and looking an opponent up should not wait for that. */
+  function scoutHostHtml(withInput) {
+    return `<div class="tm-scout-host">
+      ${withInput ? `<label class="auth-field tm-scout-who"><span>${T('tm.opponent')}</span>
+        <input type="text" id="tm-scout-who" maxlength="60" placeholder="${T('sc.whoPlaceholder')}" value="${esc(ui.scoutWho || '')}"></label>` : ''}
+      <button class="btn-ghost sm" id="tm-scout" ${ui.busy ? 'disabled' : ''}>${T('sc.scoutOpponent')}</button>
+      ${scoutList().map(x => `<button class="btn-ghost sm" data-scout-open="${esc(String(x.listId))}">${esc(x.label || x.name)}</button>`).join('')}
+      <div id="tm-scout-out">${ui.scout ? scoutHtml(ui.scout) : ''}</div>
+    </div>`;
+  }
+
   /* One opponent, on an explicit press. Nothing is fetched by hovering and nothing is crawled:
      the index is cached for the device, so a second opponent costs a single request. */
   async function scoutSquad(team) {
@@ -655,6 +668,12 @@ const TEAMS = (() => {
         <div id="tm-ours-out">${ui.ours ? scoutHtml(ui.ours, { own: true }) : ''}</div>
       </div>
 
+      <div class="film-panel tm-scout-panel">
+        <h3>${T('sc.scoutTitle')}</h3>
+        <p class="fa-note">${T('sc.scoutNote')}</p>
+        ${scoutHostHtml(true)}
+      </div>
+
       <div class="film-panel">
         <h3>${T('tm.roster')} <span class="rightbar-hint">${T('tm.nPlayers', { n: players.length })}</span></h3>
         <div class="tm-pinfo" id="tm-pinfo-roster"></div>
@@ -731,11 +750,7 @@ const TEAMS = (() => {
           <label>${T('tm.referee')}<input type="text" id="tm-s-ref" value="${esc(staff.referee)}" maxlength="60"></label>
         </div>
         ${t.wpmatch ? `<button class="btn-ghost sm" id="tm-fixtures" ${ui.busy ? 'disabled' : ''}>${T('tm.pickFixture')}</button><div id="tm-fixture-list"></div>` : ''}
-        <div class="tm-scout-host">
-          <button class="btn-ghost sm" id="tm-scout" ${ui.busy ? 'disabled' : ''}>${T('sc.scoutOpponent')}</button>
-          ${scoutList().map(x => `<button class="btn-ghost sm" data-scout-open="${esc(String(x.listId))}">${esc(x.label || x.name)}</button>`).join('')}
-          <div id="tm-scout-out">${ui.scout ? scoutHtml(ui.scout) : ''}</div>
-        </div>
+        ${scoutHostHtml(false)}
       </div>
 
       <div class="film-panel tm-avail">
@@ -911,6 +926,54 @@ const TEAMS = (() => {
 
   /* Both screens carry these: the team page has the roster and the figures button, the sheet has
      the availability list. Wiring them in one place is why an ⓘ behaves the same on both. */
+  function wireScout(t, s) {
+    on('#tm-scout', 'click', async () => {
+      const out = $('#tm-scout-out');
+      const box = $('#tm-scout-who');
+      const who = TEAMSYNC.clean((box && box.value) || (s && s.match && s.match.opponent) || '', 60);
+      if (box) ui.scoutWho = who;
+      /* Without an opponent this used to search our OWN team's name and hand back our own squad
+         list, which looks like a bug in wpmatch rather than a missing field. Say what is needed. */
+      if (!who) { out.innerHTML = `<p class="muted">${T('sc.needOpponent')}</p>`; return; }
+      out.innerHTML = `<p class="muted">${T('sc.looking')}</p>`;
+      try {
+        const hits = await WPMATCH.searchTeams(who);
+        const them = hits.filter(x => !t.wpmatch || x.id !== t.wpmatch.id);
+        if (!them.length) { out.innerHTML = `<p class="muted">${T('sc.noSquad', { name: esc(who) })}</p>`; return; }
+        if (them.length > 1) {
+          out.innerHTML = `<p class="muted">${T('sc.whichSquad')}</p>` + them.slice(0, 8).map(x => `<button class="btn-ghost sm" data-scout-team="${esc(String(x.id))}">${esc(x.name)}</button>`).join('');
+          out.querySelectorAll('[data-scout-team]').forEach(b => b.onclick = () => runScout(them.find(x => String(x.id) === b.dataset.scoutTeam)));
+          return;
+        }
+        await runScout(them[0]);
+      } catch (e) { out.innerHTML = `<p class="muted">${T('tm.wpmatchDown')}</p>`; }
+    });
+    async function runScout(team) {
+      const out = $('#tm-scout-out');
+      out.innerHTML = `<p class="muted">${T('sc.reading', { name: esc(team.name) })}</p>`;
+      try {
+        const sc = await scoutSquad(team);
+        if (sc.error) { out.innerHTML = `<p class="muted">${T(sc.error === 'ambiguous' ? 'sc.ambiguous' : 'sc.noList', { name: esc(sc.name) })}</p>`; return; }
+        ui.scout = sc; draw();
+      } catch (e) { out.innerHTML = `<p class="muted">${T('tm.wpmatchDown')}</p>`; }
+    }
+    on('#tm-scout-x', 'click', () => { ui.scout = null; ui.ours = null; draw(); });
+    on('#tm-scout-keep', 'click', () => {
+      if (!ui.scout) return;
+      const kept = saveScout(ui.scout, ($('#tm-scout-label') && $('#tm-scout-label').value) || '');
+      ui.scout = Object.assign({}, ui.scout, { label: kept.label });
+      toast(T('sc.kept', { name: kept.label || kept.name }));
+      draw();
+    });
+    $$('[data-scout-open]').forEach(b => b.onclick = () => {
+      const kept = loadScouts()[b.dataset.scoutOpen];
+      if (!kept) return;
+      ui.scout = { listId: kept.listId, name: kept.label || kept.name, url: kept.url, at: kept.at, label: kept.label, squad: kept.squad, report: SCOUT.report(kept.squad) };
+      draw();
+    });
+
+  }
+
   function wireOurFigures(t) {
     /* our own squad, from the same source and the same judging as an opponent's */
     on('#tm-ours', 'click', async () => {
@@ -948,6 +1011,7 @@ const TEAMS = (() => {
 
   function wireTeam(t) {
     wireOurFigures(t);
+    wireScout(t, null);
     on('#tm-back', 'click', () => { keepTeamForm(t); ui.teamId = null; ui.notice = ''; ui.progress = ''; draw(); });
     // and as soon as a field is left, so a name survives anything else that redraws the screen
     $$('#tm-name, #tm-cat, #tm-club, #tm-league, #tm-tpl, #tm-coach, #tm-a1, #tm-a2').forEach(el => el.addEventListener('change', () => keepTeamForm(t)));
@@ -1081,49 +1145,7 @@ const TEAMS = (() => {
     on('#tm-invite-x', 'click', () => { const m = $('#tm-invite-modal'); if (m) m.hidden = true; });
 
     wireOurFigures(t);
-    on('#tm-scout', 'click', async () => {
-      const out = $('#tm-scout-out');
-      const who = TEAMSYNC.clean((s.match && s.match.opponent) || '', 60);
-      /* Without an opponent this used to search our OWN team's name and hand back our own squad
-         list, which looks like a bug in wpmatch rather than a missing field. Say what is needed. */
-      if (!who) { out.innerHTML = `<p class="muted">${T('sc.needOpponent')}</p>`; return; }
-      out.innerHTML = `<p class="muted">${T('sc.looking')}</p>`;
-      try {
-        const hits = await WPMATCH.searchTeams(who);
-        const them = hits.filter(x => !t.wpmatch || x.id !== t.wpmatch.id);
-        if (!them.length) { out.innerHTML = `<p class="muted">${T('sc.noSquad', { name: esc(who) })}</p>`; return; }
-        if (them.length > 1) {
-          out.innerHTML = `<p class="muted">${T('sc.whichSquad')}</p>` + them.slice(0, 8).map(x => `<button class="btn-ghost sm" data-scout-team="${esc(String(x.id))}">${esc(x.name)}</button>`).join('');
-          out.querySelectorAll('[data-scout-team]').forEach(b => b.onclick = () => runScout(them.find(x => String(x.id) === b.dataset.scoutTeam)));
-          return;
-        }
-        await runScout(them[0]);
-      } catch (e) { out.innerHTML = `<p class="muted">${T('tm.wpmatchDown')}</p>`; }
-    });
-    async function runScout(team) {
-      const out = $('#tm-scout-out');
-      out.innerHTML = `<p class="muted">${T('sc.reading', { name: esc(team.name) })}</p>`;
-      try {
-        const sc = await scoutSquad(team);
-        if (sc.error) { out.innerHTML = `<p class="muted">${T(sc.error === 'ambiguous' ? 'sc.ambiguous' : 'sc.noList', { name: esc(sc.name) })}</p>`; return; }
-        ui.scout = sc; draw();
-      } catch (e) { out.innerHTML = `<p class="muted">${T('tm.wpmatchDown')}</p>`; }
-    }
-    on('#tm-scout-x', 'click', () => { ui.scout = null; ui.ours = null; draw(); });
-    on('#tm-scout-keep', 'click', () => {
-      if (!ui.scout) return;
-      const kept = saveScout(ui.scout, ($('#tm-scout-label') && $('#tm-scout-label').value) || '');
-      ui.scout = Object.assign({}, ui.scout, { label: kept.label });
-      toast(T('sc.kept', { name: kept.label || kept.name }));
-      draw();
-    });
-    $$('[data-scout-open]').forEach(b => b.onclick = () => {
-      const kept = loadScouts()[b.dataset.scoutOpen];
-      if (!kept) return;
-      ui.scout = { listId: kept.listId, name: kept.label || kept.name, url: kept.url, at: kept.at, label: kept.label, squad: kept.squad, report: SCOUT.report(kept.squad) };
-      draw();
-    });
-
+    wireScout(t, s);
     on('#tm-fixtures', 'click', async () => {
       const out = $('#tm-fixture-list'); out.innerHTML = `<p class="muted">${T('tm.searching')}</p>`;
       try {

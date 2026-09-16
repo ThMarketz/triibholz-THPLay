@@ -1673,6 +1673,9 @@ const I18N = (() => {
       'sc.why.not-loaded':'press “Show season figures” above first',
       'sc.why.not-in-squad':'no record in this squad’s list',
       'sc.why.no-player':'no such player on this device',
+      'sc.scoutTitle':'Scout an opponent',
+      'sc.scoutNote':'Look up any squad’s published season figures before you play them. You can also do this from a match sheet, where the fixture fills in the opponent for you.',
+      'sc.whoPlaceholder':'e.g. SC Horgen U14',
     },
     de: {
       'app.tagline':'Strategien & Laufwege — fürs Team und für jede Position.',
@@ -3332,6 +3335,9 @@ const I18N = (() => {
       'sc.why.not-loaded':'tipp zuerst oben auf „Saisonzahlen anzeigen“',
       'sc.why.not-in-squad':'kein Eintrag in der Liste dieses Kaders',
       'sc.why.no-player':'diesen Spieler gibt es auf diesem Gerät nicht',
+      'sc.scoutTitle':'Einen Gegner scouten',
+      'sc.scoutNote':'Schlag die veröffentlichten Saisonzahlen eines Kaders nach, bevor du gegen ihn spielst. Das geht auch aus einer Spielaufstellung heraus — dort trägt das Spiel den Gegner für dich ein.',
+      'sc.whoPlaceholder':'z. B. SC Horgen U14',
     },
     fr: {
       'app.tagline':'Stratégies & déplacements — pour l’équipe et pour chaque poste.',
@@ -4991,6 +4997,9 @@ const I18N = (() => {
       'sc.why.not-loaded':'appuie d’abord sur « Afficher les chiffres de la saison » ci-dessus',
       'sc.why.not-in-squad':'aucune entrée dans la liste de cet effectif',
       'sc.why.no-player':'aucun joueur de ce nom sur cet appareil',
+      'sc.scoutTitle':'Scouter un adversaire',
+      'sc.scoutNote':'Consulte les chiffres de la saison publiés de n’importe quel effectif avant de l’affronter. Tu peux aussi le faire depuis une feuille de match, où c’est le match qui renseigne l’adversaire à ta place.',
+      'sc.whoPlaceholder':'p. ex. SC Horgen U14',
     },
     it: {
       'app.tagline':'Strategie & movimenti — per la squadra e per ogni ruolo.',
@@ -6650,6 +6659,9 @@ const I18N = (() => {
       'sc.why.not-loaded':'premi prima «Mostra i dati di stagione» qui sopra',
       'sc.why.not-in-squad':'nessuna voce nell’elenco di questa rosa',
       'sc.why.no-player':'nessun giocatore con questo nome su questo dispositivo',
+      'sc.scoutTitle':'Scouting di un avversario',
+      'sc.scoutNote':'Consulta i dati di stagione pubblicati di qualsiasi rosa prima di affrontarla. Puoi farlo anche da una distinta, dove è la partita a inserire l’avversario al posto tuo.',
+      'sc.whoPlaceholder':'es. SC Horgen U14',
     },
   };
 

@@ -1402,3 +1402,7 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 .tm-scout-keep .auth-field{flex:1 1 200px;margin:0}
 .tm-scout-keep .fa-note{flex:1 1 100%;margin:2px 0 0}
 .tm-avail-row .tm-inf{margin-left:4px}
+
+.tm-scout-who{flex:1 1 220px;margin:0 0 8px}
+.tm-scout-host{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.tm-scout-host #tm-scout-out{flex:1 1 100%}
