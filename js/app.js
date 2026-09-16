@@ -129,7 +129,7 @@
     $('phase-toggle').style.display = inPlaybook ? '' : 'none';
     if (view==='dashboard') renderDashboard();
     if (view==='basics') renderBasics();
-    if (view==='teams' && typeof TEAMS!=='undefined') TEAMS.render($('view-teams'), { user: state.user, canEdit: canEdit(), toast });
+    if (view==='teams' && typeof TEAMS!=='undefined') TEAMS.render($('view-teams'), { user: state.user, canEdit: canEdit(), toast, inviteHtml: inviteCardHtml, bindInvite });
     if (view==='film' && typeof FILM!=='undefined') FILM.render($('view-film'), {
       user: state.user, canEdit: canEdit(), toast,
       // a tagged video moment becomes a play on the tactics board
@@ -3276,12 +3276,31 @@
      ONBOARDING — team invite (link + QR), join flow, guided tour
      ====================================================== */
   const TEAM_KEY = 'thplay.team.v1';
-  function loadTeam(){
-    try { return JSON.parse(localStorage.getItem(TEAM_KEY)) || { name:'Triibholz WPC', code:'TRII-2026' }; }
-    catch(e){ return { name:'Triibholz WPC', code:'TRII-2026' }; }
+  /* The team code scopes what a person sees (announcements, team-stamped plays). A code built into
+     the app would be the same on every install — anyone could read another club's notes by typing
+     it — so each install makes its own, once, and keeps it. */
+  function newTeamCode(){
+    const abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // no I/O/0/1: these get read aloud and typed in
+    let bytes; try { bytes = crypto.getRandomValues(new Uint8Array(6)); } catch(e){ bytes = Array.from({length:6},()=>Math.floor(Math.random()*256)); }
+    return 'TRII-' + Array.from(bytes).map(b => abc[b % abc.length]).join('');
   }
-  function inviteLink(){ const t=loadTeam(); return location.origin + location.pathname + '?join=' + encodeURIComponent(t.code); }
-  function joinParam(){ try { return new URLSearchParams(location.search).get('join'); } catch(e){ return null; } }
+  function loadTeam(){
+    let t = null; try { t = JSON.parse(localStorage.getItem(TEAM_KEY)); } catch(e){}
+    if (t && t.code) return t;
+    const made = { name: (t && t.name) || 'Triibholz WPC', code: newTeamCode() };
+    try { localStorage.setItem(TEAM_KEY, JSON.stringify(made)); } catch(e){}
+    return made;
+  }
+  /* the code travels in the #fragment: a browser never sends that to a server, so it stays out of
+     server, proxy and tunnel logs (docs/ACCOUNTS.md) */
+  function inviteLink(){ const t=loadTeam(); return location.origin + location.pathname + '#join=' + encodeURIComponent(t.code); }
+  function joinParam(){
+    try {
+      const h = /[#&]join=([^&]+)/.exec(location.hash || '');
+      if (h) return decodeURIComponent(h[1]);
+      return new URLSearchParams(location.search).get('join');   // links already sent out keep working
+    } catch(e){ return null; }
+  }
 
   function inviteCardHtml(){
     const t = loadTeam(); const link = inviteLink();

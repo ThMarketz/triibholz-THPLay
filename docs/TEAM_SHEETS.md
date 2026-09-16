@@ -49,6 +49,20 @@ The eligibility status is `metrics.Eligibility`, with exactly five values across
 *Swiss*, *Swiss Sport Nationality*, *Swiss Sport Experience*, *Ausländer/Étranger*,
 *Inactive License*.
 
+## Who can play, and inviting the players
+
+A sheet carries the coach's own note on who can play this match: ✓ can play, ✕ cannot, ? not asked.
+**Build the line-up from those in** fills the form from that pool (keeper still in cap 1), and
+auto-fill never places someone marked ✕. "Not asked" is stored as nothing at all, never as an
+answer, and the card says in plain words what this is: *nobody has been asked and nothing is sent*.
+
+Asking the players themselves — a real invitation they answer — needs accounts, and lands with
+slice 4 of [ACCOUNTS.md](ACCOUNTS.md); the server side (club join links, per-person invites) is
+already built. Until then **Invite players to the app** on the sheet shows the club's join code and
+its QR: the player scans it, lands in the app and joins the team. The code now travels **after the
+`#`**, which a browser never sends to a server, so it stays out of server, proxy and tunnel logs —
+and each install makes its own code once instead of every install sharing one built into the app.
+
 ## Where the data is stored — on the device
 
 Rosters are licence numbers, names, birth years and nationality status, much of it for minors.

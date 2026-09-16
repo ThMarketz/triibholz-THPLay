@@ -54,6 +54,12 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
   const pendCount = DATA.loadUsers().filter(u=>u.status==='pending').length;
   ok('seeded pending users ('+pendCount+')', pendCount>=2);
   ok('invite card + QR', !!q('.invite-card') && !!q('.invite-qr svg'));
+  {
+    // the invite code is this install's own, and travels after the # so it never reaches a server log
+    const code = q('.invite-code').textContent.trim(), link = q('.invite-qr').getAttribute('title');
+    ok('the team code is made once per install, not built into the app', /^TRII-[A-HJ-NP-Z2-9]{6}$/.test(code) && code !== 'TRII-2026');
+    ok('the invite link carries it in the #fragment, not the query string', link.includes('#join=' + code) && !link.includes('?join='));
+  }
   await wait(420);
   if (q('#tour-skip')) q('#tour-skip').click();
   q('.nav-btn[data-view="admin"]').click(); await wait(30);
@@ -2107,6 +2113,33 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     q('#tm-new-sheet').click(); await wait(40);
     ok('a new sheet has one row per line of the official form (14)', qa('#view-teams .tm-lineup tbody tr').length === 14);
     ok('the keeper is placed in cap 1', q('#view-teams [data-row="0"]').value === 'L50101' && q('#view-teams [data-rowgk="0"]').checked);
+    {
+      // who can play: the coach's own note, and the line-up built from it
+      const btn = (pid, state) => q(`#view-teams [data-avail="${pid}"][data-availstate="${state}"]`);
+      ok('every player on the roster can be marked in, out or not asked', qa('#view-teams .tm-avail-row').length === 4 && !!btn('L50101', 'in'));
+      ok('…and it says plainly that nobody was asked', /nobody has been asked and nothing is sent/.test(q('#view-teams .tm-avail').textContent));
+      btn('L50101', 'in').click(); await wait(30);
+      btn('L50102', 'in').click(); await wait(30);
+      btn('L50104', 'out').click(); await wait(30);
+      ok('the counts follow the marks', /2 in · 1 out · 1 not asked/.test(q('#view-teams .tm-avail').textContent));
+      q('#tm-avail-fill').click(); await wait(40);
+      const picked = qa('#view-teams .tm-lineup tbody select').map(s2 => s2.value).filter(Boolean);
+      ok('building from those in uses only them — the keeper still in cap 1', picked.length === 2 && picked.includes('L50101') && picked.includes('L50102') && q('#view-teams [data-row="0"]').value === 'L50101');
+      q('#tm-auto').click(); await wait(40);
+      const auto = qa('#view-teams .tm-lineup tbody select').map(s2 => s2.value).filter(Boolean);
+      ok('…and nobody marked out is ever auto-filled in', !auto.includes('L50104'));
+      ok('a saved sheet keeps who could play, for next time', (() => { const saved = JSON.parse(window.localStorage.getItem(TM.KEY)); return saved.sheets[0].availability.L50104 === 'out'; })());
+      btn('L50102', 'unknown').click(); await wait(30);
+      ok('…and "not asked" is stored as nothing at all, never as an answer', (() => { const saved = JSON.parse(window.localStorage.getItem(TM.KEY)); return !('L50102' in (saved.sheets[0].availability || {})); })());
+      btn('L50102', 'in').click(); await wait(30);
+      q('#tm-invite').click(); await wait(30);
+      ok('the coach can invite these players to the app from the sheet, code and QR', q('#tm-invite-modal').hidden === false && !!q('#tm-invite-modal .invite-qr svg') && /TRII-/.test(q('#tm-invite-modal .invite-code').textContent));
+      q('#tm-invite-x').click(); await wait(20);
+      q('#tm-avail-clear').click(); await wait(40);
+      ok('clearing puts everyone back to "not asked"', /0 in · 0 out · 4 not asked/.test(q('#view-teams .tm-avail').textContent));
+      q('#tm-clear').click(); await wait(30); q('#tm-auto').click(); await wait(40);   // back to the whole squad for the checks below
+      ok('with nobody marked, the line-up is the whole roster again', qa('#view-teams .tm-lineup tbody select').map(s2 => s2.value).filter(Boolean).length === 4);
+    }
     const fs = qa('#view-teams .tm-findings li').map(li => li.textContent);
     ok('the check flags the inactive licence by name', fs.some(t => /Inactive licence/.test(t) && /Mia Huber/.test(t)));
     ok('…and the player born too early for U14 in 2026/27', fs.some(t => /Too old/.test(t) && /Luca Frei/.test(t)));

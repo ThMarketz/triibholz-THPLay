@@ -380,8 +380,9 @@ approved once is never collected here (retention: slice 8).
 | registration | also accepts join links (pending player) and staff invites (pending role) |
 
 Slice 4 still has to: make joining offer "Sign in with passkey" first and create an account only
-when the person says they have none; never submit a join straight from a `#join=` link without a
-tap; remove the hard-coded `TRII-2026` fallback.
+when the person says they have none, and never submit a join straight from a `#join=` link without
+a tap. (The hard-coded `TRII-2026` team code is already gone: each install makes its own code once,
+and the invite link carries it in the fragment — see [TEAM_SHEETS.md](TEAM_SHEETS.md).)
 
 ## The switch (slice 4)
 

@@ -96,6 +96,28 @@ const TEAMS = (() => {
     .concat((d.templates || []).map(t => TEAMSHEET.normalizeTemplate(t)));
   const templateById = (d, id) => allTemplates(d).find(t => t.id === id) || TEAMSHEET.normalizeTemplate(TEAMSHEET.BUILTIN[0]);
 
+  /* ---------- who can play this match ----------
+     The coach's own note, on the coach's own device: nobody is asked anything and nothing is sent.
+     Asking the players themselves needs accounts (docs/ACCOUNTS.md slice 4) — until then the UI
+     says so in plain words rather than implying an answer that was never given. */
+  const AVAIL = ['in', 'out'];
+  const availOf = (s, pid) => (s.availability && s.availability[pid]) || 'unknown';
+  function setAvailability(s, pid, state) {
+    s.availability = s.availability || {};
+    if (AVAIL.includes(state)) s.availability[pid] = state; else delete s.availability[pid];
+  }
+  function availabilityCounts(s, players) {
+    const c = { in: 0, out: 0, unknown: 0 };
+    players.forEach(p => { c[availOf(s, p.pid)]++; });
+    return c;
+  }
+  /* the players a line-up may be built from: those marked in, or — while nobody is marked — everyone
+     except those marked out */
+  function availablePool(s, players) {
+    const marked = players.filter(p => availOf(s, p.pid) === 'in');
+    return marked.length ? marked : players.filter(p => availOf(s, p.pid) !== 'out');
+  }
+
   /* A sheet's rows → the shape ELIGIBILITY and TEAMSHEET both read. */
   function lineupOf(d, sheet) {
     return (sheet.rows || []).map(r => {
@@ -235,6 +257,7 @@ const TEAMS = (() => {
     const staff = Object.assign({}, t.staff || {}, s.staff || {});
     const result = ELIGIBILITY.check(t, filled, { date: s.match.date });
     const used = new Set(s.rows.slice(0, tpl.rows).filter(r => r && r.pid).map(r => r.pid));
+    const counts = availabilityCounts(s, players);
     const youth = ELIGIBILITY.CATEGORIES[t.category] && ELIGIBILITY.CATEGORIES[t.category].kind === 'youth';
 
     const opt = (p, row) => `<option value="${esc(p.pid)}" ${row && row.pid === p.pid ? 'selected' : ''} ${used.has(p.pid) && !(row && row.pid === p.pid) ? 'disabled' : ''}>` +
@@ -270,6 +293,27 @@ const TEAMS = (() => {
         </div>
         ${t.wpmatch ? `<button class="btn-ghost sm" id="tm-fixtures" ${ui.busy ? 'disabled' : ''}>${T('tm.pickFixture')}</button><div id="tm-fixture-list"></div>` : ''}
       </div>
+
+      <div class="film-panel tm-avail">
+        <h3>${T('tm.availability')} <span class="rightbar-hint">${T('tm.availabilityCounts', counts)}</span></h3>
+        <p class="fa-note">${T('tm.availabilityNote')}</p>
+        <div class="tm-avail-grid">${players.map(p => {
+          const st = availOf(s, p.pid);
+          return `<div class="tm-avail-row ${st}"><span class="tm-avail-name">${esc([p.name, p.firstName].filter(Boolean).join(' '))}</span>
+            <span class="tm-avail-btns">${[['in', '✓'], ['out', '✕'], ['unknown', '?']].map(([v, sym]) =>
+              `<button class="btn-ghost xs ${st === v ? 'on' : ''}" data-avail="${esc(p.pid)}" data-availstate="${v}" title="${T('tm.avail.' + v)}" aria-pressed="${st === v}">${sym}</button>`).join('')}</span></div>`;
+        }).join('') || `<p class="muted">${T('tm.noPlayersYet')}</p>`}</div>
+        <div class="tm-actions">
+          <button class="btn-ghost sm" id="tm-avail-fill" ${counts.in ? '' : 'disabled'}>${T('tm.buildFromAvailable')}</button>
+          <button class="btn-ghost sm" id="tm-avail-clear" ${counts.in || counts.out ? '' : 'disabled'}>${T('tm.availabilityReset')}</button>
+          ${ctx.inviteHtml ? `<button class="btn-ghost sm" id="tm-invite">${T('tm.inviteToApp')}</button>` : ''}
+        </div>
+      </div>
+
+      ${ctx.inviteHtml ? `<div class="modal-backdrop tm-modal" id="tm-invite-modal" hidden><div class="modal modal-sm">
+        <div class="modal-head"><h3>${T('tm.inviteToApp')}</h3><span class="spacer"></span><button class="modal-x" id="tm-invite-x">✕</button></div>
+        <div class="modal-body">${ctx.inviteHtml()}<p class="fa-note">${T('tm.inviteNote')}</p></div>
+      </div></div>` : ''}
 
       <div class="tm-builder">
         <div class="film-panel">
@@ -495,11 +539,21 @@ const TEAMS = (() => {
     on('#tm-auto', 'click', () => {
       const tpl = templateById(db, s.templateId);
       const chosen = s.rows.filter(r => r && r.pid).map(r => Object.assign({}, db.players[r.pid], { gk: r.gk, _row: r }));
-      const pool = chosen.length ? chosen : roster(db, t).map(p => Object.assign({}, p, { _row: null }));
+      const pool = chosen.length ? chosen : availablePool(s, roster(db, t)).map(p => Object.assign({}, p, { _row: null }));
       s.rows = autoOrder(pool, tpl.rows, t.category).map(p => (p ? { pid: p.pid, gk: !!p.gk, captain: !!(p._row && p._row.captain), younger: !!(p._row && p._row.younger) } : null));
       touch();
     });
     on('#tm-clear', 'click', () => { s.rows = s.rows.map(() => null); touch(); });
+    $$('[data-avail]').forEach(b => b.onclick = () => { setAvailability(s, b.dataset.avail, b.dataset.availstate); touch(); });
+    on('#tm-avail-clear', 'click', () => { s.availability = {}; touch(); });
+    on('#tm-avail-fill', 'click', () => {
+      const tpl = templateById(db, s.templateId);
+      const pool = availablePool(s, roster(db, t)).map(p => Object.assign({}, p, { _row: null }));
+      s.rows = autoOrder(pool, tpl.rows, t.category).map(p => (p ? { pid: p.pid, gk: !!p.gk, captain: false, younger: false } : null));
+      touch();
+    });
+    on('#tm-invite', 'click', () => { const m = $('#tm-invite-modal'); if (m) { m.hidden = false; if (ctx.bindInvite) ctx.bindInvite(m); } });
+    on('#tm-invite-x', 'click', () => { const m = $('#tm-invite-modal'); if (m) m.hidden = true; });
 
     on('#tm-fixtures', 'click', async () => {
       const out = $('#tm-fixture-list'); out.innerHTML = `<p class="muted">${T('tm.searching')}</p>`;
@@ -659,7 +713,8 @@ const TEAMS = (() => {
     .ts-t{width:100%;border-collapse:collapse;margin:0 0 16pt}.ts-t td,.ts-t th{border:1px solid #000;padding:3pt 5pt;text-align:left;vertical-align:top;font-weight:400}
     .ts-roster td{height:14pt}.ts-sign td{height:30pt}.ts-2nd{color:#555}.ts-note p{margin:2pt 0;font-weight:700}.ts-lead{color:#e4002b}.ts-i{font-style:italic}`;
 
-  return { KEY, CARD_KEY, CATEGORY_ORDER, render, renderPlayerCard, load, save, upsertPlayers, autoOrder, lineupOf, allTemplates };
+  return { KEY, CARD_KEY, CATEGORY_ORDER, render, renderPlayerCard, load, save, upsertPlayers, autoOrder, lineupOf, allTemplates,
+           availOf, setAvailability, availabilityCounts, availablePool };
 })();
 
 // Node/CommonJS interop (no-op in the browser)

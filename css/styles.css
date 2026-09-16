@@ -1351,3 +1351,12 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 .dev-chart-table td.dev-chart-cell{min-width:200px;width:46%;padding:2px 8px}
 .dev-charts .dev-coach-row{margin-bottom:8px}
 @media (max-width:640px){ .dev-chart-table td.dev-chart-cell{min-width:150px} }
+
+/* who can play this match — the coach's own note on their own device */
+.tm-avail-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px;margin:8px 0}
+.tm-avail-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
+.tm-avail-row.in{border-color:var(--accent)}
+.tm-avail-row.out{opacity:.65}
+.tm-avail-name{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tm-avail-btns{display:flex;gap:4px;flex:none}
+.tm-avail-btns .btn-ghost.on{background:var(--teal-strong);color:var(--white)}
