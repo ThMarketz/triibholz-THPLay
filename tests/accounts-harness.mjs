@@ -19,8 +19,8 @@ export async function startServer(port, env = {}) {
 }
 
 let addr = 0;
-export function makeCall(port) {
-  return function call(method, path, { body, origin = ORIGIN, cookie, type = 'application/json', ip, raw, headers: extra } = {}) {
+export function makeCall(port, defaultOrigin = ORIGIN) {
+  return function call(method, path, { body, origin = defaultOrigin, cookie, type = 'application/json', ip, raw, headers: extra } = {}) {
     return new Promise((resolve, reject) => {
       const payload = raw !== undefined ? raw : body === undefined ? (method === 'GET' ? '' : '{}') : JSON.stringify(body);
       const headers = { 'x-real-ip': ip || `10.8.${(++addr >> 8) & 255}.${addr & 255}` };
@@ -40,7 +40,7 @@ export function makeCall(port) {
 }
 
 export class Device {
-  constructor(call, flags) { this.call = call; this.key = new SoftAuthenticator(flags === undefined ? {} : { flags }); this.cookie = null; }
+  constructor(call, flags, origin = ORIGIN) { this.call = call; this.origin = origin; this.key = new SoftAuthenticator(flags === undefined ? {} : { flags }); this.cookie = null; }
   take(r) {
     const sc = [].concat(r.headers['set-cookie'] || [])[0];
     if (!sc) return;
@@ -51,14 +51,14 @@ export class Device {
     const options = await this.call('POST', '/api/auth/register/options', { body: { code, displayName } });
     if (options.status !== 200) return { options, verify: options };
     const pk = options.json.publicKey;
-    const credential = this.key.create({ rpId: pk.rp.id, origin: ORIGIN, challenge: pk.challenge, userHandle: pk.user.id, over });
+    const credential = this.key.create({ rpId: pk.rp.id, origin: this.origin, challenge: pk.challenge, userHandle: pk.user.id, over });
     const verify = await this.call('POST', '/api/auth/register/verify', { body: { challengeId: options.json.challengeId, credential } });
     this.take(verify);
     return { options, verify };
   }
   async login(over = {}) {
     const o = await this.call('POST', '/api/auth/login/options', {});
-    const credential = this.key.get({ rpId: 'localhost', origin: ORIGIN, challenge: o.json.publicKey.challenge, over });
+    const credential = this.key.get({ rpId: 'localhost', origin: this.origin, challenge: o.json.publicKey.challenge, over });
     const v = await this.call('POST', '/api/auth/login/verify', { body: { challengeId: o.json.challengeId, credential }, cookie: this.cookie });
     this.take(v);
     return v;
@@ -66,7 +66,7 @@ export class Device {
   async stepUp(over = {}) {
     const o = await this.call('POST', '/api/auth/stepup/options', { cookie: this.cookie });
     if (o.status !== 200) return o;
-    const credential = this.key.get({ rpId: 'localhost', origin: ORIGIN, challenge: o.json.publicKey.challenge, over });
+    const credential = this.key.get({ rpId: 'localhost', origin: this.origin, challenge: o.json.publicKey.challenge, over });
     return this.call('POST', '/api/auth/stepup/verify', { body: { challengeId: o.json.challengeId, credential }, cookie: this.cookie });
   }
   get(path) { return this.call('GET', path, { cookie: this.cookie }); }

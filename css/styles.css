@@ -1360,3 +1360,13 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 .tm-avail-name{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tm-avail-btns{display:flex;gap:4px;flex:none}
 .tm-avail-btns .btn-ghost.on{background:var(--teal-strong);color:var(--white)}
+
+/* real sign-in: the invite code and the name sit in the same card as the passkey button */
+.auth-field{display:block;text-align:left;margin:10px 0 6px;font-size:12.5px;color:var(--ink-dim)}
+.auth-field input{width:100%;margin-top:4px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font-size:14px}
+.auth-code-row{display:flex;gap:6px;margin-top:10px}
+.auth-code-row input{flex:1;min-width:0;padding:9px 11px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font-size:13px}
+#auth-real .btn-oauth,#auth-real .btn-primary{width:100%;margin-top:8px}
+.ar-code{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--ink-dim)}
+.ar-code input{width:56px;padding:4px 6px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);text-align:center;letter-spacing:.08em}
+.admin-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}

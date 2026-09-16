@@ -25,7 +25,17 @@ const API = (() => {
     try { LEGACY_KEYS.forEach(k => localStorage.removeItem(k)); } catch (e) {}
   }
 
-  return { base, url, forgetLegacyOverrides, LEGACY_KEYS };
+  /* every call to the club server, from anywhere in the app: same origin, and — once accounts are
+     on — the app's own version, so a server that has moved on can say "update the app" instead of
+     failing in some unreadable way. */
+  function apiFetch(path, opts) {
+    const o = Object.assign({ credentials: 'same-origin' }, opts || {});
+    o.headers = Object.assign({}, o.headers || {});
+    if (typeof SESSION !== 'undefined' && SESSION.on && SESSION.on()) o.headers['x-thp-client'] = String(SESSION.CLIENT_VERSION);
+    return fetch(/^https?:/.test(path) ? path : url(path), o);
+  }
+
+  return { base, url, fetch: apiFetch, forgetLegacyOverrides, LEGACY_KEYS };
 })();
 // Node/CommonJS interop (no-op in the browser)
 if (typeof module !== "undefined" && module.exports) module.exports = API;

@@ -20,6 +20,13 @@ services:
     container_name: triibholz-analysis
     ports:
       - "127.0.0.1:4200:4200"   # this Mac only (curl, debugging); everyone else goes through /api on :8088
+    environment:
+      # accounts are off unless you turn them on (docs/ACCOUNTS.md); with them on, RP_ID and
+      # APP_ORIGINS must match the address people open the app from, or the server refuses to start
+      - ACCOUNTS=${ACCOUNTS:-}
+      - RP_ID=${RP_ID:-}
+      - APP_ORIGINS=${APP_ORIGINS:-}
+      - DEV=${DEV:-}
     volumes:
       - analysis-data:/data
     restart: unless-stopped

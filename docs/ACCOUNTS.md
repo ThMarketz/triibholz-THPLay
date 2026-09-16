@@ -22,7 +22,7 @@ the rules below, not a footnote.
 | 1 | Database, migrations, `tx()`, configuration checks, operator CLI, last-admin rule | **done** (02d9042) |
 | 2 | Passkey registration and sign-in, sessions, behind `ACCOUNTS=1`; nothing depends on it yet | **done** — server only; the app still signs in the simulated way |
 | 3 | Clubs and memberships: invites, join codes, approvals, roles, removal, step-up, UV for staff | **done** — server only |
-| 4 | The switch, in one release: the app signs in for real; every existing endpoint authorized | |
+| 4 | The switch, in one release: the app signs in for real; every existing endpoint authorized | **done** — server (5d7733d) and app; the announcement composer, a demo sandbox and legacy-data tools are still to come |
 | 5 | Teams, rosters, sheets, templates on the server; read-only offline copy for staff | |
 | 6 | Devices: QR pairing with approval on the old device, devices page, revocation | |
 | 7 | Recovery with a hold period; player and guardian links | |
@@ -379,9 +379,17 @@ approved once is never collected here (retention: slice 8).
 | `POST /api/auth/stepup/options` · `…/verify` | a signed-in person |
 | registration | also accepts join links (pending player) and staff invites (pending role) |
 
-Slice 4 still has to: make joining offer "Sign in with passkey" first and create an account only
-when the person says they have none, and never submit a join straight from a `#join=` link without
-a tap. (The hard-coded `TRII-2026` team code is already gone: each install makes its own code once,
+Built in slice 4: the app asks `/api/health` whether accounts exist and, when they do, offers only
+a passkey — the simulated sign-in and the demo personas are not shown at all. A `#invite=`/`#join=`
+link is peeked first and never submitted on its own: the screen says which club and which role, and
+waits for a tap. Signing in needs no name and no e-mail (a discoverable passkey). The admin console
+becomes the club console: requests with their four-digit numbers, members and roles, join links and
+per-person invites, each sensitive action re-asking for the passkey. Every call carries the app's
+version, so a server that has moved on answers `426 update the app`.
+
+Still to do in this area: the announcement composer addressing one player by member ref (coaches
+cannot see the member list until slice 5, so they send club-wide notes for now), the `DEMO=1`
+sandbox club for the browser suite, and the operator tools for data written before accounts. (The hard-coded `TRII-2026` team code is already gone: each install makes its own code once,
 and the invite link carries it in the fragment — see [TEAM_SHEETS.md](TEAM_SHEETS.md).)
 
 ## The switch (slice 4)

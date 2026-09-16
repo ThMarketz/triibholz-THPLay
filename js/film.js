@@ -523,7 +523,7 @@ const FILM = (() => {
           const blob = await getVideo('film-' + cur.id);
           if (!blob) throw new Error('video-missing');
           const url = endpoint.replace(/\/+$/, '') + '/api/analyse';
-          const r = await fetch(url, { method: 'POST', headers: {
+          const r = await API.fetch(url, { method: 'POST', headers: {
             'content-type': 'application/octet-stream',
             'x-calibration': JSON.stringify(jb.calibration),
             'x-opts': JSON.stringify({ start: startT, winSec: 2.5 }),
@@ -586,19 +586,19 @@ const FILM = (() => {
     if (out) out.innerHTML = `<div class="muted">${TX('film.uploadingVideo')}</div>`;
     try {
       const blob = await getVideo('film-' + cur.id); if (!blob) throw new Error('video-missing');
-      let health = null; try { health = await (await fetch(base + '/api/health')).json(); } catch (e) { throw new Error('backend-unreachable'); }
+      let health = null; try { health = await (await API.fetch(base + '/api/health')).json(); } catch (e) { throw new Error('backend-unreachable'); }
       if (health && health.ffmpeg === false) throw new Error('backend-no-ffmpeg');
       const mb = blob.size / 1048576;
       if (health && health.maxUploadMB && mb > health.maxUploadMB) throw new Error(`too-large:${Math.round(mb)}:${health.maxUploadMB}`);
       const videoRef = await uploadWithProgress(base + '/api/upload', blob, pct => { setScoutStatus(TX('film.statusUploadingPct', { pct }), 'cloud'); if (out) out.innerHTML = `<div class="muted">${TX('film.uploadingMb', { mb: Math.round(mb), pct })}</div>`; });
-      const job = await fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, calibration: { H: vHomography, mode: (root.querySelector('#film-moving') || {}).checked ? 'auto' : 'fixed', minConf: 0.4 }, scout: true, us, opts: { fps: 6, chunkSec: 20 } }) });
+      const job = await API.fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, calibration: { H: vHomography, mode: (root.querySelector('#film-moving') || {}).checked ? 'auto' : 'fixed', minConf: 0.4 }, scout: true, us, opts: { fps: 6, chunkSec: 20 } }) });
       if (!job.ok) throw new Error('job-' + job.status);
       const { id } = await job.json();
       setScoutStatus(TX('film.statusScouting'), 'cloud'); if (out) out.innerHTML = `<div class="muted">${TX('film.scoutingWholeVideo', { id: esc(id) })}</div>`;
       let st = 'queued', tries = 0, j;
-      while (st !== 'done' && st !== 'error' && tries++ < 900) { await new Promise(r => setTimeout(r, 2000)); j = await (await fetch(base + '/api/jobs/' + id)).json(); st = j.status; }
+      while (st !== 'done' && st !== 'error' && tries++ < 900) { await new Promise(r => setTimeout(r, 2000)); j = await (await API.fetch(base + '/api/jobs/' + id)).json(); st = j.status; }
       if (st !== 'done') throw new Error(j && j.error ? 'scout-' + j.error : 'timed-out');
-      const result = await (await fetch(base + '/api/jobs/' + id + '/result')).json();
+      const result = await (await API.fetch(base + '/api/jobs/' + id + '/result')).json();
       renderScout(result.scout, result);
       setScoutStatus(TX('film.statusDone'), 'cloud'); ctx.toast(TX('film.scoutingReportReady'));
     } catch (e) {
@@ -741,7 +741,7 @@ const FILM = (() => {
       </div>`).join('')}</div>`;
   }
   async function cutClip(videoRef, t0, t1) {
-    const r = await fetch(scoutBase() + '/api/clip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, start: Math.max(0, t0 - 2), end: t1 + 2 }) });
+    const r = await API.fetch(scoutBase() + '/api/clip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, start: Math.max(0, t0 - 2), end: t1 + 2 }) });
     if (!r.ok) throw new Error('clip-' + r.status);
     return (await r.json()).clipUrl;
   }
@@ -777,7 +777,7 @@ const FILM = (() => {
       }
       if (st) st.textContent = ' — ' + TX('film.publishing');
       const body = { team: teamOf(ctx.user), title: TX('film.debriefTitle', { title: dt(cur.title) }), matchTitle: dt(cur.title), author: ctx.user && ctx.user.name, us, summary: (sc.narrative || []).concat(sc.summary || []).slice(0, 12), plan: rows, items };
-      const r = await fetch(scoutBase() + '/api/debriefs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      const r = await API.fetch(scoutBase() + '/api/debriefs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       if (!r.ok) throw new Error('debrief-' + r.status);
       if (st) st.textContent = ' — ' + TX('film.sharedSeeBelow'); ctx.toast(TX('film.debriefShared'));
       await loadDebriefs(); const d = root.querySelector('#film-debriefs'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -786,7 +786,7 @@ const FILM = (() => {
   async function loadDebriefs() {
     const list = root && root.querySelector('#debrief-list'); if (!list) return;
     try {
-      const r = await fetch(scoutBase() + '/api/debriefs?team=' + encodeURIComponent(teamOf(ctx.user)));
+      const r = await API.fetch(scoutBase() + '/api/debriefs?team=' + encodeURIComponent(teamOf(ctx.user)));
       const { debriefs } = await r.json();
       if (!debriefs.length) { list.innerHTML = `<span class="muted">${TX('film.noDebriefsYet')}` + (ctx.canEdit ? TX('film.scoutThenShare') : '') + '</span>'; return; }
       list.className = 'debrief-list';
@@ -797,7 +797,7 @@ const FILM = (() => {
   async function openDebrief(id) {
     const box = root && root.querySelector('#debrief-open'); if (!box) return;
     box.innerHTML = `<div class="muted">${TX('film.loading')}</div>`;
-    let d; try { d = await (await fetch(scoutBase() + '/api/debriefs/' + id)).json(); } catch (e) { box.innerHTML = `<div class="muted">${TX('film.couldNotLoadDebrief')}</div>`; return; }
+    let d; try { d = await (await API.fetch(scoutBase() + '/api/debriefs/' + id)).json(); } catch (e) { box.innerHTML = `<div class="muted">${TX('film.couldNotLoadDebrief')}</div>`; return; }
     const cmts = itemId => d.comments.filter(c => (c.itemId || null) === (itemId || null));
     const cHtml = itemId => `<div class="deb-comments" data-for="${itemId || ''}">${cmts(itemId).map(c => `<div class="deb-c"><strong>${esc(c.author)}</strong> <span class="muted">${new Date(c.at).toLocaleString()}</span><div>${esc(c.text)}</div></div>`).join('') || `<span class="muted">${TX('film.noCommentsYet')}</span>`}
       <div class="deb-c-new"><input type="text" placeholder="${TX('film.addComment')}" data-cin="${itemId || ''}" /><button class="btn-ghost sm" data-cpost="${itemId || ''}">${TX('film.post')}</button></div></div>`;
@@ -833,7 +833,7 @@ const FILM = (() => {
       const inp = box.querySelector(`input[data-cin="${b.dataset.cpost}"]`); const text = (inp.value || '').trim(); if (!text) return;
       b.disabled = true;
       try {
-        const r = await fetch(scoutBase() + '/api/debriefs/' + id + '/comments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ author: ctx.user && ctx.user.name, text, itemId: b.dataset.cpost || null }) });
+        const r = await API.fetch(scoutBase() + '/api/debriefs/' + id + '/comments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ author: ctx.user && ctx.user.name, text, itemId: b.dataset.cpost || null }) });
         if (!r.ok) throw new Error('comment-' + r.status);
         await openDebrief(id); loadDebriefs();
       } catch (e) { ctx.toast(TX('film.commentFailed', { error: whyText(e.message) })); b.disabled = false; }

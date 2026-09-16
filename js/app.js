@@ -73,6 +73,72 @@
   function saveSession(u) { try { localStorage.setItem(SESSION_KEY, JSON.stringify({ email: u.email })); } catch(e){} }
   function clearSession() { try { localStorage.removeItem(SESSION_KEY); } catch(e){} }
 
+  /* ---------------- real accounts (js/session.js) ----------------
+     Switched on by the server, not by the app: /api/health says whether this deployment has
+     accounts. When it does, the simulated sign-in and the demo personas are not offered at all —
+     a passkey is the only way in, and the club decides who gets one. */
+  let realAccounts = false, pendingCode = null;
+  const ROLE_WORD = { admin: 'club.roleAdmin', coach: 'role.coach', trainer: 'role.trainer', player: 'role.player' };
+  const codeFromHash = () => { const m = /[#&](?:invite|join)=([A-Za-z0-9-]+)/.exec(location.hash || ''); return m ? m[1] : null; };
+  function showRealAuth(on) {
+    const real = $('auth-real'), sim = $('auth-simulated');
+    if (real) real.hidden = !on;
+    if (sim) sim.hidden = on;
+  }
+  async function realBoot() {
+    realAccounts = typeof SESSION !== 'undefined' && await SESSION.probe();
+    if (!realAccounts) return false;
+    showRealAuth(true);
+    let who = null;
+    try { who = await SESSION.me(); } catch (e) { if (e.status === 426) toast(T('auth.updateApp')); }
+    const code = codeFromHash();
+    if (code) await offerCode(code);
+    if (who) { routeReal(SESSION.appUser()); return true; }
+    show('auth-screen');
+    return true;
+  }
+  /* what this code is for, before anyone types anything: the club and the role it asks for */
+  async function offerCode(code) {
+    try {
+      const info = await SESSION.peek(code);
+      pendingCode = code;
+      const note = $('auth-join-note');
+      if (note) { note.hidden = false; note.textContent = T('auth.joiningAs', { club: info.club.name, role: T(ROLE_WORD[info.role] || 'role.player').toLowerCase() }); }
+      if ($('auth-name-wrap')) $('auth-name-wrap').hidden = false;
+      if ($('auth-create')) $('auth-create').hidden = false;
+      if ($('auth-code')) $('auth-code').value = '';
+    } catch (e) { toast(T(e.status === 426 ? 'auth.updateApp' : 'auth.codeUnknown')); }
+  }
+  const passkeyProblem = e => toast(T(e && e.status === 426 ? 'auth.updateApp' : 'auth.passkeyFailed'));
+  async function createAccount() {
+    if (!SESSION.supported()) return toast(T('auth.noPasskeySupport'));
+    const name = (($('auth-name') || {}).value || '').trim();
+    if (!name) return toast(T('auth.nameNeeded'));
+    try { await SESSION.register(pendingCode, name); pendingCode = null; cleanAuthHash(); routeReal(SESSION.appUser()); }
+    catch (e) { passkeyProblem(e); }
+  }
+  async function signInWithPasskey() {
+    if (!SESSION.supported()) return toast(T('auth.noPasskeySupport'));
+    try {
+      await SESSION.signIn();
+      if (pendingCode) { try { await SESSION.join(pendingCode); await SESSION.me(); } catch (e) {} pendingCode = null; }
+      cleanAuthHash();
+      routeReal(SESSION.appUser());
+    } catch (e) { passkeyProblem(e); }
+  }
+  /* a used code should not sit in the address bar of a shared screen */
+  function cleanAuthHash() {
+    try { if (codeFromHash() && history.replaceState) history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  }
+  function routeReal(user) {
+    if (!user) return show('auth-screen');
+    state.user = user;
+    if (user.status === 'approved') return enterApp();
+    const num = user.pending && user.pending.requestNo;
+    if ($('pending-email')) $('pending-email').textContent = num ? T('auth.waitingApproval', { n: num }) : user.name;
+    show('pending-screen');
+  }
+
   // route an existing user record by status
   function routeUser(user) {
     state.user = user;
@@ -1122,7 +1188,113 @@
   /* ======================================================
      SUPER ADMIN CONSOLE
      ====================================================== */
+  /* ---- the club console, when accounts are real ----
+     The same screen as the simulated one, fed by the server: the club's own requests (each with the
+     number the person shows in person), its members, and the two ways in — a join link for players
+     and a single-use invite for a coach. Anything that changes a role asks for the passkey again. */
+  async function withStepUp(run) {
+    try { return await run(); }
+    catch (e) {
+      if (e.status !== 403 || e.error !== 'step-up-required') throw e;
+      await SESSION.stepUp();            // prove it is still you, then do exactly what was asked
+      return run();
+    }
+  }
+  async function renderClubAdmin() {
+    const v = $('view-admin'), club = SESSION.activeClub(state.user && state.user.clubId);
+    if (!club) { v.innerHTML = `<div class="admin-wrap"><p class="muted">${T('club.noClub')}</p></div>`; return; }
+    const base = `/api/clubs/${club.id}`;
+    let info = null, members = [], codes = [], invites = [];
+    try {
+      info = await SESSION.api(base);
+      if (info.myRole === 'admin') {
+        members = (await SESSION.api(base + '/members')).members;
+        codes = (await SESSION.api(base + '/join-codes')).joinCodes;
+        invites = (await SESSION.api(base + '/invites')).invites;
+      }
+    } catch (e) { v.innerHTML = `<div class="admin-wrap"><p class="muted">${escapeHtml(T(e.status === 401 ? 'auth.passkeyFailed' : 'club.cannotLoad'))}</p></div>`; return; }
+    const pend = members.filter(m => m.status === 'pending'), approved = members.filter(m => m.status === 'approved');
+    const roleOpts = cur => ['player', 'trainer', 'coach', 'admin'].map(r => `<option value="${r}"${r === cur ? ' selected' : ''}>${T(ROLE_WORD[r] || 'role.player')}</option>`).join('');
+    v.innerHTML = `<div class="admin-wrap">
+      <div class="admin-head"><h1>${escapeHtml(info.name)}</h1><p class="dash-sub">${T('club.yourRole', { role: T(ROLE_WORD[info.myRole] || 'role.player') })}${info.adminCount === 1 ? ' · ' + T('club.onlyAdmin') : ''}</p></div>
+      ${info.myRole !== 'admin' ? `<p class="muted">${T('club.staffOnly')}</p>` : `
+      ${(info.alerts || []).length ? `<section class="admin-sec"><h3>${T('club.alerts')}</h3>${info.alerts.map(a => `<div class="admin-row"><span class="ar-main">${T('club.suspectPasskey', { name: escapeHtml(a.name) })}</span></div>`).join('')}</section>` : ''}
+      <section class="admin-sec">
+        <h3>${T('club.requests')} ${pend.length ? `<span class="pill-count">${pend.length}</span>` : ''}</h3>
+        <div class="admin-list" id="club-requests">
+          ${pend.length ? pend.map(m => `<div class="admin-row" data-member="${escapeHtml(m.memberRef)}">
+            <span class="ar-av">${escapeHtml((m.name || '?').charAt(0))}</span>
+            <span class="ar-main"><span class="ar-name">${escapeHtml(m.name)}${m.sameName ? ` <span class="tag">${T('club.sameName')}</span>` : ''}${m.mixedScript ? ` <span class="tag">${T('club.oddLetters')}</span>` : ''}</span>
+              <span class="ar-sub">${T('club.asksToJoinAs', { role: T(ROLE_WORD[m.role] || 'role.player') })}${m.via && m.via.label ? ' · ' + escapeHtml(m.via.label) : ''}${m.previously ? ' · ' + T('club.previously' + (m.previously.status === 'removed' ? 'Removed' : 'Denied')) : ''}</span></span>
+            <span class="ar-actions">
+              <label class="ar-code">${T('club.requestNo')} <input type="text" inputmode="numeric" maxlength="4" size="4" data-no="${escapeHtml(m.memberRef)}"></label>
+              <button class="btn-primary sm" data-approve-member="${escapeHtml(m.memberRef)}">${T('ui.approve')}</button>
+              <button class="btn-ghost sm danger" data-deny-member="${escapeHtml(m.memberRef)}">${T('ui.deny')}</button>
+            </span></div>`).join('') : `<div class="muted">${T('club.noRequests')}</div>`}
+        </div>
+        <p class="fa-note">${T('club.requestNoNote')}</p>
+      </section>
+      <section class="admin-sec">
+        <h3>${T('club.members')} <span class="pill-count">${approved.length}</span></h3>
+        <div class="admin-list">${approved.map(m => `<div class="admin-row">
+          <span class="ar-av">${escapeHtml((m.name || '?').charAt(0))}</span>
+          <span class="ar-main"><span class="ar-name">${escapeHtml(m.name)}</span></span>
+          <span class="ar-actions">
+            <select data-role-member="${escapeHtml(m.memberRef)}">${roleOpts(m.role)}</select>
+            <button class="btn-ghost sm danger" data-remove-member="${escapeHtml(m.memberRef)}">${T('club.remove')}</button>
+          </span></div>`).join('')}</div>
+      </section>
+      <section class="admin-sec">
+        <h3>${T('club.waysIn')}</h3>
+        <div class="admin-list">
+          ${codes.map(c => `<div class="admin-row"><span class="ar-main"><span class="ar-name">${escapeHtml(c.label || T('club.joinLink'))}</span>
+            <span class="ar-sub">${T('club.joinLinkStats', { uses: c.uses, pending: c.pendingCount })}${c.active ? '' : ' · ' + T('club.revoked')}</span></span>
+            ${c.active ? `<span class="ar-actions"><button class="btn-ghost sm danger" data-revoke-code="${escapeHtml(c.ref)}">${T('club.revoke')}</button></span>` : ''}</div>`).join('')}
+          ${invites.map(i => `<div class="admin-row"><span class="ar-main"><span class="ar-name">${escapeHtml(i.label || T(ROLE_WORD[i.role] || 'role.coach'))}</span>
+            <span class="ar-sub">${i.status === 'pending' ? T('club.inviteUsedBy', { name: escapeHtml(i.usedBy.name) }) : T('club.inviteUnused', { role: T(ROLE_WORD[i.role] || 'role.coach') })}</span></span>
+            ${i.status === 'unused' ? `<span class="ar-actions"><button class="btn-ghost sm danger" data-revoke-invite="${escapeHtml(i.ref)}">${T('club.revoke')}</button></span>` : ''}</div>`).join('')}
+        </div>
+        <div class="admin-actions">
+          <button class="btn-primary sm" id="club-new-join">${T('club.newJoinLink')}</button>
+          <select id="club-invite-role">${['coach', 'trainer', 'admin'].map(r => `<option value="${r}">${T(ROLE_WORD[r])}</option>`).join('')}</select>
+          <button class="btn-ghost sm" id="club-new-invite">${T('club.newInvite')}</button>
+        </div>
+        <div id="club-new-code" hidden></div>
+      </section>`}
+    </div>`;
+    wireClubAdmin(v, base);
+  }
+  function wireClubAdmin(v, base) {
+    const again = async (fn) => { try { await fn(); await renderClubAdmin(); } catch (e) { toast(clubError(e)); } };
+    const numFor = ref => ((v.querySelector(`[data-no="${ref}"]`) || {}).value || '').trim();
+    v.querySelectorAll('[data-approve-member]').forEach(b => b.onclick = () => again(() => withStepUp(() =>
+      SESSION.api(`${base}/members/${b.dataset.approveMember}/approve`, { method: 'POST', body: { requestNo: numFor(b.dataset.approveMember) } }))));
+    v.querySelectorAll('[data-deny-member]').forEach(b => b.onclick = () => again(() =>
+      SESSION.api(`${base}/members/${b.dataset.denyMember}/deny`, { method: 'POST', body: { requestNo: numFor(b.dataset.denyMember) } })));
+    v.querySelectorAll('[data-role-member]').forEach(s => s.onchange = () => again(() => withStepUp(() =>
+      SESSION.api(`${base}/members/${s.dataset.roleMember}/role`, { method: 'POST', body: { role: s.value } }))));
+    v.querySelectorAll('[data-remove-member]').forEach(b => b.onclick = () => { if (!confirm(T('club.confirmRemove'))) return; again(() => withStepUp(() =>
+      SESSION.api(`${base}/members/${b.dataset.removeMember}/remove`, { method: 'POST', body: {} }))); });
+    v.querySelectorAll('[data-revoke-code]').forEach(b => b.onclick = () => again(() =>
+      SESSION.api(`${base}/join-codes/${b.dataset.revokeCode}/revoke`, { method: 'POST', body: {} })));
+    v.querySelectorAll('[data-revoke-invite]').forEach(b => b.onclick = () => again(() =>
+      SESSION.api(`${base}/invites/${b.dataset.revokeInvite}/revoke`, { method: 'POST', body: {} })));
+    const show = (code, what) => { const box = v.querySelector('#club-new-code'); if (!box) return; box.hidden = false;
+      box.innerHTML = `<div class="invite-card"><div class="invite-left"><span class="dc-k">${escapeHtml(what)}</span><div class="invite-code">${escapeHtml(code)}</div>
+        <p class="dc-note">${T('club.codeShownOnce')}</p></div><div class="invite-qr">${typeof QR !== 'undefined' ? QR.toSVG(location.origin + location.pathname + '#join=' + code.replace(/-/g, ''), { size: 148, quiet: 2 }) : ''}</div></div>`; };
+    const nj = v.querySelector('#club-new-join');
+    if (nj) nj.onclick = async () => { try { const r = await withStepUp(() => SESSION.api(`${base}/join-codes`, { method: 'POST', body: { label: T('club.joinLink') } })); await renderClubAdmin(); show(r.code, T('club.newJoinLink')); } catch (e) { toast(clubError(e)); } };
+    const ni = v.querySelector('#club-new-invite');
+    if (ni) ni.onclick = async () => { const role = (v.querySelector('#club-invite-role') || {}).value || 'coach';
+      try { const r = await withStepUp(() => SESSION.api(`${base}/invites`, { method: 'POST', body: { role } })); await renderClubAdmin(); show(r.code, T(ROLE_WORD[role] || 'role.coach')); } catch (e) { toast(clubError(e)); } };
+  }
+  const clubError = e => T(e && e.error === 'request-changed' ? 'club.requestChanged'
+    : e && e.error === 'last-admin' ? 'club.lastAdmin'
+    : e && e.error === 'needs-verified-passkey' ? 'club.needsVerifiedPasskey'
+    : e && e.status === 426 ? 'auth.updateApp' : 'club.cannotLoad');
+
   function renderAdmin() {
+    if (realAccounts) { renderClubAdmin(); return; }
     const v = $('view-admin');
     const users = DATA.loadUsers();
     const pend = users.filter(u=>u.status==='pending');
@@ -2243,7 +2415,7 @@
     const base = feedBase().replace(/\/+$/,''); const token = calToken();
     out.innerHTML = `<div class="muted">${T('ui.publishing')}</div>`;
     try {
-      const r = await fetch(`${base}/api/calendar/${token}`, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ name:'Triibholz — '+(state.user&&state.user.name||'Team'), events: ev }) });
+      const r = await API.fetch(`${base}/api/calendar/${token}`, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ name:'Triibholz — '+(state.user&&state.user.name||'Team'), events: ev }) });
       if (!r.ok) throw new Error('publish-'+r.status);
       const url = `${base}/api/calendar/${token}.ics`;
       const webcal = url.replace(/^https?:/, 'webcal:');
@@ -2277,7 +2449,7 @@
     if (!state.user) return;
     const base = feedBase().replace(/\/+$/, '');
     try {
-      const r = await fetch(`${base}/api/announcements?team=${encodeURIComponent(announceTeam())}&for=${encodeURIComponent(state.user.email)}`);
+      const r = await API.fetch(`${base}/api/announcements?team=${encodeURIComponent(announceTeam())}&for=${encodeURIComponent(state.user.email)}`);
       if (!r.ok) throw new Error('list-' + r.status);
       const data = await r.json();
       announce.list = data.announcements || []; announce.unread = data.unread || 0; announce.reachable = true;
@@ -2323,7 +2495,7 @@
     const box = $('announce-detail'); if (!box) return;
     box.innerHTML = `<div class="muted" style="padding:8px 4px">${T('ui.loadingEllipsis')}</div>`;
     const base = feedBase().replace(/\/+$/, '');
-    let a; try { a = await (await fetch(`${base}/api/announcements/${id}`)).json(); } catch (e) { box.innerHTML = `<div class="muted">${T('ui.couldNotLoadThis')}</div>`; return; }
+    let a; try { a = await (await API.fetch(`${base}/api/announcements/${id}`)).json(); } catch (e) { box.innerHTML = `<div class="muted">${T('ui.couldNotLoadThis')}</div>`; return; }
     box.innerHTML = `<div class="announce-open">
       <div class="ann-open-head"><b>${escapeHtml(a.title)}</b><span class="muted">${escapeHtml((a.from && a.from.name) || '')} · ${new Date(a.createdAt).toLocaleString()}</span></div>
       ${a.matchLabel ? `<div class="ann-match">🤽 ${escapeHtml(a.matchLabel)}</div>` : ''}
@@ -2332,7 +2504,7 @@
     </div>`;
     box.querySelectorAll('[data-import-play]').forEach(b => b.onclick = e => { e.stopPropagation(); importAnnouncedPlay(a.plays[+b.dataset.importPlay]); });
     if (!(a.readBy || []).includes(state.user.email)) {
-      try { await fetch(`${base}/api/announcements/${id}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ by: state.user.email }) }); } catch (e) {}
+      try { await API.fetch(`${base}/api/announcements/${id}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ by: state.user.email }) }); } catch (e) {}
       // update the badge/list state quietly — a full re-render would wipe the detail view open right now
       const item = (announce.list || []).find(x => x.id === id); if (item) item.read = true;
       announce.unread = (announce.list || []).filter(x => !x.read).length;
@@ -2396,7 +2568,7 @@
       const btn = ov.querySelector('#ann-send'); btn.disabled = true; btn.textContent = T('ui.sending');
       try {
         const base = feedBase().replace(/\/+$/, '');
-        const r = await fetch(`${base}/api/announcements`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+        const r = await API.fetch(`${base}/api/announcements`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
         if (!r.ok) throw new Error('send-' + r.status);
         toast(scope === 'player' ? T('ui.noteSent') : T('ui.sentToWholeTeam'));
         close(); loadAnnouncements();
@@ -3369,6 +3541,9 @@
 
   /* ---------------- wire events ---------------- */
   function wire() {
+    if ($('signin-passkey')) $('signin-passkey').onclick = signInWithPasskey;
+    if ($('auth-create')) $('auth-create').onclick = createAccount;
+    if ($('auth-code-go')) $('auth-code-go').onclick = () => { const c = (($('auth-code') || {}).value || '').trim(); if (c) offerCode(c); };
     $('signin-apple').onclick  = (e)=> simulateSignIn('apple', e.currentTarget);
     $('signin-google').onclick = (e)=> simulateSignIn('google', e.currentTarget);
     document.querySelectorAll('.demo-btn').forEach(b=> b.onclick=()=> enterDemo(b.dataset.demo));
@@ -3531,7 +3706,7 @@
     $('ed-phase').onchange = (e)=>{ edit.scenario.phase=e.target.value; };
     if ($('ed-visibility')) $('ed-visibility').onchange = (e)=>{ edit.scenario.visibility=e.target.value; };
 
-    $('logout-btn').onclick = (e)=>{ e.stopPropagation(); clearSession(); state.user=null; if (typeof SHARE!=='undefined' && $('auth-share-note')) $('auth-share-note').hidden = !SHARE.fromHash(location.hash); show('auth-screen'); };
+    $('logout-btn').onclick = (e)=>{ e.stopPropagation(); if (realAccounts && typeof SESSION!=='undefined') SESSION.signOut().catch(()=>{}); clearSession(); state.user=null; if (typeof SHARE!=='undefined' && $('auth-share-note')) $('auth-share-note').hidden = !SHARE.fromHash(location.hash); show('auth-screen'); };
     $('editor-modal').onclick = (e)=>{ if(e.target===$('editor-modal')) closeEditor(); };
   }
 
@@ -3615,6 +3790,11 @@
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
       navigator.serviceWorker.register('sw.js').catch(()=>{});
     }
+    // accounts are the server's decision: ask before offering a simulated sign-in
+    if (typeof SESSION !== 'undefined') { realBoot().then(on => { if (!on) bootSimulated(); }).catch(() => bootSimulated()); return; }
+    bootSimulated();
+  }
+  function bootSimulated() {
     const sess = loadSession();
     if (sess && sess.email) { const u = DATA.findUserByEmail(sess.email); if (u && u.role) { routeUser(u); return; } }
     if (typeof SHARE!=='undefined' && SHARE.fromHash(location.hash) && $('auth-share-note')) $('auth-share-note').hidden = false;
