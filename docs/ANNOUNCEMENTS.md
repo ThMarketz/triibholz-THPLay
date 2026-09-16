@@ -43,6 +43,34 @@ The same bell, plus **＋ New**:
 
 Composing is limited to coach / trainer / super-admin (`canEdit()`); everyone can read.
 
+## A moment from the Film Room
+
+A coach watching a video in the Film Room can send one tagged moment out of it — to the whole
+club, or to one player — without leaving the page. On each tagged moment there is a **✂ Send**
+button (staff only, and only for a video the app has the file for):
+
+1. the video is uploaded once and remembered for the rest of the session, so sending a second
+   moment from the same match cuts straight away;
+2. `POST /api/clip` cuts the seconds of that moment into a small mp4 (the same cut the game plan
+   and the debrief already use);
+3. the cut travels as `clip` on an ordinary announcement, carrying **what was already marked on
+   that moment** — the tactic recognised, the zone, the outcome — plus whatever the coach types.
+
+The player opens the bell and the clip plays inline, with those marks under it. Nothing is
+downloaded and nothing is shared outside the club.
+
+**Who may watch the cut.** A clip belongs to whoever cut it and to the club's staff. A player may
+watch one only because something they are allowed to read already shows it to them: a debrief of
+their club, or a note sent to them or to the whole club (`clipShownTo()` in `server/index.js`,
+used by `requireAssetRead()`). A club-mate the note was not addressed to gets the same `404` a
+stranger does, and a club cannot attach a clip cut from another club's video — the server checks
+the clip's `assets` row against the poster's club before the note is stored.
+
+`GET /api/clubs/:club/addressees` is what fills the **To** list: approved members of that club as
+`{ memberRef, name, role }`, staff only, from a user-verified session — no request numbers, no
+history. It is an interim: slice 5 of `ACCOUNTS.md` narrows it to the teams that coach actually
+has.
+
 ## API
 
 | Method | Route | Notes |
@@ -50,7 +78,13 @@ Composing is limited to coach / trainer / super-admin (`canEdit()`); everyone ca
 | POST | `/api/announcements` | create; 400 on bad scope / missing title-body / player scope without a valid `to` email |
 | GET | `/api/announcements?team=…&for=…` | only what that reader may see, newest first, plus an `unread` count |
 | GET | `/api/announcements/:id` | the full announcement, body and attached plays included |
-| POST | `/api/announcements/:id/read` | `{ by: email }` — idempotent |
+| POST | `/api/announcements/:id/read` | `{ by: email }` — idempotent; with accounts on the reader comes from the session and the body is ignored |
+| GET | `/api/clubs/:club/addressees` | who a coach may write to: `{ memberRef, name, role }`, staff only |
+
+A `clip` on an announcement is `{ url, title, start, end, marks[] }`. `ANNOUNCE.sanitize()`
+refuses anything whose `url` is not `/api/clips/<id>.mp4` (`bad-clip` — an outside URL can never
+be smuggled into a note and played inside the app), keeps at most 8 marks of 80 characters, and
+`summarize()` reports `hasClip` so the bell can show which notes carry a moment to watch.
 
 Visibility is decided in one place, `ANNOUNCE.visibleTo()` in `js/announce.js`, a pure
 module the server `require`s directly (like `calendar.js` and `privacy.js` already do) so

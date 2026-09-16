@@ -22,7 +22,7 @@ the rules below, not a footnote.
 | 1 | Database, migrations, `tx()`, configuration checks, operator CLI, last-admin rule | **done** (02d9042) |
 | 2 | Passkey registration and sign-in, sessions, behind `ACCOUNTS=1`; nothing depends on it yet | **done** — server only; the app still signs in the simulated way |
 | 3 | Clubs and memberships: invites, join codes, approvals, roles, removal, step-up, UV for staff | **done** — server only |
-| 4 | The switch, in one release: the app signs in for real; every existing endpoint authorized | **done** — server (5d7733d) and app; the announcement composer, a demo sandbox and legacy-data tools are still to come |
+| 4 | The switch, in one release: the app signs in for real; every existing endpoint authorized | **done** — server (5d7733d), app (e366672) and sending a cut moment from the Film Room; the announcement composer, a demo sandbox and legacy-data tools are still to come |
 | 5 | Teams, rosters, sheets, templates on the server; read-only offline copy for staff | |
 | 6 | Devices: QR pairing with approval on the old device, devices page, revocation | |
 | 7 | Recovery with a hold period; player and guardian links | |
@@ -405,8 +405,15 @@ One release, because half-authorized is worse than either state:
   headers are removed.
 - New resources get 128-bit random ids (today's announcement, debrief and job ids are clock-based
   and enumerable). Announcements and debriefs take team and author from the session.
-- A clip is readable by its owner, the club's admins, and whoever may read a debrief that
-  references it (stored server-side).
+- A clip is readable by its owner, the club's admins, and whoever may read something that already
+  shows it to them: a debrief of their club, or a note sent to them or to the whole club
+  (`clipShownTo()`). A club-mate the note was not addressed to gets the same 404 a stranger does.
+- **A moment from the Film Room** can be sent to the club or to one player, carrying the marks
+  already on it (`docs/ANNOUNCEMENTS.md`). The server checks the clip was cut from that club's own
+  video before the note is stored, and `ANNOUNCE.sanitize()` refuses any `clip.url` that is not
+  `/api/clips/<id>.mp4`, so an outside URL cannot be smuggled into a note and played in the app.
+- `GET /api/clubs/:club/addressees` gives staff the names and member refs they may write to, and
+  nothing else. It is an interim — slice 5 narrows it to the teams that coach actually has.
 - **Calendar feeds** get server-issued, revocable tokens created by the team's staff; old
   client-made tokens are refused. No venue for youth training unless the club turns it on.
 - Files already on the volume (announcements, debriefs, videos, clips, calendars) have no owner:
@@ -421,6 +428,8 @@ One release, because half-authorized is worse than either state:
   correction never changes another club's sheet.
 - The two-teams-same-category check runs within the club only. Staff who are not on both teams are
   told "conflicts with another team list in this club" without the team's name.
+- The addressee list (`/api/clubs/:club/addressees`, slice 4) is narrowed here from "every
+  approved member of the club" to the members of the teams that coach is actually staff of.
 - Uploading a device's local teams: approved staff only, into a club they pick, idempotent (the
   local ids are the key — a retried upload creates nothing new), confirmed by a server manifest
   before the device touches its copy. Never offered in a session that started from a pairing,
@@ -504,6 +513,15 @@ None blocks local development. All are needed before real people sign in.
   fault-injected; each fails a check. Two are deliberately layered and fail only with both layers
   removed: ending a cloned passkey's sessions (sessions also refuse any passkey that is not active),
   and the replay check before verification (the used-challenge insert refuses it again).
+- `tests/authz.mjs` — slice 4 over real HTTP: the gate in front of every old endpoint (client
+  version, Origin, content type, no CORS), signed-out 401s, clubs that cannot see each other's
+  debriefs, announcements, insights or videos, staff acting only from a user-verified session,
+  clips cut only from a video the person may use, calendar feeds issued and revoked, data from
+  before accounts belonging to nobody, and [9b] a cut moment sent to one player: the player may
+  then watch that clip, a club-mate it was not sent to may not, another club may not attach it,
+  and an invented clip url is refused. 8 protections fault-injected; each fails a check.
+- `tests/signin.mjs` — the app against that server in jsdom: the passkey sign-in, the club
+  console, and the bell showing a sent moment and playing it inline with its marks.
 - `scripts/test-nginx-realip.sh` — the real nginx image: `CF-Connecting-IP` believed only from
   `TRUSTED_PROXY`, ignored without it or from any other address; bad values refuse to start.
 

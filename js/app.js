@@ -2499,12 +2499,17 @@
     box.innerHTML = `<div class="announce-open">
       <div class="ann-open-head"><b>${escapeHtml(a.title)}</b><span class="muted">${escapeHtml((a.from && a.from.name) || '')} · ${new Date(a.createdAt).toLocaleString()}</span></div>
       ${a.matchLabel ? `<div class="ann-match">🤽 ${escapeHtml(a.matchLabel)}</div>` : ''}
+      ${a.clip && a.clip.url ? `<div class="ann-clip">
+        <video controls playsinline preload="metadata" src="${escapeHtml(API.url(a.clip.url))}"></video>
+        <div class="ann-marks">${(a.clip.marks || []).map(m => `<span class="tag">${escapeHtml(m)}</span>`).join('')}</div>
+      </div>` : ''}
       <p>${escapeHtml(a.body)}</p>
       ${(a.plays || []).length ? `<div class="ann-plays">${a.plays.map((p, i) => `<button class="btn-ghost sm" data-import-play="${i}">${T('ui.playImportButton', { title: escapeHtml((p.play && p.play.title) || T('ui.playN', { n: i + 1 })) })}</button>`).join('')}</div>` : ''}
     </div>`;
     box.querySelectorAll('[data-import-play]').forEach(b => b.onclick = e => { e.stopPropagation(); importAnnouncedPlay(a.plays[+b.dataset.importPlay]); });
-    if (!(a.readBy || []).includes(state.user.email)) {
-      try { await API.fetch(`${base}/api/announcements/${id}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ by: state.user.email }) }); } catch (e) {}
+    if (!(a.readBy || []).includes(realAccounts ? state.user.id : state.user.email)) {
+      // with accounts on the server takes the reader from the session; it is only told who otherwise
+      try { await API.fetch(`${base}/api/announcements/${id}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(realAccounts ? {} : { by: state.user.email }) }); } catch (e) {}
       // update the badge/list state quietly — a full re-render would wipe the detail view open right now
       const item = (announce.list || []).find(x => x.id === id); if (item) item.read = true;
       announce.unread = (announce.list || []).filter(x => !x.read).length;

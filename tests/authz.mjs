@@ -150,6 +150,35 @@ await section('[8] Calendar feeds are issued by the server and can be revoked', 
   ok('an invented token is not a feed', (await rawCall('GET', '/api/calendar/nonsense.ics')).status === 404);
 });
 
+await section('[9b] A moment from the Film Room, sent to the club or to one player', async () => {
+  const clipId = 'clip_sent_30_40.mp4';
+  writeFileSync(join(S.DATA, 'clips', clipId), Buffer.alloc(48, 5));
+  db.prepare("INSERT INTO assets (id, kind, club_id, owner_user_id, created_at) VALUES (?, 'clip', ?, ?, ?)").run(clipId, A.clubId, null, Date.now());
+  const clip = { url: '/api/clips/' + clipId, title: '0:34 · Our shot saved', start: 30, end: 40, marks: ['6 on 5', 'near post', 'shoot earlier'] };
+  const sent = await post(A.admin, '/api/announcements', { scope: 'player', to: A.playerRef, title: 'Look at this', body: 'Next time, shoot earlier.', clip });
+  ok('a coach sends a cut moment to one player', sent.status === 201);
+  const seen = await get(A.player, '/api/announcements/' + sent.json.id);
+  ok('…the player gets the clip and what was marked on it', seen.status === 200 && seen.json.clip.url === clip.url && seen.json.clip.marks.length === 3);
+  ok('…and may now watch that clip, which was not theirs before', (await get(A.player, '/api/clips/' + clipId)).status === 200);
+  ok('another club’s player still may not', (await get(B.player, '/api/clips/' + clipId)).status === 404);
+  const other = await post(B.admin, '/api/announcements', { scope: 'team', title: 'Stolen clip', body: 'x', clip });
+  ok('a club cannot attach a clip cut from another club’s video', other.status === 404);
+  ok('a made-up clip url is not a clip', (await post(A.admin, '/api/announcements', { scope: 'team', title: 'x', body: 'y', clip: { url: 'https://evil.example/x.mp4' } })).status === 400);
+  // a second player of the same club, who was not written to
+  const addr = await get(A.admin, `/api/clubs/${A.clubId}/addressees`);
+  ok('staff can see who they may write to — names and refs, nothing else', addr.status === 200 && addr.json.addressees.some(x => x.name === 'Player Alpha WPC') && !JSON.stringify(addr.json).includes('requestNo'));
+  ok('a player cannot', (await get(A.player, `/api/clubs/${A.clubId}/addressees`)).status === 404);
+  await A.admin.stepUp();
+  const jc = (await A.admin.post(`/api/clubs/${A.clubId}/join-codes`, { label: 'more players' })).json;
+  const mate = dev(); await mate.register(jc.code, 'Second Alpha');
+  const pend = (await A.admin.get(`/api/clubs/${A.clubId}/members`)).json.members.find(m => m.name === 'Second Alpha');
+  await A.admin.post(`/api/clubs/${A.clubId}/members/${pend.memberRef}/approve`, { requestNo: pend.requestNo });
+  await mate.login();
+  ok('a club-mate the note was not sent to cannot watch that clip', (await get(mate, '/api/clips/' + clipId)).status === 404);
+  const teamClip = await post(A.admin, '/api/announcements', { scope: 'team', title: 'For everyone', body: 'watch', clip });
+  ok('a club-wide note carries it to every member', teamClip.status === 201 && (await get(A.player, '/api/clips/' + clipId)).status === 200 && (await get(mate, '/api/clips/' + clipId)).status === 200);
+});
+
 await section('[9] What was there before accounts belongs to nobody', async () => {
   // a debrief and a video written by the old, unauthenticated server
   writeFileSync(join(S.DATA, 'debriefs', 'legacy1.json'), JSON.stringify({ id: 'legacy1', team: 'club', title: 'Old review', items: [], comments: [], createdAt: Date.now() }));

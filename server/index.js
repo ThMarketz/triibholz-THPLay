@@ -69,7 +69,7 @@ try {
   if (ACCOUNTS.accounts) accountsDb = require('./db.js').open(path.join(DATA_DIR, 'triibholz.db'));
   if (accountsDb) auth = require('./auth.js').createAuth({ db: accountsDb, cfg: ACCOUNTS });
   access = accountsDb
-    ? require('./access.js').createAccess({ db: accountsDb, auth, cfg: ACCOUNTS, clipInDebrief })
+    ? require('./access.js').createAccess({ db: accountsDb, auth, cfg: ACCOUNTS, clipShownTo })
     : require('./access.js').openAccess();
 } catch (e) {
   if (require.main !== module) throw e;
@@ -201,13 +201,18 @@ const staffIn = (who, clubId) => ['admin', 'coach', 'trainer'].includes(who.club
 const announcementFor = (a, who) => access.visibleRecord(a, who) && (a.scope === 'team' || a.to === memberRefOf(a.clubId, who.userId) || staffIn(who, a.clubId));
 const memberOfClub = (clubId, memberRef) => { try { return !!accountsDb.prepare("SELECT 1 FROM club_members WHERE club_id = ? AND member_ref = ? AND status = 'approved'").get(clubId, String(memberRef || '')); } catch (e) { return false; } };
 
-/* a clip a debrief of that club shows: the one case where a player may watch someone else's clip */
-function clipInDebrief(clipId, clubId) {
+/* A clip a player may watch: one their club's debrief shows, or one that came with a note sent to
+   them or to the whole club. Anything else is theirs only if they made it or they are staff. */
+function clipShownTo(clipId, clubId, userId) {
+  const ref = memberRefOf(clubId, userId);
   try {
-    return fs.readdirSync(DEBRIEF_DIR).filter(f => f.endsWith('.json')).some(f => {
+    const inDebrief = fs.readdirSync(DEBRIEF_DIR).filter(f => f.endsWith('.json')).some(f => {
       const d = loadDebrief(f.replace(/\.json$/, ''));
       return d && d.clubId === clubId && (d.items || []).some(it => it && it.clipUrl && it.clipUrl.includes(clipId));
     });
+    if (inDebrief) return true;
+    return listAnnounces().some(a => a && a.clubId === clubId && a.clip && a.clip.url && a.clip.url.includes(clipId)
+      && (a.scope === 'team' || a.to === ref));
   } catch (e) { return false; }
 }
 const announcePath = id => path.join(ANNOUNCE_DIR, safeToken(id) + '.json');
@@ -425,6 +430,11 @@ const server = http.createServer(async (req, res) => {
       if (access.on) {
         // the club, the author and who it is for come from the session and this club's own members
         if (a.scope === 'player' && !memberOfClub(club.clubId, a.to)) return send(res, 404, { error: 'not-found' });
+        // a clip may only travel with a note if it was cut from this club's own video
+        if (a.clip) {
+          const asset = access.assetOf(a.clip.url.replace('/api/clips/', ''));
+          if (!asset || asset.kind !== 'clip' || asset.club_id !== club.clubId) return send(res, 404, { error: 'not-found' });
+        }
         Object.assign(a, { clubId: club.clubId, authorUserId: who.userId, from: { name: displayNameOf(who.userId) || '', email: '' } });
       }
       saveAnnounce(a);

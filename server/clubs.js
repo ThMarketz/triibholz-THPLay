@@ -164,6 +164,20 @@ function routes(core) {
     send(res, 200, { ok: true, withdrawn: !!out.withdrawn }, out.signedOut ? clearCookie() : undefined);
   }
 
+  /* The people a staff member may write to: this club's approved members, name and role only — no
+     request numbers, no history, no labels. It exists so a coach can send a clip to one player.
+     Slice 5 narrows it to the teams that coach actually has (docs/ACCOUNTS.md). */
+  async function addressees(req, res, clubId) {
+    const s = requireSession(req), t = now();
+    const out = tx(db, () => {
+      guard(s, clubId, { roles: STAFF }, t);
+      return db.prepare(`SELECT m.member_ref, u.display_name, m.role FROM club_members m JOIN users u ON u.id = m.user_id
+                         WHERE m.club_id = ? AND m.status = 'approved' ORDER BY u.display_name`).all(clubId)
+        .map(r => ({ memberRef: r.member_ref, name: r.display_name, role: r.role }));
+    });
+    send(res, 200, { addressees: out });
+  }
+
   /* ---- codes ---- */
   async function createJoinCode(req, res, clubId) {
     const body = await readJson(req); const t = now(); const s = requireSession(req);
@@ -333,6 +347,7 @@ function routes(core) {
     ['POST', new RegExp(`^/api/clubs/${CLUB}/name$`), rename],
     ['POST', new RegExp(`^/api/clubs/${CLUB}/leave$`), leave],
     ['GET', new RegExp(`^/api/clubs/${CLUB}/members$`), members],
+    ['GET', new RegExp(`^/api/clubs/${CLUB}/addressees$`), addressees],
     ['POST', new RegExp(`^/api/clubs/${CLUB}/members/${MEMBER}/approve$`), decide(true)],
     ['POST', new RegExp(`^/api/clubs/${CLUB}/members/${MEMBER}/deny$`), decide(false)],
     ['POST', new RegExp(`^/api/clubs/${CLUB}/members/${MEMBER}/role$`), role],

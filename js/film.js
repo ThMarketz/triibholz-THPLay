@@ -610,6 +610,7 @@ const FILM = (() => {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest(); xhr.open('POST', url);
       xhr.setRequestHeader('content-type', 'application/octet-stream');
+      if (typeof SESSION !== 'undefined' && SESSION.on && SESSION.on()) xhr.setRequestHeader('x-thp-client', String(SESSION.CLIENT_VERSION));
       xhr.upload.onprogress = ev => { if (ev.lengthComputable && onPct) onPct(Math.round(100 * ev.loaded / ev.total)); };
       xhr.onload = () => { if (xhr.status === 200) { try { resolve(JSON.parse(xhr.responseText).videoRef); } catch (e) { reject(new Error('upload-bad-json')); } } else reject(new Error('upload-' + xhr.status)); };
       xhr.onerror = () => reject(new Error('upload-network'));
@@ -740,6 +741,65 @@ const FILM = (() => {
         <div class="ar-clip" hidden></div>
       </div>`).join('')}</div>`;
   }
+  /* ---- send a moment: cut it out of the match video and give it to the team, or to one player ----
+     The clip is cut by the server out of a video that already belongs to this club, and travels with
+     what the coach marked on the moment. Only staff see the button, and only for a video file the
+     app actually holds; a link (YouTube) cannot be cut. Needs real accounts — without them there is
+     nobody to send it TO. */
+  const canSend = () => typeof SESSION !== 'undefined' && SESSION.on && SESSION.on();
+  async function ensureServerVideo(sessions, s) {
+    if (s.videoRef) return s.videoRef;
+    const blob = await getVideo('film-' + s.id);
+    if (!blob) throw new Error('video-missing');
+    const ref = await uploadWithProgress(scoutBase() + '/api/upload', blob, pct => ctx.toast(TX('film.sendUploading', { pct })));
+    s.videoRef = ref; save(sessions);
+    return ref;
+  }
+  function marksOf(e) {
+    const t = typeOf(e.type);
+    return [TX(t.label), sitLabel(e.situation), e.pos ? TX('film.posLabel', { n: e.pos }) : '', e.zone || '',
+      e.verdict ? (e.verdict === 'right' ? TX('film.right') : TX('film.wrong')) : '', e.counter ? dt(e.counter) : '', e.note ? dt(e.note) : ''].filter(Boolean);
+  }
+  async function openSendMoment(root2, sessions, s, e) {
+    const marks = marksOf(e), title = `${fmt(e.t)} · ${TX(typeOf(e.type).label)}`;
+    let people = [];
+    try { const club = SESSION.activeClub(); if (club) people = (await SESSION.api(`/api/clubs/${club.id}/addressees`)).addressees; } catch (err) {}
+    const box = document.createElement('div');
+    box.className = 'modal-backdrop film-send';
+    box.innerHTML = `<div class="modal modal-sm"><div class="modal-head"><h3>${TX('film.sendMoment')}</h3><span class="spacer"></span><button class="modal-x" data-send-x>✕</button></div>
+      <div class="modal-body">
+        <p class="fa-note">${esc(title)} · ${esc(marks.join(' · '))}</p>
+        <label class="auth-field"><span>${TX('film.sendTo')}</span>
+          <select id="send-to"><option value="">${TX('film.sendToTeam')}</option>${people.map(p => `<option value="${esc(p.memberRef)}">${esc(p.name)}</option>`).join('')}</select></label>
+        <label class="auth-field"><span>${TX('film.sendNote')}</span><textarea id="send-note" rows="3" maxlength="1500"></textarea></label>
+        <p class="fa-note" id="send-state"></p>
+      </div>
+      <div class="modal-foot"><button class="btn-ghost" data-send-x>${TX('film.cancel')}</button><button class="btn-primary" id="send-go">${TX('film.sendIt')}</button></div></div>`;
+    root2.appendChild(box);
+    const close = () => box.remove();
+    box.querySelectorAll('[data-send-x]').forEach(b => b.onclick = close);
+    box.querySelector('#send-go').onclick = async () => {
+      const state = box.querySelector('#send-state'), go = box.querySelector('#send-go');
+      go.disabled = true; state.textContent = TX('film.sendPreparing');
+      try {
+        const ref = await ensureServerVideo(sessions, s);
+        const start = Math.max(0, e.t - 4), end = e.t + 6;
+        const clipUrl = await cutClip(ref, start, end);
+        const to = box.querySelector('#send-to').value;
+        await SESSION.api('/api/announcements', { method: 'POST', body: {
+          scope: to ? 'player' : 'team', to: to || undefined,
+          title, body: (box.querySelector('#send-note').value || '').trim() || marks.join(' · '),
+          clip: { url: clipUrl, title, start, end, marks },
+        } });
+        ctx.toast(TX('film.sendSent'));
+        close();
+      } catch (err) {
+        go.disabled = false;
+        state.textContent = TX(err && err.message === 'video-missing' ? 'film.sendNeedsFile' : 'film.sendFailed');
+      }
+    };
+  }
+
   async function cutClip(videoRef, t0, t1) {
     const r = await API.fetch(scoutBase() + '/api/clip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, start: Math.max(0, t0 - 2), end: t1 + 2 }) });
     if (!r.ok) throw new Error('clip-' + r.status);
@@ -1044,6 +1104,7 @@ const FILM = (() => {
                 ${e.counter?`<span class="fe-counter">🎯 ${esc(dt(e.counter))}</span>`:''}
                 ${e.note?`<span class="fe-note">${esc(dt(e.note))}</span>`:''}</span>
               <span class="fe-actions">
+                ${ctx.canEdit && canSend() && s.source.kind === 'file' ? `<button class="btn-ghost sm" data-send="${e.id}" title="${TX('film.sendMomentTitle')}">${TX('film.sendMoment')}</button>` : ''}
                 ${ctx.canEdit?`<button class="btn-ghost sm" data-rebuild="${e.id}" title="${TX('film.rebuildTitle')}">${TX('film.boardBtn')}</button>`:''}
                 ${ctx.canEdit?`<button class="btn-ghost sm danger" data-del="${e.id}">✕</button>`:''}
               </span>
@@ -1112,6 +1173,10 @@ const FILM = (() => {
       if (runBtn) runBtn.onclick = () => runCloudAnalysis(runBtn);
     }
 
+    main.querySelectorAll('[data-send]').forEach(b => b.onclick = () => {
+      const e = (s.events || []).find(x => x.id === b.dataset.send);
+      if (e) openSendMoment(main, sessions, s, e);
+    });
     main.querySelectorAll('[data-seek]').forEach(b => b.onclick = () => seekTo(parseFloat(b.dataset.seek)));
     main.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
       s.events = s.events.filter(e=>e.id!==b.dataset.del); save(sessions); renderSession();

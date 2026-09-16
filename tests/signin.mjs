@@ -148,6 +148,26 @@ await section('[3] A player asks to join, and the admin approves by the number',
   ok('…and the console now shows them as a member', /Pia Player/.test(q('#view-admin').textContent));
 });
 
+await section('[3b] A clip sent from the Film Room arrives in the app, with its marks', async () => {
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  const clipId = 'clip_app_10_20.mp4';
+  mkdirSync(join(S.DATA, 'clips'), { recursive: true });
+  writeFileSync(join(S.DATA, 'clips', clipId), Buffer.alloc(24, 7));
+  db.prepare("INSERT INTO assets (id, kind, club_id, owner_user_id, created_at) VALUES (?, 'clip', ?, ?, ?)").run(clipId, clubId, null, Date.now());
+  const r = await window.fetch('/api/announcements', { method: 'POST', headers: { 'x-thp-client': '4' }, body: JSON.stringify({
+    scope: 'team', title: '0:12 · Drive & kick', body: 'Watch the near post.',
+    clip: { url: '/api/clips/' + clipId, title: '0:12 · Drive & kick', start: 8, end: 18, marks: ['6 on 6', 'near post'] } }) });
+  ok('the club server accepts a moment with its marks', r.status === 201);
+  q('#announce-btn').click();
+  await settle(20);
+  ok('it shows up in the bell', /Drive & kick/.test(q('#announce-panel').textContent));
+  q('#announce-panel .announce-item').click();
+  await settle(20);
+  const open = q('#announce-detail');
+  ok('opening it plays the clip, not a link to somewhere else', !!open.querySelector('video') && open.querySelector('video').getAttribute('src').includes(clipId));
+  ok('…with what the coach marked on the moment', /6 on 6/.test(open.textContent) && /near post/.test(open.textContent));
+});
+
 await section('[4] Signing out and back in with the passkey alone', async () => {
   q('#logout-btn').click();
   await settle(30);

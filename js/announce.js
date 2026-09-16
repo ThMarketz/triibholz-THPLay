@@ -17,6 +17,8 @@
    ============================================================ */
 const ANNOUNCE = (() => {
   const MAX_TITLE = 120, MAX_BODY = 1500, MAX_MATCH_LABEL = 160, MAX_PLAYS = 6, MAX_NAME = 80;
+  const MAX_MARKS = 8, MAX_MARK = 80;
+  const CLIP_URL = /^\/api\/clips\/[\w-]+\.mp4$/;
   const SCOPES = ['team', 'player'];
 
   const clean = (v, n) => String(v == null ? '' : v).slice(0, n);
@@ -36,6 +38,19 @@ const ANNOUNCE = (() => {
     const toRef = /^m_[A-Za-z0-9_-]{22}$/.test(String(input.to || ''));
     if (scope === 'player' && !isEmail(input.to) && !toRef) return { ok: false, error: 'player-scope-needs-a-valid-to-email' };
     const plays = (Array.isArray(input.plays) ? input.plays : []).slice(0, MAX_PLAYS).filter(p => p && typeof p === 'object');
+    /* a moment cut out of a match video, with what the coach marked on it. The url must be a clip
+       this server cut (the server also checks it belongs to the same club); anything else is not a
+       clip and is dropped rather than passed on to a player's browser. */
+    let clip = null;
+    if (input.clip && typeof input.clip === 'object' && CLIP_URL.test(String(input.clip.url || ''))) {
+      clip = {
+        url: String(input.clip.url),
+        title: clean(input.clip.title, MAX_TITLE),
+        start: Math.max(0, +input.clip.start || 0),
+        end: Math.max(0, +input.clip.end || 0),
+        marks: (Array.isArray(input.clip.marks) ? input.clip.marks : []).slice(0, MAX_MARKS).map(m => clean(m, MAX_MARK)).filter(Boolean),
+      };
+    } else if (input.clip) return { ok: false, error: 'bad-clip' };
     return {
       ok: true,
       value: {
@@ -46,7 +61,7 @@ const ANNOUNCE = (() => {
         title, body,
         matchLabel: input.matchLabel ? clean(input.matchLabel, MAX_MATCH_LABEL) : null,
         matchEventId: input.matchEventId ? clean(input.matchEventId, 60) : null,
-        plays,
+        plays, clip,
       },
     };
   }
@@ -65,7 +80,7 @@ const ANNOUNCE = (() => {
     return {
       id: a.id, scope: a.scope, title: a.title,
       from: a.from && a.from.name, matchLabel: a.matchLabel || null,
-      createdAt: a.createdAt, playCount: (a.plays || []).length,
+      createdAt: a.createdAt, playCount: (a.plays || []).length, hasClip: !!(a.clip && a.clip.url),
       read: forEmail ? (a.readBy || []).includes(forEmail) : null,
     };
   }
@@ -75,7 +90,7 @@ const ANNOUNCE = (() => {
     return (list || []).filter(a => !(a.readBy || []).includes(email)).length;
   }
 
-  return { MAX_TITLE, MAX_BODY, MAX_MATCH_LABEL, MAX_PLAYS, SCOPES, sanitize, visibleTo, summarize, unreadCount };
+  return { MAX_TITLE, MAX_BODY, MAX_MATCH_LABEL, MAX_PLAYS, MAX_MARKS, CLIP_URL, SCOPES, sanitize, visibleTo, summarize, unreadCount };
 })();
 
 // Node/CommonJS interop (no-op in the browser)

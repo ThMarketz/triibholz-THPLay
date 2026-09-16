@@ -45,7 +45,7 @@ function openAccess() {
   };
 }
 
-function createAccess({ db, auth, cfg, now = Date.now, clipInDebrief }) {
+function createAccess({ db, auth, cfg, now = Date.now, clipShownTo }) {
   /* ---- who is asking ---- */
   function actorOf(req) {
     const s = auth.sessionFrom(req);
@@ -94,15 +94,16 @@ function createAccess({ db, auth, cfg, now = Date.now, clipInDebrief }) {
       .run(String(id), kind, clubId, ownerUserId || null, now(), meta ? JSON.stringify(meta) : null);
   const assetOf = id => db.prepare('SELECT * FROM assets WHERE id = ?').get(String(id || '')) || null;
 
-  /* An asset this person may read: their own, or their club's if they are staff, or a clip that a
-     debrief of their club shows (a player may watch the clip in their own team's review). */
+  /* An asset this person may read: their own, or their club's if they are staff, or a clip that
+     something they may read already shows them — a debrief of their club, or a note sent to them or
+     to the whole club. A clip is never readable just because its id was guessed. */
   function requireAssetRead(actor, id, kinds) {
     const a = assetOf(id);
     if (!a || (kinds && !kinds.includes(a.kind))) throw httpError(404, 'not-found');
     const role = actor.clubs.get(a.club_id);
     if (!role) throw httpError(404, 'not-found');
     if (a.owner_user_id === actor.userId || STAFF.includes(role)) return a;
-    if (a.kind === 'clip' && clipInDebrief && clipInDebrief(a.id, a.club_id)) return a;
+    if (a.kind === 'clip' && clipShownTo && clipShownTo(a.id, a.club_id, actor.userId)) return a;
     throw httpError(404, 'not-found');
   }
   /* may this person cut a clip out of this video? */

@@ -1397,6 +1397,12 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('missing title/body is rejected', ANNOUNCE.sanitize({ scope: 'team', title: '', body: 'b' }).ok === false);
     ok('a bad scope is rejected', ANNOUNCE.sanitize({ scope: 'everyone', title: 't', body: 'b' }).ok === false);
     ok('plays list is capped at MAX_PLAYS', ANNOUNCE.sanitize({ scope: 'team', title: 't', body: 'b', plays: Array.from({ length: 20 }, () => ({})) }).value.plays.length === ANNOUNCE.MAX_PLAYS);
+    // a cut moment from the Film Room, travelling with the note
+    const withClip = ANNOUNCE.sanitize({ scope: 'team', title: 't', body: 'b', clip: { url: '/api/clips/clip_ab12.mp4', title: '0:34 · shot saved', start: 30.4, end: 40.4, marks: Array.from({ length: 20 }, (_, i) => 'mark ' + i + ' ' + 'x'.repeat(200)) } });
+    ok('a clip cut from the Film Room travels with the note', withClip.ok === true && withClip.value.clip.url === '/api/clips/clip_ab12.mp4' && withClip.value.clip.start === 30.4);
+    ok('…and what a coach marked on it is capped, in count and in length', withClip.value.clip.marks.length === ANNOUNCE.MAX_MARKS && withClip.value.clip.marks.every(m => m.length <= 80));
+    ok('a clip url pointing anywhere else is refused outright', ANNOUNCE.sanitize({ scope: 'team', title: 't', body: 'b', clip: { url: 'https://evil.example/x.mp4' } }).error === 'bad-clip');
+    ok('the bell can tell which notes carry a moment to watch', ANNOUNCE.summarize(withClip.value, { team: 'A' }).hasClip === true && ANNOUNCE.summarize(teamOk.value, { team: 'A' }).hasClip === false);
     const teamAnn = { team: 'A', scope: 'team', to: null }, playerAnn = { team: 'A', scope: 'player', to: 'nora@icloud.com' };
     ok('a team announcement is visible to any teammate', ANNOUNCE.visibleTo(teamAnn, { team: 'A', email: 'anyone@x' }));
     ok('a player announcement is visible only to its recipient', ANNOUNCE.visibleTo(playerAnn, { team: 'A', email: 'nora@icloud.com' }) && !ANNOUNCE.visibleTo(playerAnn, { team: 'A', email: 'timo@gmail.com' }));
