@@ -22,7 +22,7 @@ the rules below, not a footnote.
 | 1 | Database, migrations, `tx()`, configuration checks, operator CLI, last-admin rule | **done** (02d9042) |
 | 2 | Passkey registration and sign-in, sessions, behind `ACCOUNTS=1`; nothing depends on it yet | **done** — server only; the app still signs in the simulated way |
 | 3 | Clubs and memberships: invites, join codes, approvals, roles, removal, step-up, UV for staff | **done** — server only |
-| 4 | The switch, in one release: the app signs in for real; every existing endpoint authorized | **done** — server (5d7733d), app (e366672), sending a cut moment from the Film Room (faf789a) and the announcement composer; a demo sandbox and legacy-data tools are still to come |
+| 4 | The switch, in one release: the app signs in for real; every existing endpoint authorized | **done** — server (5d7733d), app (e366672), sending a cut moment from the Film Room (faf789a), the announcement composer (2d9c24c) and the operator's legacy-data commands; only the `DEMO=1` sandbox club is still to come |
 | 5 | Teams, rosters, sheets, templates on the server; read-only offline copy for staff | |
 | 6 | Devices: QR pairing with approval on the old device, devices page, revocation | |
 | 7 | Recovery with a hold period; player and guardian links | |
@@ -418,8 +418,25 @@ One release, because half-authorized is worse than either state:
   by member ref; `team=`/`for=` are no longer sent at all, and the author is stamped server-side.
 - **Calendar feeds** get server-issued, revocable tokens created by the team's staff; old
   client-made tokens are refused. No venue for youth training unless the club turns it on.
-- Files already on the volume (announcements, debriefs, videos, clips, calendars) have no owner:
-  they are quarantined as operator-only, with CLI commands to assign them to a club or purge them.
+- Files already on the volume (announcements, debriefs, videos, clips, jobs, calendars) have no
+  owner: they are quarantined — served to nobody — until an operator decides. `server/legacy.js`
+  and three commands are the only way out of the quarantine, and nothing runs by itself:
+
+  | Command | What it does |
+  |---|---|
+  | `node admin.js legacy` | what belongs to nobody, by kind, with sizes and examples |
+  | `node admin.js adopt <club-id> [kind…]` | gives it to one club: records get the club id written into the file, files get an `assets` row owned by the club and by no person. Idempotent. |
+  | `node admin.js forget --yes [kind…]` | deletes it for good. Without `--yes` it only says what it would delete. |
+
+  Adoption is an operator's assertion that a volume belongs to a club — true of every deployment
+  this app has had, and never inferred from the data. Three things it deliberately will not do:
+  **calendars cannot be adopted** (a pre-accounts feed token was invented by a *client*, so its
+  `.ics` is a bearer URL in somebody's calendar app; putting it back in service is exactly what
+  the switch removed — a club republishes from the app and hands out the new link); **an old
+  `to:` e-mail is not resolved to a member**, so a note addressed to one person becomes readable
+  by that club's staff and nobody else; and **an unreadable file is left alone**, listed until an
+  operator deletes it on purpose. A feed the server itself issued is never listed as ownerless —
+  it is a live subscription, and `forget --yes` must not touch it.
 - Old installed apps get `426 Update the app`.
 - Demo: a `DEMO=1` sandbox club with fictional users for tests; local-only on production.
 
@@ -521,7 +538,8 @@ None blocks local development. All are needed before real people sign in.
   clips cut only from a video the person may use, calendar feeds issued and revoked, data from
   before accounts belonging to nobody, and [9b] a cut moment sent to one player: the player may
   then watch that clip, a club-mate it was not sent to may not, another club may not attach it,
-  and an invented clip url is refused. 8 protections fault-injected; each fails a check.
+  and an invented clip url is refused, and [9] data from before accounts reaching its club once an
+  operator adopts it — and no further. 8 protections fault-injected; each fails a check.
 - `tests/signin.mjs` — the app against that server in jsdom: the passkey sign-in, the club
   console, and the bell showing a sent moment and playing it inline with its marks.
 - `scripts/test-nginx-realip.sh` — the real nginx image: `CF-Connecting-IP` believed only from
@@ -542,5 +560,7 @@ HTTP and sessions, transactions, hostile input), each finding reproduced with a 
   handles carry nothing of the id, CHECKs), codes (format, hash-only on disk, forgiving input,
   single use, expiry, revocation, a race between two connections, a failed grant returns the
   code), the last-admin rule (demote, remove, delete, raw SQL, pending admin), sessions and purge,
-  the CLI as a real process, and server startup refusing a bad configuration. Also run inside the
+  the CLI as a real process, [8b] the legacy commands (what is listed, what adoption writes, what
+  it refuses to touch, a live feed left alone, `forget` without `--yes` deleting nothing), and
+  server startup refusing a bad configuration. Also run inside the
   production image (Node 22.23.2). Every protection was fault-injected: removing it fails a check.

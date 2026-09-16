@@ -18,6 +18,9 @@ const fs = require('node:fs');
 const DB = require('./db.js');
 const ID = require('./identity.js');
 const { loadConfig } = require('./config.js');
+const LEGACY = require('./legacy.js');
+
+const mb = n => n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} kB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
 
 const HELP = `Triibholz operator commands
 
@@ -29,6 +32,10 @@ const HELP = `Triibholz operator commands
   clubs                            list clubs with member and admin counts
   members <club-id>                list a club's members (id, role, status)
   purge                            expire old requests; delete expired challenges, sessions, old codes and abandoned accounts
+
+  legacy                           what was on the volume before accounts and now belongs to nobody
+  adopt <club-id> [kind…]          give that to one club (default: everything but calendars)
+  forget --yes [kind…]             delete it, permanently
 
   Database: $DATA_DIR/triibholz.db (DATA_DIR=${process.env.DATA_DIR || '(unset → server/data)'})`;
 
@@ -93,6 +100,45 @@ function main(argv, { now = Date.now(), out = console.log, err = console.error, 
       }
       case 'purge': {
         out(JSON.stringify(ID.housekeeping(db, now)));
+        return 0;
+      }
+      /* ---- what was here before accounts (server/legacy.js) ---- */
+      case 'legacy': {
+        const found = LEGACY.scan(db, dataDir), t = LEGACY.totals(found);
+        if (!t.count) { out('nothing ownerless on this volume — everything belongs to a club'); return 0; }
+        for (const kind of LEGACY.KINDS) {
+          if (!t[kind].count) continue;
+          out(`${String(t[kind].count).padStart(5)}  ${kind.padEnd(14)} ${mb(t[kind].bytes).padStart(9)}${LEGACY.ADOPTABLE.includes(kind) ? '' : '   (cannot be adopted — the token was made by a client)'}`);
+          for (const r of found[kind].slice(0, 3)) out(`       ${r.file}${r.unreadable ? '  ← unreadable' : ''}`);
+          if (found[kind].length > 3) out(`       …and ${found[kind].length - 3} more`);
+        }
+        out(`\n${t.count} item(s), ${mb(t.bytes)}. Served to nobody until a club adopts them.\n  node admin.js adopt <club-id>      give them to one club\n  node admin.js forget --yes        delete them`);
+        return 0;
+      }
+      case 'adopt': {
+        const clubId = need(args[0], 'club id');
+        const kinds = args.slice(1).filter(a => !a.startsWith('-'));
+        const club = ID.getClub(db, clubId); if (!club) throw Object.assign(new Error(`no club ${clubId}`), { code: 'not-found' });
+        const done = LEGACY.adopt(db, dataDir, { clubId, kinds: kinds.length ? kinds : undefined, now });
+        const n = Object.values(done).reduce((a, b) => a + b, 0);
+        out(`${n} item(s) now belong to "${club.name}": ${JSON.stringify(done)}`);
+        if (!kinds.length && LEGACY.scan(db, dataDir).calendars.length) out('\nCalendars were left alone on purpose: a pre-accounts feed link is a bearer URL made by a\nclient. Publish the calendar again from the app and hand out the new link, then: forget --yes calendars');
+        return 0;
+      }
+      case 'forget': {
+        const kinds = args.filter(a => !a.startsWith('-'));
+        const found = LEGACY.scan(db, dataDir), t = LEGACY.totals(found);
+        const chosen = kinds.length ? kinds : LEGACY.KINDS;
+        const bad = chosen.filter(k => !LEGACY.KINDS.includes(k));
+        if (bad.length) throw Object.assign(new Error(`not a kind: ${bad.join(', ')}`), { code: 'usage' });
+        const n = chosen.reduce((a, k) => a + t[k].count, 0);
+        if (!args.includes('--yes')) {
+          out(`this would delete ${n} item(s) (${mb(chosen.reduce((a, k) => a + t[k].bytes, 0))}) for good: ${chosen.join(', ')}`);
+          out('nothing was deleted. Add --yes if that is what you mean.');
+          return 0;
+        }
+        const done = LEGACY.forget(db, dataDir, { kinds: chosen, now });
+        out(`deleted ${Object.values(done).reduce((a, b) => a + b, 0)} item(s): ${JSON.stringify(done)}`);
         return 0;
       }
       default:

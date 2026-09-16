@@ -2,11 +2,12 @@
    and the operator CLI. Real SQLite files in a temp dir; the CLI runs as a real child process.
    Run:  node tests/identity.mjs */
 import { createRequire } from 'node:module';
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const require = createRequire(import.meta.url);
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -14,6 +15,7 @@ const SERVER = join(HERE, '..', 'server');
 const { loadConfig, assertConfig } = require('../server/config.js');
 const DB = require('../server/db.js');
 const ID = require('../server/identity.js');
+const LEGACY = require('../server/legacy.js');
 
 let pass = 0, fail = 0;
 const ok = (n, c) => { if (c) { pass++; console.log('  ✓', n); } else { fail++; console.log('  ✗ FAIL:', n); } };
@@ -226,6 +228,79 @@ section('[8] Operator CLI — a real process against a real file', () => {
   db.close();
   const bad = spawnSync(process.execPath, [join(SERVER, 'admin.js'), 'clubs'], { env: { ...env, DATA_DIR: tmp() }, encoding: 'utf8' });
   ok('a fresh data directory is initialised, not an error', bad.status === 0 && /no clubs yet/.test(bad.stdout));
+});
+
+section('[8b] What was on the volume before accounts: see it, adopt it, or delete it', () => {
+  const dir = tmp();
+  const env = { ...process.env, DATA_DIR: dir, ACCOUNTS: '1', RP_ID: 'localhost', DEV: '1', APP_ORIGINS: 'http://localhost:8088', NODE_NO_WARNINGS: '1' };
+  const cli = (...args) => { const r = spawnSync(process.execPath, [join(SERVER, 'admin.js'), ...args], { env, encoding: 'utf8' }); return { code: r.status, out: r.stdout, err: r.stderr }; };
+  const put = (kind, file, body) => { mkdirSync(join(dir, kind), { recursive: true }); writeFileSync(join(dir, kind, file), body); };
+
+  // a season's worth of data written by the old, unauthenticated server
+  put('announcements', 'a1.json', JSON.stringify({ id: 'a1', team: 'club', scope: 'player', to: 'nora@icloud.com', title: 'Old note', body: 'x', readBy: [] }));
+  put('debriefs', 'd1.json', JSON.stringify({ id: 'd1', team: 'club', title: 'Old review', items: [], comments: [] }));
+  put('videos', 'v1.mp4', Buffer.alloc(4096, 1));
+  put('clips', 'c1.mp4', Buffer.alloc(512, 2));
+  put('jobs', 'j1.json', JSON.stringify({ id: 'j1', state: 'done' }));
+  put('calendars', 'TRII2026.json', JSON.stringify({ name: 'Season', events: [] }));
+  put('debriefs', 'broken.json', '{ not json');
+
+  const seen = cli('legacy');
+  ok('legacy lists every kind that belongs to nobody, with sizes', seen.code === 0 && /announcements/.test(seen.out) && /videos/.test(seen.out) && /4\.0 kB|4096|4 kB/.test(seen.out));
+  ok('…including a file it cannot even read', /broken\.json/.test(seen.out) && /unreadable/.test(seen.out));
+  ok('…and says a client-made calendar token cannot be adopted', /calendars/.test(seen.out) && /cannot be adopted/.test(seen.out));
+
+  const clubId = (cli('create-club', 'Adopting WPC').out.match(/club created: (c_[\w-]+)/) || [])[1];
+  ok('adopting into a club that does not exist fails, and changes nothing', cli('adopt', 'c_nope').code === 1 && !JSON.parse(readFileSync(join(dir, 'announcements', 'a1.json'), 'utf8')).clubId);
+  const dry = cli('forget');
+  ok('forget without --yes deletes nothing and says so', dry.code === 0 && /nothing was deleted/.test(dry.out) && readdirSync(join(dir, 'videos')).length === 1);
+
+  const done = cli('adopt', clubId);
+  ok('adopt gives the club its records and its files', done.code === 0 && /"videos":1/.test(done.out) && /"announcements":1/.test(done.out));
+  const db2 = DB.open(join(dir, 'triibholz.db'));
+  ok('…records carry the club id now', JSON.parse(readFileSync(join(dir, 'announcements', 'a1.json'), 'utf8')).clubId === clubId);
+  ok('…files get an assets row owned by the club and by no person', (() => {
+    const a = db2.prepare("SELECT * FROM assets WHERE id = 'v1.mp4'").get();
+    return a && a.club_id === clubId && a.owner_user_id === null && a.kind === 'video';
+  })());
+  ok('…a note addressed to an e-mail keeps it: nobody guesses which member that was', JSON.parse(readFileSync(join(dir, 'announcements', 'a1.json'), 'utf8')).to === 'nora@icloud.com');
+  ok('…the calendar was left alone, and the operator is told why', /left alone on purpose/.test(done.out) && existsSync(join(dir, 'calendars', 'TRII2026.json')));
+  ok('…and it was written to the audit as the operator', db2.prepare("SELECT count(*) AS n FROM audit WHERE action = 'legacy.adopt'").get().n === 1);
+  ok('adopting twice is not a second copy', /"videos":0/.test(cli('adopt', clubId).out) && db2.prepare("SELECT count(*) AS n FROM assets WHERE id = 'v1.mp4'").get().n === 1);
+  ok('what was adopted is no longer ownerless', /calendars/.test(cli('legacy').out) && !/videos/.test(cli('legacy').out));
+  const noAdopt = cli('adopt', clubId, 'calendars');
+  ok('a kind that cannot be adopted is refused by name, not silently skipped', noAdopt.code === 2 && /cannot adopt: calendars/.test(noAdopt.err));
+
+  const gone = cli('forget', '--yes', 'calendars');
+  ok('forget --yes deletes only the kind it was given', gone.code === 0 && !existsSync(join(dir, 'calendars', 'TRII2026.json')) && existsSync(join(dir, 'videos', 'v1.mp4')));
+  // the unreadable file is the one thing adoption will not touch: it cannot be given a club id,
+  // so it stays listed until an operator deletes it on purpose
+  const after = cli('legacy');
+  ok('…and the file nobody can read is still listed, because adoption would not touch it', /broken\.json/.test(after.out) && !/videos/.test(after.out));
+  cli('forget', '--yes', 'debriefs');
+  ok('deleting it is the only way it goes, and then the volume is clean', /nothing ownerless/.test(cli('legacy').out) && !existsSync(join(dir, 'debriefs', 'broken.json')) && existsSync(join(dir, 'debriefs', 'd1.json')));
+  ok('a made-up kind is refused', cli('forget', '--yes', 'everything').code === 2);
+  /* a feed the server itself issued is live: a calendar app is subscribed to it. It is named for
+     the hash of its token and has a row, and none of this may touch it. */
+  const feedToken = 'aRealServerIssuedFeedToken';
+  const feedHash = createHash('sha256').update(feedToken).digest('hex');
+  const userId = ID.createUser(db2, { displayName: 'Ada Admin' }, Date.now()).id;
+  db2.prepare('INSERT INTO calendar_feeds (token_hash, club_id, label, created_by, created_at) VALUES (?, ?, ?, ?, ?)').run(feedHash, clubId, 'Season', userId, Date.now());
+  put('calendars', feedHash.slice(0, 32) + '.json', JSON.stringify({ name: 'Season', events: [] }));
+  ok('a feed the server issued is not ownerless — it is somebody’s live subscription', !/[0-9a-f]{32}/.test(cli('legacy').out));
+  cli('forget', '--yes');
+  ok('…so deleting everything ownerless leaves it alone', existsSync(join(dir, 'calendars', feedHash.slice(0, 32) + '.json')));
+
+
+  // called directly, not through the CLI: adopt must refuse a club that does not exist rather than
+  // writing a dangling club id into somebody's records
+  put('debriefs', 'd2.json', JSON.stringify({ id: 'd2', team: 'club', items: [] }));
+  ok('adopt() itself refuses an unknown club, and writes nothing', (() => {
+    let threw = false;
+    try { LEGACY.adopt(db2, dir, { clubId: 'c_doesnotexist' }); } catch (e) { threw = e.code === 'not-found'; }
+    return threw && !JSON.parse(readFileSync(join(dir, 'debriefs', 'd2.json'), 'utf8')).clubId;
+  })());
+  db2.close();
 });
 
 section('[9] Server startup', () => {

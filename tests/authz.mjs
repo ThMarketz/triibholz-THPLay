@@ -189,6 +189,18 @@ await section('[9] What was there before accounts belongs to nobody', async () =
   writeFileSync(join(S.DATA, 'clips', 'legacyclip.mp4'), Buffer.alloc(16, 2));
   const legacyClip = await Promise.all([get(A.admin, '/api/clips/legacyclip.mp4'), get(A.player, '/api/clips/legacyclip.mp4'), get(B.admin, '/api/clips/legacyclip.mp4')]);
   ok('a legacy clip belongs to nobody: staff, player and another club all get 404', legacyClip.every(r => r.status === 404));
+
+  // …until an operator says whose volume this is (server/legacy.js, `node admin.js adopt`)
+  const LEGACY = (await import('node:module')).createRequire(import.meta.url)('../server/legacy.js');
+  const before = LEGACY.scan(db, S.DATA);
+  ok('the operator can see it all before deciding anything', before.debriefs.some(r => r.id === 'legacy1') && before.videos.some(r => r.id === 'legacyvideo.mp4'));
+  LEGACY.adopt(db, S.DATA, { clubId: A.clubId });
+  ok('after adoption the club’s staff have their old review back', (await get(A.admin, '/api/debriefs/legacy1')).status === 200);
+  ok('…and it is in their list, still in nobody else’s', (await get(A.admin, '/api/debriefs')).json.debriefs.some(d => d.id === 'legacy1') && !(await get(B.admin, '/api/debriefs')).json.debriefs.some(d => d.id === 'legacy1'));
+  ok('…their old video can be cut again', (await post(A.admin, '/api/clip', { videoRef: 'legacyvideo.mp4', start: 0, end: 2 })).json.error !== 'video-not-found');
+  ok('…and their old clip is theirs to watch', (await get(A.admin, '/api/clips/legacyclip.mp4')).status === 200);
+  ok('another club is no better off than before', (await get(B.admin, '/api/clips/legacyclip.mp4')).status === 404 && (await get(B.admin, '/api/debriefs/legacy1')).status === 404);
+  ok('a player of the adopting club still may not watch a clip nothing shows them', (await get(A.player, '/api/clips/legacyclip.mp4')).status === 404);
 });
 
 S.close();

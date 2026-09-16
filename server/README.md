@@ -65,8 +65,11 @@ answer.
 - **Queue**: in-process FIFO (`CONCURRENCY`, default 1). Swap for Redis at scale.
 - **Storage**: jobs, videos and clips on disk under `DATA_DIR` (`/data` in the container).
 - **Env**: `PORT` `DATA_DIR` `CONCURRENCY` `MAX_BODY` `MAX_UPLOAD` `FFMPEG` `MODEL_ENDPOINT`.
-- **Accounts** (being built, off unless `ACCOUNTS=1`): `RP_ID` `APP_ORIGINS` `DEV` —
-  checked at startup; `node admin.js help` for the operator commands. See `docs/ACCOUNTS.md`.
+- **Accounts** (off unless `ACCOUNTS=1`): `RP_ID` `APP_ORIGINS` `DEV` — checked at startup;
+  `node admin.js help` for the operator commands. See `docs/ACCOUNTS.md`.
+- **Turning accounts on for a volume that already has data**: everything already there belongs to
+  nobody and is served to nobody. `node admin.js legacy` shows it, `adopt <club-id>` gives it to a
+  club, `forget --yes` deletes it. Nothing happens automatically — see `server/legacy.js`.
 - **Reached at** `/api` on the app's own address through nginx; port 4200 is loopback-only.
 
 ## Tests
