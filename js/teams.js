@@ -385,7 +385,7 @@ const TEAMS = (() => {
 
   /* ------------------------------------------------------------- screens */
   let root = null, ctx = {}, db = blank();
-  const ui = { tab: 'teams', teamId: null, sheetId: null, tplId: null, busy: '', progress: '', notice: '' };
+  const ui = { tab: 'teams', teamId: null, sheetId: null, tplId: null, busy: '', progress: '', notice: '', scout: null };
 
   function render(container, context) {
     root = container; ctx = context || {}; db = load();
@@ -431,6 +431,59 @@ const TEAMS = (() => {
     if (e.error === 'no-room') return T('tm.whyNoRoom');
     if (String(e.error || '').startsWith('bad-') || e.error === 'too-many-players' || e.error === 'duplicate-player') return T('tm.whyRefused', { what: String(e.error) });
     return T('tm.whyUnknown');
+  }
+
+  /* ---------- scouting the other team.
+
+     A coach preparing for Saturday can look up what the opposing squad has actually done this
+     season — wpmatch publishes it, and every club can read it. SCOUT judges, this renders.
+
+     Nothing here is a prediction. Every number arrives with what it is out of, exclusions are
+     labelled as the ones a player conceded, and the limits are on the screen rather than in a
+     footnote, because the gaps (who DRAWS exclusions, where they shoot, which hand) are exactly
+     the ones a coach would otherwise assume were covered. */
+  function scoutLine(p) {
+    const rate = p.perMatch === null ? '' : ' ' + T('sc.aMatch', { n: p.perMatch });
+    return `<li><strong>${esc(p.name)}</strong> — ${T('sc.nInMatches', { n: p.n, matches: p.played })}${rate}${p.share ? ` <span class="muted">${T('sc.ofSquad', { share: esc(p.share) })}</span>` : ''}</li>`;
+  }
+  function scoutHtml(sc) {
+    const r = sc.report;
+    if (r.empty) {
+      return `<div class="film-panel tm-scout"><h3>${T('sc.title', { name: esc(sc.name) })}</h3>
+        <p class="muted">${T('sc.noFigures')}</p><p class="fa-note">${T('sc.noFiguresWhy')}</p>
+        <div class="tm-actions"><button class="btn-ghost sm" id="tm-scout-x">${T('sc.close')}</button></div></div>`;
+    }
+    const cols = [['played', 'sc.colPlayed'], ['goals', 'sc.colGoals'], ['goalon', 'sc.colSixOnSix'], ['goalextraplayer', 'sc.colExtra'],
+      ['penaltygoals', 'sc.colPenalties'], ['exclusionfoul', 'sc.colExcluded'], ['penaltyfouls', 'sc.colFouls']]
+      .concat(r.showMisconduct ? [['misconductfoul', 'sc.colMisconduct']] : [])
+      .concat(r.showBrutality ? [['brutalityfoul', 'sc.colViolent']] : []);
+    return `<div class="film-panel tm-scout">
+      <h3>${T('sc.title', { name: esc(sc.name) })} <span class="rightbar-hint">${T('sc.matchesSoFar', { n: r.matches })} · ${esc(new Date(sc.at).toLocaleDateString())}</span></h3>
+      ${r.team.perMatch !== null ? `<p class="tm-scout-band">${T('sc.bandExclusions', { n: r.team.exclusions, matches: r.matches, per: r.team.perMatch })}</p>` : ''}
+      ${r.sections.map(x => `<div class="tm-scout-sec"><span class="ef-label">${T('sc.sec.' + x.key)}</span>
+        <ul class="tm-scout-list">${x.players.map(scoutLine).join('')}</ul></div>`).join('')}
+      ${r.thin.length ? `<div class="tm-scout-sec"><span class="ef-label">${T('sc.tooFew')}</span>
+        <ul class="tm-scout-list">${r.thin.map(p => `<li><strong>${esc(p.name)}</strong> — ${T('sc.thinLine', { goals: p.goals, excl: p.exclusionfoul, matches: p.played })}</li>`).join('')}</ul></div>` : ''}
+      <details class="tm-scout-all"><summary>${T('sc.everyPlayer', { n: r.table.length })}</summary>
+        <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>${T('sc.colPlayer')}</th>${cols.map(c => `<th>${T(c[1])}</th>`).join('')}</tr></thead>
+          <tbody>${r.table.map(p => `<tr><td>${esc(p.name)}</td>${cols.map(c => `<td>${p[c[0]] || 0}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>
+      <p class="fa-note">${T('sc.limits')}</p>
+      <p class="fa-note">${T('sc.source')} ${sc.url ? `<a href="${esc(sc.url)}" target="_blank" rel="noopener noreferrer">wpmatch.ch</a>` : 'wpmatch.ch'}</p>
+      <div class="tm-actions"><button class="btn-ghost sm" id="tm-scout-x">${T('sc.close')}</button></div></div>`;
+  }
+
+  /* One opponent, on an explicit press. Nothing is fetched by hovering and nothing is crawled:
+     the index is cached for the device, so a second opponent costs a single request. */
+  async function scoutSquad(team) {
+    const INDEX_TTL = 7 * 24 * 3600e3, SQUAD_TTL = 24 * 3600e3;
+    let index = (WPMATCH.cacheGet('lists.index', INDEX_TTL) || {}).data;
+    if (!index || !index.length) { index = await WPMATCH.fetchListIndex(); WPMATCH.cachePut('lists.index', index); }
+    const found = WPMATCH.resolveList(team, index);
+    if (!found.list) return { error: found.by === 'ambiguous' ? 'ambiguous' : 'no-list', name: team.name };
+    const hit = WPMATCH.cacheGet('scout.' + found.list.id, SQUAD_TTL);
+    let squad = hit && !hit.stale ? hit.data : null;
+    if (!squad) { squad = await WPMATCH.fetchSquad(found.list.id); WPMATCH.cachePut('scout.' + found.list.id, squad); }
+    return { name: squad.name || team.name, url: squad.url, at: (hit && hit.at) || Date.now(), report: SCOUT.report(squad) };
   }
 
   /* ---------- the club's copy: one button, and what it last said.
@@ -606,6 +659,10 @@ const TEAMS = (() => {
           <label>${T('tm.referee')}<input type="text" id="tm-s-ref" value="${esc(staff.referee)}" maxlength="60"></label>
         </div>
         ${t.wpmatch ? `<button class="btn-ghost sm" id="tm-fixtures" ${ui.busy ? 'disabled' : ''}>${T('tm.pickFixture')}</button><div id="tm-fixture-list"></div>` : ''}
+        <div class="tm-scout-host">
+          <button class="btn-ghost sm" id="tm-scout" ${ui.busy ? 'disabled' : ''}>${T('sc.scoutOpponent')}</button>
+          <div id="tm-scout-out">${ui.scout ? scoutHtml(ui.scout) : ''}</div>
+        </div>
       </div>
 
       <div class="film-panel tm-avail">
@@ -910,6 +967,32 @@ const TEAMS = (() => {
     on('#tm-invite', 'click', () => { const m = $('#tm-invite-modal'); if (m) { m.hidden = false; if (ctx.bindInvite) ctx.bindInvite(m); } });
     on('#tm-invite-x', 'click', () => { const m = $('#tm-invite-modal'); if (m) m.hidden = true; });
 
+    on('#tm-scout', 'click', async () => {
+      const out = $('#tm-scout-out');
+      const who = (s.match && s.match.opponent) || '';
+      out.innerHTML = `<p class="muted">${T('sc.looking')}</p>`;
+      try {
+        const hits = await WPMATCH.searchTeams(who || (t.wpmatch && t.wpmatch.name) || t.name);
+        const them = hits.filter(x => !t.wpmatch || x.id !== t.wpmatch.id);
+        if (!them.length) { out.innerHTML = `<p class="muted">${T('sc.noSquad', { name: esc(who) })}</p>`; return; }
+        if (them.length > 1) {
+          out.innerHTML = `<p class="muted">${T('sc.whichSquad')}</p>` + them.slice(0, 8).map(x => `<button class="btn-ghost sm" data-scout-team="${esc(String(x.id))}">${esc(x.name)}</button>`).join('');
+          out.querySelectorAll('[data-scout-team]').forEach(b => b.onclick = () => runScout(them.find(x => String(x.id) === b.dataset.scoutTeam)));
+          return;
+        }
+        await runScout(them[0]);
+      } catch (e) { out.innerHTML = `<p class="muted">${T('tm.wpmatchDown')}</p>`; }
+    });
+    async function runScout(team) {
+      const out = $('#tm-scout-out');
+      out.innerHTML = `<p class="muted">${T('sc.reading', { name: esc(team.name) })}</p>`;
+      try {
+        const sc = await scoutSquad(team);
+        if (sc.error) { out.innerHTML = `<p class="muted">${T(sc.error === 'ambiguous' ? 'sc.ambiguous' : 'sc.noList', { name: esc(sc.name) })}</p>`; return; }
+        ui.scout = sc; draw();
+      } catch (e) { out.innerHTML = `<p class="muted">${T('tm.wpmatchDown')}</p>`; }
+    }
+    on('#tm-scout-x', 'click', () => { ui.scout = null; draw(); });
     on('#tm-fixtures', 'click', async () => {
       const out = $('#tm-fixture-list'); out.innerHTML = `<p class="muted">${T('tm.searching')}</p>`;
       try {
@@ -1071,7 +1154,7 @@ const TEAMS = (() => {
   return { KEY, CARD_KEY, MIRROR_KEY, SYNC_KEY, CATEGORY_ORDER, render, renderPlayerCard, load, save, upsertPlayers, autoOrder, lineupOf, allTemplates,
            availOf, setAvailability, availabilityCounts, availablePool,
            syncClub, maySync, payloadFor, forUpload, syncTeam, syncAll, loadMirror, syncStateOf, wipeDevice,
-           removeAtClub, deleteAtClub, serverIdOf, seasonOf, pullTeam };
+           removeAtClub, deleteAtClub, serverIdOf, seasonOf, pullTeam, scoutSquad, scoutHtml };
 })();
 
 // Node/CommonJS interop (no-op in the browser)

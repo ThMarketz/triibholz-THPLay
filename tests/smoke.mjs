@@ -19,9 +19,9 @@ window.Response = window.Response || globalThis.Response;
 if (!window.Blob.prototype.text) window.Blob.prototype.text = function () { return new Promise((res, rej) => { const r = new window.FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsText(this); }); };
 if (!window.Blob.prototype.arrayBuffer) window.Blob.prototype.arrayBuffer = function () { return new Promise((res, rej) => { const r = new window.FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsArrayBuffer(this); }); };
 
-const files = ['js/theme.js','js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/chart.js','js/sheetdoc.js','js/eligibility.js','js/teamsheet.js','js/teamsync.js','js/teams.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/api.js','js/session.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/theme.js','js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/chart.js','js/sheetdoc.js','js/eligibility.js','js/teamsheet.js','js/scout.js','js/teamsync.js','js/teams.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/api.js','js/session.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { THEME, CHART, API, SESSION, POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET , TEAMSYNC , TEAMS , WPMATCH };';
+  + '\n;\nwindow.__T = { THEME, CHART, API, SESSION, POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET , TEAMSYNC , TEAMS , WPMATCH , SCOUT };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -2134,6 +2134,49 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     })());
   }
 
+  console.log('\n[14c] What the scouting report will and will not say');
+  {
+    const SC = window.__T.SCOUT;
+    const P = (name, o) => Object.assign({ wpId: 0, name, played: 10, goals: 0, goalon: 0, goalextraplayer: 0, penaltygoals: 0,
+      exclusionfoul: 0, penaltyfouls: 0, misconductfoul: 0, brutalityfoul: 0 }, o);
+    const squad = { name: 'Invented WPC U14', matches: 12, players: [
+      P('Alpha Invented',   { played: 12, goals: 30, goalon: 24, goalextraplayer: 4, penaltygoals: 2, exclusionfoul: 12 }),
+      P('Bravo Invented',   { played: 11, goals: 12, goalon: 6,  goalextraplayer: 6, penaltygoals: 0, exclusionfoul: 3 }),
+      P('Charlie Invented', { played: 12, goals: 6,  goalon: 6,  goalextraplayer: 0, penaltygoals: 0, exclusionfoul: 9 }),
+      P('Delta Invented',   { played: 10, goals: 0,  goalon: 0,  goalextraplayer: 0, penaltygoals: 0, exclusionfoul: 1 }),
+      // two matches: a rate here would be noise presented as authority
+      P('Echo Newcomer',    { played: 2,  goals: 8,  goalon: 8,  goalextraplayer: 0, penaltygoals: 0, exclusionfoul: 2 }),
+    ] };
+    const r = SC.report(squad);
+
+    ok('the team line is a count and its denominator, never a forecast', r.team.exclusions === 27 && r.team.matches === 12 && r.team.perMatch === 2.3);
+    const six = r.sections.find(x => x.key === 'sixOnSix');
+    ok('the hardest mark in 6-on-6 is named, out of the squad’s own 6-on-6 goals', six.players[0].name === 'Alpha Invented' && six.players[0].n === 24 && six.players[0].share === '24 / 44');
+    const extra = r.sections.find(x => x.key === 'extraPlayer');
+    ok('the man-down section is ranked on extra-player goals, not on total goals', extra.players[0].name === 'Bravo Invented' && extra.players[0].n === 6);
+    const excl = r.sections.find(x => x.key === 'excluded');
+    ok('the most-excluded in this squad is a rate with its matches beside it', excl.players[0].name === 'Alpha Invented' && excl.players[0].n === 12 && excl.players[0].perMatch === 1);
+
+    ok('a player with two matches is never ranked against one with twelve', r.sections.every(x => !x.players.some(p => p.name === 'Echo Newcomer')));
+    ok('…but is still shown, with counts and no rate', r.thin.length === 1 && r.thin[0].name === 'Echo Newcomer' && r.thin[0].played === 2);
+    ok('every ranked line carries its own denominator', r.sections.every(x => x.players.every(p => p.played > 0 && typeof p.n === 'number')));
+    ok('no line anywhere carries a probability, a score or a rating', !/likel|risk|probab|score:|rating/i.test(JSON.stringify(r)));
+
+    ok('the full table leads with who actually scored, and still lists the rest', r.table[0].name === 'Alpha Invented' && r.table.length === 5
+      && r.table[r.table.length - 1].goals === 0);
+    ok('columns that are all zeros across the squad are left off a phone screen', r.showMisconduct === false && r.showBrutality === false);
+    ok('a squad nobody has figures for is a state, not an empty table', SC.report({ players: [], matches: 0 }).empty === true);
+
+    // the rate floor, exactly at the boundary
+    const four = SC.report({ matches: 4, players: [P('Foxtrot Invented', { played: 4, goals: 8, goalon: 8 })] });
+    ok('four matches is below the floor: counts only, and out of the ranked sections', four.sections.length === 0 && four.thin.length === 1);
+    const five = SC.report({ matches: 5, players: [P('Golf Invented', { played: 5, goals: 10, goalon: 10 })] });
+    ok('five is where a rate starts being worth showing', five.sections.length === 1 && five.sections[0].players[0].perMatch === 2);
+    // …and the team's own line obeys the same floor: three matches is not a tendency
+    const early = SC.report({ matches: 3, players: [P('Hotel Invented', { played: 3, goals: 4, goalon: 4, exclusionfoul: 6 })] });
+    ok('a squad three matches into a season gets no "expect this many a match" line', early.team.perMatch === null && early.team.exclusions === 6);
+  }
+
   console.log('\n[15] Teams & team sheets — the coach flow, end to end in the DOM');
   {
     const { TEAMS: TM, ELIGIBILITY: E } = window.__T;
@@ -2229,6 +2272,37 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
       ok('clearing puts everyone back to "not asked"', /0 in · 0 out · 4 not asked/.test(q('#view-teams .tm-avail').textContent));
       q('#tm-clear').click(); await wait(30); q('#tm-auto').click(); await wait(40);   // back to the whole squad for the checks below
       ok('with nobody marked, the line-up is the whole roster again', qa('#view-teams .tm-lineup tbody select').map(s2 => s2.value).filter(Boolean).length === 4);
+    }
+    {
+      // the coach presses one button; nothing is fetched until they do
+      const W = window.__T.WPMATCH;
+      const realSearch = W.searchTeams, realIndex = W.fetchListIndex, realSquad = W.fetchSquad;
+      let fetched = 0;
+      W.searchTeams = async () => [{ id: 77, slug: 'other-town-u14', name: 'Other Town U14', url: '' }];
+      W.fetchListIndex = async () => { fetched++; return [{ id: 9100, slug: 'other-town-u14-team', name: 'Other Town U14 – Team' }]; };
+      W.fetchSquad = async () => { fetched++; return { id: 9100, name: 'Other Town U14 – Team', url: 'https://example.invalid/list/x/', matches: 12, players: [
+        { wpId: 1, name: 'Alpha Invented', played: 12, goals: 30, goalon: 24, goalextraplayer: 4, penaltygoals: 2, exclusionfoul: 12, penaltyfouls: 1, misconductfoul: 0, brutalityfoul: 0 },
+        { wpId: 2, name: 'Bravo Invented', played: 11, goals: 12, goalon: 6, goalextraplayer: 6, penaltygoals: 0, exclusionfoul: 3, penaltyfouls: 0, misconductfoul: 0, brutalityfoul: 0 },
+      ] }; };
+      const btn = q('#view-teams #tm-scout');
+      ok('the coach is offered a scouting report while preparing the sheet', !!btn);
+      ok('…and nothing has been asked of wpmatch before they press it', fetched === 0);
+      if (btn) {
+        btn.click();
+        await wait(400);
+        const panel = q('#view-teams .tm-scout');
+        ok('pressing it reports on the opposing squad', !!panel && /Other Town U14/.test(panel.textContent));
+        ok('…leading with how many extra-player chances to expect', /15 exclusions in 12 matches/.test(panel.textContent) || /1\.3 a match/.test(panel.textContent));
+        ok('…naming who to mark at 6-on-6, with what it is out of', /Alpha Invented/.test(panel.textContent) && /24 \/ 30/.test(panel.textContent));
+        ok('…and who the man-down has to cover', /Bravo Invented/.test(panel.textContent));
+        ok('the limits are on the screen, not in a footnote', /who DRAWS exclusions is not recorded/i.test(panel.textContent) && /is a prediction/i.test(panel.textContent));
+        ok('…and it says plainly that exclusions are the ones conceded', /conceded/i.test(panel.textContent));
+        ok('no opponent child’s age, year of birth or nationality is anywhere on the screen', !/\b20(0|1)\d\b/.test(panel.textContent) && !/Ausl|Swiss Sport Nationality/.test(panel.textContent));
+        q('#view-teams #tm-scout-x').click();
+        await wait(120);
+        ok('the report closes again', !q('#view-teams .tm-scout'));
+      }
+      W.searchTeams = realSearch; W.fetchListIndex = realIndex; W.fetchSquad = realSquad;
     }
     const fs = qa('#view-teams .tm-findings li').map(li => li.textContent);
     ok('the check flags the inactive licence by name', fs.some(t => /Inactive licence/.test(t) && /Mia Huber/.test(t)));

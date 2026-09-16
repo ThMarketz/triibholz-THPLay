@@ -79,7 +79,7 @@ window.navigator.credentials = {
 };
 
 const files = ['js/theme.js', 'js/i18n.js', 'js/help.js', 'js/draft.js', 'js/commands.js', 'js/solver.js', 'js/qr.js', 'js/fx.js', 'js/pool.js', 'js/data.js', 'js/animate.js',
-  'js/vision.js', 'js/field.js', 'js/shot.js', 'js/testlog.js', 'js/chart.js', 'js/sheetdoc.js', 'js/eligibility.js', 'js/teamsheet.js', 'js/teamsync.js', 'js/teams.js', 'js/manikin.js', 'js/track.js',
+  'js/vision.js', 'js/field.js', 'js/shot.js', 'js/testlog.js', 'js/chart.js', 'js/sheetdoc.js', 'js/eligibility.js', 'js/teamsheet.js', 'js/scout.js', 'js/teamsync.js', 'js/teams.js', 'js/manikin.js', 'js/track.js',
   'js/bytetrack.js', 'js/events.js', 'js/webdetector.js', 'js/videogen.js', 'js/calendar.js', 'js/planner.js', 'js/privacy.js', 'js/tactics.js', 'js/gameplan.js', 'js/share.js',
   'js/announce.js', 'js/wpmatch.js', 'js/api.js', 'js/session.js', 'js/analysis.js', 'js/film.js', 'js/app.js'];
 window.eval(files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n') + '\n;\nwindow.__T = { SESSION, API, DATA, TEAMS, TEAMSYNC };');
