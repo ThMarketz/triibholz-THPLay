@@ -544,6 +544,7 @@
   let devViewing = null;   // the email whose record is on screen; null → self
   let devTeamMode = true;  // coaches land on the squad table; a player can never reach it
   let devTeamSort = 'name';
+  let devTrendTest = null;   // which test the player's progress chart shows
   function devTargetEmail() { return state.user.role === 'player' ? state.user.email : (devViewing || state.user.email); }
 
   function renderDevelopment() {
@@ -555,7 +556,7 @@
     const canEditThis = isSelf || devCanCoach();
     const wk = TESTLOG.weekKeyOf(new Date().toISOString().slice(0, 10));
     const mascot = TESTLOG.mascotState(home.log, wk);
-    const row = TESTLOG.squadRow(dev, home, wk);   // same arithmetic the squad table uses
+    const row = TESTLOG.squadRow(dev, home, wk, { today: new Date().toISOString().slice(0, 10), days: 90 });   // same arithmetic the squad table uses
     const roster = devCanCoach() ? DATA.loadUsers().filter(u => u.role === 'player' && u.status === 'approved').sort((a, b) => (a.name || '').localeCompare(b.name || '')) : [];
 
     const testCat = TESTLOG.testsFor(!!dev.info.isGK);
@@ -643,6 +644,8 @@
         <div class="dev-bench-grid">${testCat.map(benchCard).join('')}</div>
       </div>
 
+      ${progressCard(dev)}
+
       <details class="dev-history"><summary>${T('dev.testLogHistory', { n: testRows.length })}</summary>
         <div class="dev-table-wrap"><table class="dev-table"><thead><tr><th>${T('dev.date')}</th><th>${T('dev.test')}</th><th>${T('dev.result')}</th><th>${T('dev.testedBy')}</th><th>${T('dev.status')}</th><th>${T('dev.remark')}</th>${canEditThis ? '<th></th>' : ''}</tr></thead>
           <tbody>${testRows.map(r => `<tr><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.test)}</td><td>${escapeHtml(String(r.result))} ${escapeHtml(r.unit || '')}</td><td>${escapeHtml(r.testedBy || '')}</td>
@@ -707,16 +710,104 @@
     wireDevelopment(root, email, dev, home, wk, canEditThis);
   }
 
+  /* ---- one player's test over time ----
+     The first place in the app where a result is more than a row in a table: the same numbers as
+     the history below, with the season target as a rule across the chart. Better is always up,
+     including for times, where the smaller number is the better one. */
+  function progressCard(dev) {
+    if (typeof CHART === 'undefined') return '';
+    const live = (dev.tests || []).filter(r => TESTLOG.normalizeTestStatus(r.status) !== 'denied');
+    const cat = TESTLOG.testsFor(!!dev.info.isGK);
+    const have = cat.filter(t => live.some(r => r.test === t.label || r.test === t.id));
+    if (!have.length) return '';
+    const pick = have.find(t => t.id === devTrendTest) || have[0];
+    const points = TESTLOG.playerSeries(live, pick.id, dev.info.tier || 0, dev.info.isGK);
+    const target = TESTLOG.evaluate(pick, points.length ? points[points.length - 1].value : null, dev.info.tier || 0);
+    return `<div class="dev-card dev-charts">
+      <h3>${T('dev.progressTitle')} <span class="rightbar-hint">${escapeHtml(pick.unit)}</span></h3>
+      <div class="dev-coach-row">
+        <label class="ef-label" for="dev-trend-test">${T('dev.progressPick')}</label>
+        <select id="dev-trend-test" class="focus-select">${have.map(t => `<option value="${escapeHtml(t.id)}" ${t.id === pick.id ? 'selected' : ''}>${escapeHtml(t.label)}</option>`).join('')}</select>
+      </div>
+      ${CHART.series(points, { width: 320, height: 140, target: target && target.target, lower: !!pick.lower,
+        title: pick.label, empty: T('dev.progressEmpty'), dateFormat: d => d,
+        valueFormat: v => pick.unit === 'min:s' ? TESTLOG.fmtSeconds(v) : String(Math.round(v * 100) / 100) })}
+      <p class="fa-note">${points.length < 2 ? T('dev.progressOnlyOne') : T('dev.chartsHowToRead')}</p>
+    </div>`;
+  }
+
+  /* ---- the squad in charts: the same numbers as the table, drawn ----
+     Every value comes from TESTLOG (squadByTest / squadFocus / squadCoverage), so a chart can
+     never say something the table below it does not. A dot is one player measured against the
+     target for THEIR OWN tier, which is why the scale is "% of my target" and not seconds: a
+     U14 and a U18 keeper cannot share a seconds axis honestly. The raw result travels in the
+     dot's own label. Coverage is stated in the card, not in a footnote: these records live on
+     this device, so the chart speaks for the players whose record is here and no one else. */
+  function fmtResult(test, value) {
+    if (value == null) return '—';
+    if (test.unit === 'min:s') return TESTLOG.fmtSeconds(value);
+    return `${Math.round(value * 100) / 100} ${test.unit}`;
+  }
+  function squadCharts(rows) {
+    if (typeof CHART === 'undefined') return '';
+    const players = rows.filter(x => x.started).map(x => ({ id: x.u.email, name: x.u.name || x.u.email, tier: x.tier, isGK: x.isGK, tests: (x.dev && x.dev.tests) || [] }));
+    if (!players.length) return '';
+    const opts = { today: new Date().toISOString().slice(0, 10), maxAgeDays: 365 };
+    const cover = TESTLOG.squadCoverage(players, opts);
+    const groups = [{ gk: false, label: T('dev.chartFieldTests') }].concat(players.some(p => p.isGK) ? [{ gk: true, label: T('dev.chartKeeperTests') }] : []);
+    const testRow = t => {
+      const test = TESTLOG.testById(t.testId, /^(eggbeater|side|lunge|throw|catch|penalty)/.test(t.testId));
+      const strip = CHART.dotStrip(t.rows.map(r => ({
+        value: r.ratio, met: r.met, verified: r.verified,
+        label: `${r.name} · ${fmtResult(test, r.value)}${r.verified ? '' : ' · ' + T('dev.selfReportedWord')}`,
+      })), { target: 1, lower: false, width: 300, height: 52, title: t.label, targetLabel: T('dev.chartTarget'),
+        empty: T('dev.chartNoResultsHere'), axisFormat: v => Math.round(v * 100) + '%' });
+      return `<tr><td>${escapeHtml(t.label)}${t.piste ? ` <span class="tag">PISTE</span>` : ''}</td>
+        <td class="dev-chart-cell">${strip}</td>
+        <td class="${t.n && t.metCount === t.n ? 'dev-team-ok' : t.n ? 'dev-team-gap' : 'muted'}">${t.n ? T('dev.chartAtTarget', { met: t.metCount, n: t.n }) : '—'}</td>
+        <td class="muted">${t.n ? escapeHtml(fmtResult(test, t.median)) : ''}${t.missing ? `<br><small>${T('dev.chartMissing', { n: t.missing })}</small>` : ''}</td></tr>`;
+    };
+    const focus = TESTLOG.squadFocus(players, opts);
+    const focusLabelOf = k => (FOCUS_LIST().find(f => f[0] === k) || [k, k])[1];
+    return `<div class="dev-card dev-charts">
+      <h3>${T('dev.chartsTitle')} <span class="rightbar-hint">${T('dev.chartsSince12Months')}</span></h3>
+      <p class="fa-note">${T('dev.chartsCoverage', { known: cover.withAny, total: cover.total })} · ${T('dev.chartsConfirmedSplit', { verified: cover.verified, self: cover.self })}</p>
+      ${groups.map(g => {
+        const all = TESTLOG.squadByTest(players, Object.assign({ gk: g.gk }, opts));
+        const done = all.filter(t => t.n > 0);
+        const untested = all.filter(t => t.n === 0);
+        if (!done.length && !untested.length) return '';
+        return `<h4 class="dev-chart-head">${escapeHtml(g.label)}</h4>
+          ${done.length ? `<div class="dev-table-wrap"><table class="dev-table dev-chart-table">
+            <thead><tr><th>${T('dev.test')}</th><th>${T('dev.chartVsOwnTarget')}</th><th>${T('dev.chartAtTargetHead')}</th><th>${T('dev.chartMedian')}</th></tr></thead>
+            <tbody>${done.map(testRow).join('')}</tbody></table></div>` : ''}
+          ${untested.length ? `<p class="fa-note">${T('dev.chartsUntested', { n: untested.length, tests: untested.map(t => t.label).join(', ') })}</p>` : ''}`;
+      }).join('')}
+      ${(() => {
+        const withTraining = rows.filter(x => x.r && x.r.training.invited).map(x => ({ label: x.u.name || x.u.email, value: x.r.training.rate, note: T('dev.attendanceOf', { attended: x.r.training.attended, invited: x.r.training.invited }) })).sort((a, b) => a.value - b.value);
+        if (!withTraining.length) return `<p class="fa-note">${T('dev.chartsNoAttendance')}</p>`;
+        return `<h4 class="dev-chart-head">${T('dev.chartsAttendanceTitle')}</h4>
+          ${CHART.bars(withTraining, { width: 460, max: 1, title: T('dev.chartsAttendanceTitle'), empty: T('dev.chartNoResultsHere'), valueFormat: v => Math.round(v * 100) + '%' })}
+          <p class="fa-note">${T('dev.chartsAttendanceNote')}</p>`;
+      })()}
+      ${focus.length ? `<h4 class="dev-chart-head">${T('dev.chartsFocusTitle')}</h4>
+        ${CHART.bars(focus.map(f => ({ label: focusLabelOf(f.focus), value: f.gap, note: T('dev.chartsFocusNote', { n: f.players, test: f.worstLabel || '' }) })),
+  { width: 460, max: 1, title: T('dev.chartsFocusTitle'), empty: T('dev.chartNoResultsHere'), valueFormat: v => Math.round(v * 100) + '%' })}` : ''}
+      <p class="fa-note">${T('dev.chartsHowToRead')}</p>
+    </div>`;
+  }
+
   /* ---- the coach's squad table: every player at a glance, one row each ----
      Numbers come from TESTLOG.squadRow, the same function the single-player
      strip uses, so the two views can never quietly disagree. */
   function renderDevTeam(root) {
     const roster = devCanCoach() ? DATA.loadUsers().filter(u => u.role === 'player' && u.status === 'approved').sort((a, b) => (a.name || '').localeCompare(b.name || '')) : [];
-    const wk = TESTLOG.weekKeyOf(new Date().toISOString().slice(0, 10));   // once per render, never per row
+    const today = new Date().toISOString().slice(0, 10);
+    const wk = TESTLOG.weekKeyOf(today);   // once per render, never per row
     const rows = roster.map(u => {
       const started = devHasRecord(u.email);
       const dev = loadDev(u.email), home = loadHome(u.email);
-      return { u, started, r: started ? TESTLOG.squadRow(dev, home, wk) : null, tier: dev.info.tier, isGK: dev.info.isGK };
+      return { u, started, r: started ? TESTLOG.squadRow(dev, home, wk, { today, days: 90 }) : null, tier: dev.info.tier, isGK: dev.info.isGK, dev };
     });
     const live = rows.filter(x => x.started && x.r);
     const keeping = live.filter(x => x.r.compliance >= 0.6).length;      // same floor as the streak/mood thresholds
@@ -732,12 +823,14 @@
     const sorted = rows.slice().sort(sorters[devTeamSort] || sorters.name);
 
     const cell = (x) => {
-      if (!x.started) return `<td colspan="6" class="muted">${T('dev.noRecordYetNothing')}</td>`;
+      if (!x.started) return `<td colspan="7" class="muted">${T('dev.noRecordYetNothing')}</td>`;
       const r = x.r;
       const pct = Math.round(r.compliance * 100);
       const testCls = (r.metVerified > 0 && r.metVerified === r.total) ? 'dev-team-ok' : (r.hasTests ? 'dev-team-gap' : '');
+      const tr = r.training;
       return `<td><span class="tag">${escapeHtml(TESTLOG.TIERS[x.tier] || TESTLOG.TIERS[0])}</span></td>
         <td class="${testCls}">${r.hasTests ? `${r.metVerified}/${r.total}${r.metUnverified ? ` <span class="muted">+${r.metUnverified} ${T('dev.selfReportedWord')}</span>` : ''}` : '—'}</td>
+        <td class="${tr.invited && tr.rate < 0.6 ? 'dev-team-gap' : ''}">${tr.invited ? `${Math.round(tr.rate * 100)}% <span class="muted">${T('dev.attendanceOf', { attended: tr.attended, invited: tr.invited })}</span>${tr.excused ? ` <span class="tag">${T('dev.attendanceExcused', { n: tr.excused })}</span>` : ''}` : '—'}</td>
         <td>${r.lastDate ? escapeHtml(r.lastDate) + (r.lastVerified ? '' : ' <span class="tag tag-self">self</span>') : '—'}</td>
         <td><div class="dev-bench-bar"><span style="width:${pct}%"></span></div> ${pct}% ${(typeof FX !== 'undefined') ? FX.mascot(22, r.mood) : ''}</td>
         <td>${r.streak > 0 ? '🔥 ' + r.streak : '—'}</td>
@@ -771,13 +864,15 @@
         </div>
       </details>
 
+      ${squadCharts(rows)}
+
       <div class="dev-card">
         <h3>${T('dev.everyPlayer')} <span class="rightbar-hint">${T('dev.thisWeek')}</span></h3>
         <div class="dev-table-wrap"><table class="dev-table dev-team-table">
-          <thead><tr><th>${T('dev.player')}</th><th>${T('dev.tier')}</th><th>${T('dev.testsAtTarget2')}</th><th>${T('dev.lastTested')}</th><th>${T('dev.thHomeTraining')}<small>${T('dev.thSelfLogged')}</small></th><th>${T('dev.streak')}</th><th>${T('dev.thMetres')}<small>${T('dev.thSelfDeclared')}</small></th></tr></thead>
+          <thead><tr><th>${T('dev.player')}</th><th>${T('dev.tier')}</th><th>${T('dev.testsAtTarget2')}</th><th>${T('dev.thTraining')}<small>${T('dev.thLast90Days')}</small></th><th>${T('dev.lastTested')}</th><th>${T('dev.thHomeTraining')}<small>${T('dev.thSelfLogged')}</small></th><th>${T('dev.streak')}</th><th>${T('dev.thMetres')}<small>${T('dev.thSelfDeclared')}</small></th></tr></thead>
           <tbody>${sorted.map(x => `<tr class="dev-team-row" data-dev-open="${escapeHtml(x.u.email)}">
             <td><button class="btn-ghost sm">${escapeHtml(x.u.name || x.u.email)}</button>${x.u.position ? ` <span class="tag">${T('ui.pos')} ${escapeHtml(x.u.position)}</span>` : ''}${x.isGK ? ' <span class="tag">GK</span>' : ''}</td>
-            ${cell(x)}</tr>`).join('') || `<tr><td colspan="7" class="muted">${T('dev.noApprovedPlayersOn')}</td></tr>`}</tbody>
+            ${cell(x)}</tr>`).join('') || `<tr><td colspan="8" class="muted">${T('dev.noApprovedPlayersOn')}</td></tr>`}</tbody>
         </table></div>
       </div>`;
     wireDevTeam(root);
@@ -792,6 +887,8 @@
   function devToggleModal(root, id, show) { const m = root.querySelector('#' + id); if (m) m.hidden = show == null ? !m.hidden : !show; }
 
   function wireDevelopment(root, email, dev, home, wk, canEditThis) {
+    const trend = root.querySelector('#dev-trend-test');
+    if (trend) trend.onchange = () => { devTrendTest = trend.value; renderDevelopment(); };
     const rs = root.querySelector('#dev-roster-select');
     if (rs) rs.onchange = () => { devViewing = rs.value || null; devTeamMode = false; renderDevelopment(); };
     const backTeam = root.querySelector('#dev-back-team');
@@ -867,10 +964,10 @@
       const files = Array.from(impFile.files || []); impFile.value = ''; if (!files.length) return;
       const roster = DATA.loadUsers().filter(u => u.role === 'player');
       const byName = n => roster.find(u => (u.name || '').trim().toLowerCase() === String(n || '').trim().toLowerCase());
-      let addedTests = 0, addedWeeks = 0, confirmedTests = 0, unmatched = new Set(), bad = 0;
+      let addedTests = 0, addedWeeks = 0, confirmedTests = 0, addedSessions = 0, unmatched = new Set(), bad = 0;
       for (const f of files) {
         try {
-          let testSheetRows = [], swimSheetRows = [];
+          let testSheetRows = [], swimSheetRows = [], spondRows = [];
           if (/\.xlsx$/i.test(f.name)) {
             const buf = new Uint8Array(await f.arrayBuffer());
             const { sheets } = await TESTLOG.readXLSX(buf);
@@ -878,10 +975,17 @@
             const swimSheet = sheets['Schwimm-Wochen'] || Object.values(sheets).find(rows => TESTLOG.rowsFromSheetTable(rows, TESTLOG.SWIM_COLS).length);
             if (testSheet) testSheetRows = TESTLOG.rowsFromSheetTable(testSheet, TESTLOG.TEST_COLS);
             if (swimSheet) swimSheetRows = TESTLOG.rowsFromSheetTable(swimSheet, TESTLOG.SWIM_COLS);
+            // a Spond attendance export: one row per person per session. Recognised by the columns it
+            // alone has (a person, a date AND an attendance word), never by the file's name.
+            const asSpond = Object.values(sheets).map(rows => TESTLOG.rowsFromSheetTable(rows, TESTLOG.SPOND_COLS)).find(rs => rs.some(r => r.name && r.date && r.state));
+            if (asSpond) spondRows = asSpond.filter(r => r.name && r.date && r.state);
           } else {
             const text = await f.text(); const rows = TESTLOG.parseCSV(text);
             const asTests = TESTLOG.rowsFromCSV(rows, TESTLOG.TEST_COLS), asSwim = TESTLOG.rowsFromCSV(rows, TESTLOG.SWIM_COLS);
-            if (asTests.some(r => r.test && r.result)) testSheetRows = asTests; else if (asSwim.some(r => r.week)) swimSheetRows = asSwim;
+            const asSpond = TESTLOG.rowsFromCSV(rows, TESTLOG.SPOND_COLS).filter(r => r.name && r.date && r.state);
+            if (asTests.some(r => r.test && r.result)) testSheetRows = asTests;
+            else if (asSwim.some(r => r.week)) swimSheetRows = asSwim;
+            else if (asSpond.length) spondRows = asSpond;
           }
           testSheetRows.filter(r => r.test && r.result).forEach(r => {
             const u = byName(r.name); if (!u) { unmatched.add(r.name || '(blank)'); return; }
@@ -902,9 +1006,26 @@
             const dup = d.swimWeeks.some(x => x.week === r.week);
             if (!dup) { d.swimWeeks.push({ id: 's' + Math.random().toString(36).slice(2, 9), week: r.week, name: r.name, metersClub: +r.metersClub || 0, metersSelf: +r.metersSelf || 0, total: +r.total || ((+r.metersClub || 0) + (+r.metersSelf || 0)), attended: +r.attended || 0, possible: +r.possible || 0 }); saveDev(u.email, d); addedWeeks++; }
           });
+          if (spondRows.length) {
+            // training attendance from the club's Spond export: sessions per person, newest kept, no duplicates
+            TESTLOG.attendanceFrom(spondRows).players.forEach(p => {
+              const u = byName(p.name); if (!u) { unmatched.add(p.name || '(blank)'); return; }
+              const d = loadDev(u.email); d.attendance = d.attendance || [];
+              p.events.forEach(ev => {
+                const i = d.attendance.findIndex(x => x.date === ev.date && x.event === ev.event);
+                if (i >= 0) { if (d.attendance[i].state !== ev.state) { d.attendance[i] = ev; addedSessions++; } }
+                else { d.attendance.push(ev); addedSessions++; }
+              });
+              d.attendance.sort((a, b) => a.date.localeCompare(b.date));
+              saveDev(u.email, d);
+            });
+          }
         } catch (e) { bad++; }
       }
-      toast(`Imported ${addedTests} test result${addedTests === 1 ? '' : 's'} and ${addedWeeks} swim week${addedWeeks === 1 ? '' : 's'}` + (confirmedTests ? ` · ${confirmedTests} self-reported now confirmed` : '') + (unmatched.size ? ` · ${unmatched.size} name${unmatched.size > 1 ? 's' : ''} not on the roster` : '') + (bad ? ` · ${bad} file${bad > 1 ? 's' : ''} could not be read` : ''));
+      toast(T('dev.importedSummary', { tests: addedTests, weeks: addedWeeks, sessions: addedSessions })
+        + (confirmedTests ? ' · ' + T('dev.importedConfirmed', { n: confirmedTests }) : '')
+        + (unmatched.size ? ' · ' + T('dev.importedUnmatched', { n: unmatched.size }) : '')
+        + (bad ? ' · ' + T('dev.importedUnreadable', { n: bad }) : ''));
       renderDevelopment();
     };
   }

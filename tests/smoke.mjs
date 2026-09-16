@@ -14,10 +14,14 @@ window.TextEncoder = window.TextEncoder || TE;   // QR needs it
 window.TextDecoder = window.TextDecoder || TD;   // TESTLOG's XLSX reader needs it
 window.DecompressionStream = window.DecompressionStream || globalThis.DecompressionStream;   // jsdom has neither; Node does
 window.Response = window.Response || globalThis.Response;
+// jsdom has no Blob.text()/arrayBuffer() (every browser the app supports has had them since 2020);
+// without them a file the coach picks cannot be read here at all
+if (!window.Blob.prototype.text) window.Blob.prototype.text = function () { return new Promise((res, rej) => { const r = new window.FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsText(this); }); };
+if (!window.Blob.prototype.arrayBuffer) window.Blob.prototype.arrayBuffer = function () { return new Promise((res, rej) => { const r = new window.FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsArrayBuffer(this); }); };
 
-const files = ['js/theme.js','js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/sheetdoc.js','js/eligibility.js','js/teamsheet.js','js/teams.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/api.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/theme.js','js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/chart.js','js/sheetdoc.js','js/eligibility.js','js/teamsheet.js','js/teams.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/api.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { THEME, API, POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET , TEAMS };';
+  + '\n;\nwindow.__T = { THEME, CHART, API, POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET , TEAMS };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -1234,10 +1238,51 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('tapping a row opens that player\'s full record', !!q('.dev-bench-grid') && !!q('#dev-back-team'));
     q('#dev-back-team').click(); await wait(30);
     ok('◀ Squad returns to the table', !!q('.dev-team-table'));
+    {
+      // the charts: the same numbers as the table, drawn — and honest about who they speak for
+      ok('with nobody’s record on this device, no chart is drawn at all', !q('.dev-charts'));
+      const players = DATA.loadUsers().filter(u => u.role === 'player' && u.status === 'approved').slice(0, 2);
+      players.forEach((u, i) => window.localStorage.setItem('thplay.testlog.' + u.email.toLowerCase(), JSON.stringify({
+        info: { tier: 0, isGK: false },
+        tests: [{ id: 't' + i, date: '2026-03-0' + (i + 1), test: '25 m freestyle', result: i ? '15.2' : '17.4', status: i ? 'approved' : 'pending' },
+                { id: 's' + i, date: '2026-01-0' + (i + 1), test: '25 m freestyle', result: '18.0', status: 'approved' }],
+        swimWeeks: [],
+      })));
+      q('.nav-btn[data-view="playbook"]').click(); await wait(20); q('.nav-btn[data-view="development"]').click(); await wait(60);
+      const charts = q('.dev-charts');
+      ok('once two players have a record, the squad view draws a chart card above the table', !!charts && charts.querySelectorAll('svg.chart').length >= 1);
+      ok('…one dot strip per test that anyone has done, with the target line', charts.querySelectorAll('.chart-dots').length >= 1 && charts.innerHTML.includes(window.__T.THEME.c('--chart-target')));
+      ok('…and it says how many players it can speak for on this device', /of \d+ players have a record on this device/.test(charts.textContent));
+      ok('…confirmed and self-reported results are counted apart', /confirmed by a coach/.test(charts.textContent));
+      {
+        // the club's Spond export, imported like the test logbook
+        const names = players.map(u => u.name);
+        const csv = 'Name,Event,Date,Attendance\n' + [
+          `${names[0]},Training U16,2026-09-06,Attended`, `${names[0]},Training U16,2026-09-13,Attended`,
+          `${names[1]},Training U16,2026-09-06,Declined`, `${names[1]},Training U16,2026-09-13,Attended`,
+          'Someone Else,Training U16,2026-09-13,Attended',
+        ].join('\n');
+        const f = new window.File([csv], 'spond-attendance.csv', { type: 'text/csv' });
+        const input = q('#dev-import-file');
+        Object.defineProperty(input, 'files', { value: [f], configurable: true });
+        input.dispatchEvent(new window.Event('change'));
+        await wait(200);
+        const row = qa('.dev-team-row').find(tr => tr.textContent.includes(names[1]));
+        ok('a Spond attendance export imports and shows per player in the squad table', /50%/.test(row.textContent) && /\(1 of 2\)/.test(row.textContent));
+        ok('…a name that is not on the roster is reported, never invented', /not on the roster/.test((q('.toast') || {}).textContent || ''));
+        const bars = [...qa('.dev-charts .chart-bars')].map(b => b.textContent).join(' ');
+        ok('…and the charts show attendance, lowest first', /50%/.test(bars) && /100%/.test(bars));
+      }
+      const dots = charts.querySelectorAll('.chart-dots circle').length;
+      ok('…one dot per player with a result for that test — the newest one, no placeholders', dots === 2);
+      ok('…the self-reported one is hollow, the confirmed one filled', charts.innerHTML.includes('fill="none"'));
+      ok('…and it says 2 of the squad, not the whole squad', /2 of \d+ players have a record/.test(charts.textContent));
+    }
     qa('.dev-team-row')[0].click(); await wait(40);
     // switch back to my own record via the roster picker — the rest of this section is a self-view
     q('#dev-roster-select').value = ''; q('#dev-roster-select').dispatchEvent(new window.Event('change')); await wait(40);
     ok('My Development view renders with a hero mascot and a goal line', !!q('.dev-hero-mascot .mascot') && !!q('.dev-hero-goal'));
+
     ok('a glanceable stat strip is shown', qa('.dev-stat').length===4);
     ok('the six real home-training activities are listed', qa('.dev-home-item').length===6 && /Wall passing/.test(q('.dev-home-list').textContent));
     const bar0 = q('.dev-home-item .dev-home-bar span').style.width;
@@ -1252,8 +1297,86 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     q('[data-open-modal="test"]').click(); await wait(10);
     ok('the "Log a test result" tile opens the test modal', q('#dev-test-modal').hidden===false);
     q('#dev-test-id').value = 'free50'; q('#dev-test-result').value = '34.0'; q('#dev-test-add').click(); await wait(30);
+    {
+      // the player's own progress chart: it appears with the first result, and follows the picker
+      const prog = q('.dev-charts');
+      ok('a first result draws that test over time, with a test to choose', !!prog && !!q('#dev-trend-test') && !!prog.querySelector('svg.chart'));
+      ok('…and one result says so instead of pretending to be a trend', /One result so far/.test(prog.textContent));
+      // an older, slower result: the chart must then show the improvement up to today's 34.0
+      q('#dev-test-id').value = 'free50'; q('#dev-test-result').value = '36.0'; q('#dev-test-date').value = '2026-01-06'; q('#dev-test-add').click(); await wait(40);
+      const line = q('.dev-charts .chart-series');
+      ok('a second result draws the line, and faster sits higher', !!line && (() => { const ys = [...line.querySelectorAll('circle')].map(c => +c.getAttribute('cy')); return ys.length >= 2 && ys[ys.length - 1] < ys[0]; })());
+    }
     ok('a saved test result appears in the history table and updates the benchmark card', /34/.test(q('.dev-table').textContent) && q('.dev-bench-card.dev-bench-met'));
     ok('a download-CSV button exists for the test log', !!q('#dev-export-tests'));
+  }
+
+  console.log('\n[6zz2] Squad development — the numbers behind the charts, and the charts themselves');
+  {
+    const { TESTLOG, CHART, THEME } = window.__T;
+    const P = (id, name, tier, tests, isGK) => ({ id, name, tier, isGK: !!isGK, tests });
+    const squad = [
+      P('a', 'A', 0, [{ date: '2026-01-05', test: '25 m freestyle', result: '17.0', status: 'approved' },
+                      { date: '2026-03-05', test: '25 m freestyle', result: '15.5', status: 'approved' },
+                      { date: '2026-03-05', test: 'Passing distance', result: '14', status: 'approved' }]),
+      P('b', 'B', 0, [{ date: '2026-02-05', test: '25 m freestyle', result: '16.8', status: 'pending' }]),
+      P('c', 'C', 0, [{ date: '2026-02-05', test: '25 m freestyle', result: '12.0', status: 'denied' }]),
+      P('d', 'D', 0, []),
+      P('g', 'G', 1, [{ date: '2026-02-05', test: 'Side shuttle 4×5 m', result: '18.0', status: 'approved' }], true),
+    ];
+    const opts = { today: '2026-04-01', maxAgeDays: 365 };
+    const byTest = TESTLOG.squadByTest(squad, opts);
+    const free = byTest.find(r => r.testId === 'free25');
+    ok('squadByTest: one row per player with a result, the newest one, denied dropped', free.n === 2 && free.rows.map(r => r.name).join() === 'A,B' && free.rows[0].value === 15.5);
+    ok('…says how many of the squad it cannot speak for', free.missing === 2 && byTest.find(r => r.testId === 'passDist').missing === 3);
+    ok('…counts at-target and coach-confirmed separately', free.metCount === 1 && free.verifiedCount === 1 && free.rows[1].verified === false);
+    ok('…keeps the raw value and the unit, and adds progress against each player’s own tier target', free.unit === 's' && free.lower === true && free.rows[0].ratio > 1 && free.rows[1].ratio < 1);
+    ok('…a keeper’s tests are their own catalogue, not mixed into the field squad', !byTest.some(r => r.testId === 'sideShuttle') && TESTLOG.squadByTest(squad, { gk: true }).find(r => r.testId === 'sideShuttle').n === 1);
+    ok('…a result older than the window is not counted as current', TESTLOG.squadByTest(squad, { today: '2027-06-01', maxAgeDays: 365 }).find(r => r.testId === 'free25').n === 0);
+    ok('squadByTest median is the middle value, in the test’s own unit', TESTLOG.squadByTest([squad[0], squad[1], P('e', 'E', 0, [{ date: '2026-03-01', test: '25 m freestyle', result: '20.0', status: 'approved' }])], opts).find(r => r.testId === 'free25').median === 16.8);
+    const series = TESTLOG.playerSeries(squad[0].tests, 'free25', 0);
+    ok('playerSeries: one player’s test over time, oldest first, with the target beside each point', series.length === 2 && series[0].date < series[1].date && series[1].met === true && series[0].target === 16);
+    const focus = TESTLOG.squadFocus(squad, opts);
+    ok('squadFocus: the squad’s worst focus first, each player counted once per focus', focus.length >= 1 && focus[0].focus === 'skills' && focus[0].players === 1);
+    // training attendance, as the club's Spond export gives it (Spond has no interface for other apps)
+    const att = TESTLOG.attendanceFrom([
+      { name: 'Nora Frei', event: 'Training U16', date: '06.09.2026', state: 'Attended' },
+      { name: 'Nora Frei', event: 'Training U16', date: '2026-09-13', state: 'Valid absence' },
+      { name: 'Nora Frei', event: 'Training U16', date: '2026-09-13', state: 'Valid absence' },
+      { name: 'Timo Koch', event: 'Training U16', date: '06.09.2026', state: 'Abgesagt' },
+      { name: 'Timo Koch', event: 'Training U16', date: '2026-09-13', state: 'Verspätet' },
+      { name: '', event: 'Training U16', date: '2026-09-13', state: 'Attended' },
+      { name: 'Ghost', event: 'Training U16', date: '2026-09-13', state: 'maybe?' },
+    ]);
+    ok('attendance: a person per row per session, both date styles, English and German words', att.players.length === 2 && att.players[0].events[0].date === '2026-09-06' && att.players[1].events[1].state === 'late');
+    ok('…the same session twice in one file counts once', att.players[0].invited === 2);
+    ok('…a blank name or a word the file does not define counts for nothing', !att.players.some(p => /Ghost/.test(p.name)) && att.events[1].invited === 2);
+    ok('…being late is being at training, and is still reported as late', att.players[1].attended === 1 && att.players[1].late === 1);
+    ok('…an excused absence is not attendance, and is counted on its own', att.players[0].rate === 0.5 && att.players[0].excused === 1);
+    ok('…the file’s own range is reported', att.from === '2026-09-06' && att.to === '2026-09-13');
+    const win = TESTLOG.attendanceSummary(att.players[0].events, { today: '2026-09-20', days: 10 });
+    ok('attendanceSummary counts only the window asked for', win.invited === 1 && win.lastDate === '2026-09-13');
+    const whole = TESTLOG.attendanceSummary(att.players[0].events, { today: '2026-09-20', days: 90 });
+    ok('…and an excused absence is still not attendance there either', whole.invited === 2 && whole.attended === 1 && whole.excused === 1 && whole.rate === 0.5);
+    const cov = TESTLOG.squadCoverage(squad, opts);
+    ok('squadCoverage: how much of the squad this device knows about, and how much is self-reported', cov.total === 5 && cov.withAny === 3 && cov.missing === 2 && cov.verified === 4 && cov.self === 1);
+
+    // the charts
+    const dots = CHART.dotStrip(free.rows.map(r => ({ value: r.value, label: r.name, met: r.met, verified: r.verified })), { target: 16, lower: true, title: '25 m', targetLabel: 'target', empty: 'no results' });
+    const xOf = n => +(new RegExp('<circle cx="([\\d.]+)"[^>]*><title>' + n).exec(dots) || [])[1];
+    ok('dotStrip: one dot per player, better to the RIGHT even when a lower time is better', xOf('A') > xOf('B'));
+    ok('…a self-reported dot is hollow, a confirmed one filled', /<circle[^>]*fill="none"[^>]*><title>B/.test(dots) && !/<circle[^>]*fill="none"[^>]*><title>A/.test(dots));
+    ok('…the target line is drawn, and every colour comes from a theme token', dots.includes(THEME.c('--chart-target')) && !/#[0-9a-f]{3,6}/i.test(dots.replace(new RegExp(Object.values(THEME.FALLBACK.today).join('|').replace(/[()]/g, '\\$&'), 'gi'), '')));
+    ok('…no data draws a sentence, not an empty box', CHART.dotStrip([], { title: 't', empty: 'no results' }).includes('no results'));
+    ok('…a missing or broken value is dropped, never drawn as zero', (CHART.dotStrip([{ value: null }, { value: NaN }, { value: 5, label: 'ok' }], { title: 't', empty: 'e' }).match(/<circle/g) || []).length === 1);
+    const bars = CHART.bars([{ label: 'skills', value: 0.6 }, { label: 'power', value: 0.3 }], { title: 'focus', empty: 'none' });
+    ok('bars: the bar is as long as its share of the biggest one', (() => { const w = [...bars.matchAll(/<rect x="\d+" y="\d+" width="([\d.]+)" height="12" rx="6" fill="' + '"/g)]; const all = [...bars.matchAll(/width="([\d.]+)" height="12"/g)].map(m => +m[1]); return Math.abs(all[3] / all[1] - 0.5) < 0.02; })());
+    const line = CHART.series(series, { target: 16, lower: true, title: 'trend', empty: 'none', dateFormat: d => d });
+    const ys = [...line.matchAll(/<circle cx="[\d.]+" cy="([\d.]+)"/g)].map(m => +m[1]);
+    ok('series: getting faster moves the line UP (a lower time is a better result)', ys.length === 2 && ys[1] < ys[0]);
+    ok('…both ends are dated, and the target is a rule across the chart', line.includes('2026-01-05') && line.includes('2026-03-05') && /stroke-dasharray="4 3"/.test(line));
+    ok('…one single result still draws (no division by zero)', CHART.series([series[0]], { title: 't', empty: 'e' }).includes('<circle'));
+    ok('every chart carries a label for a screen reader', dots.includes('role="img"') && bars.includes('aria-label') && line.includes('<title>'));
   }
 
   console.log('\n[6zzz] Announcements — coach note to a player, or a broadcast to the team (ANNOUNCE)');
@@ -1485,7 +1608,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     const fb = THEME.FALLBACK.today;
     const drift = Object.keys(fb).filter(k => cssTok[k] !== fb[k]);
     ok('js/theme.js fallback = the CSS token values, one for one' + (drift.length ? ' — differs: ' + drift.slice(0, 6).join(', ') : ''), Object.keys(fb).length >= 100 && drift.length === 0);
-    const jsFiles = ['js/pool.js', 'js/animate.js', 'js/film.js', 'js/app.js', 'js/videogen.js', 'js/fx.js', 'js/manikin.js'];
+    const jsFiles = ['js/pool.js', 'js/animate.js', 'js/film.js', 'js/app.js', 'js/videogen.js', 'js/fx.js', 'js/manikin.js', 'js/chart.js'];
     const asked = [...new Set(jsFiles.flatMap(fl => [...readFileSync(join(APP, fl), 'utf8').matchAll(/\bC\('(--[\w-]+)'\)|THEME\.c\('(--[\w-]+)'\)/g)].map(m => m[1] || m[2])))];
     const missing = asked.filter(n => !(n in fb) || !(n in cssTok));
     ok('every colour token code asks for exists in the CSS and the fallback (' + asked.length + ' names)' + (missing.length ? ' — missing: ' + missing.join(', ') : ''), asked.length >= 90 && missing.length === 0);

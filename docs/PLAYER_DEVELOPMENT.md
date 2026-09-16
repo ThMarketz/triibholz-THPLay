@@ -80,6 +80,35 @@ Self-reported results are shown separately (`+2 self-reported`) and never colour
 progress. Players who have never opened the view read as "No record yet" rather than as a
 misleading zero, and are excluded from the squad averages.
 
+### The charts
+
+Above the table, the same numbers are drawn (`js/chart.js`, hand-drawn SVG, no library):
+
+- **One dot per player per test**, placed against the target for **their own** tier — which is why
+  the scale reads "% of my target" and not seconds: a U14 and a U18 keeper cannot share a seconds
+  axis honestly. The raw result travels with the dot. Better is always to the right, including for
+  times, where the smaller number is the better one. A hollow dot is self-reported, a filled one
+  coach-confirmed. Tests nobody has done are one line of text, not empty rows.
+- **Where the squad is furthest behind** — the same normalised gaps that feed the season plan,
+  each player counted once per focus so a focus with three tests cannot outweigh one with a single
+  test.
+- **Training attendance, lowest first** (see below).
+- **A player's own test over time**, on their record, with the target as a rule across the chart:
+  the first place in the app where a result is more than a row in a table.
+
+Every chart says what it does **not** know. The card states how many of the squad have a record on
+this device and how many results are confirmed against self-reported, because these records live
+on each device: a chart here speaks for the players whose record is here and for nobody else.
+
+### Training attendance (Spond)
+
+Spond has no interface other apps may use, so attendance arrives as **Spond's own admin export**,
+imported with the same button as the test logbook. The squad table gains an attendance column for
+the last 90 days, and the charts show it per player, lowest first. Late counts as at training and
+is shown as such; an excused absence is not attendance and is counted beside it. See
+[SPOND.md](SPOND.md) for what was researched, what the club must decide, and why there is no live
+connection.
+
 ## Feeding the season plan
 
 The Season planner can read the signed-in player's own test log (**Use my test results**,
@@ -108,8 +137,10 @@ through a roster picker; a player only ever sees their own.
 
 - **Export** is CSV, for both the test log and the swim weeks — every spreadsheet app
   opens and saves it natively.
-- **Import** accepts a real club workbook (`.xlsx`) or a `.csv`, matched to the team
-  roster by player name. Column headers are recognised in **English or German**
+- **Import** accepts a real club workbook (`.xlsx`), a Spond attendance export (`.xlsx`), or a
+  `.csv` of any of them, matched to the team roster by player name. A file is recognised by the
+  columns it carries, never by its name; a name that is not on the roster is reported, never
+  invented. Column headers are recognised in **English or German**
   (Datum/Name/Test/Resultat/Einheit/Getestet von/Bemerkung and the Schwimm-Wochen
   equivalents), because that is the real header language of the source document this
   was built against.

@@ -56,6 +56,9 @@ const THEME = (() => {
     "--fx-confetti-1":"#ff7a18", "--fx-confetti-2":"#16b3c4", "--fx-confetti-3":"#2bd07a",
     "--fx-confetti-4":"#ffd400", "--fx-confetti-5":"#ffffff", "--fx-confetti-6":"#e23b3b", "--mascot-body":"#ff7a18",
     "--mascot-edge":"#9c3d00", "--mascot-seam":"#fff", "--mascot-eye":"#fff", "--mascot-ink":"#0b1f2c",
+    "--chart-ink":"#eaf4fb", "--chart-muted":"#9fb6c9", "--chart-grid":"#1e3650", "--chart-line":"#1fc0d4",
+    "--chart-target":"#ffd166", "--chart-good":"#2bd07a", "--chart-short":"#ff6b6b", "--chart-bar":"#16b3c4",
+    "--chart-bar-track":"#13263a", "--chart-bg":"#0f1c2b",
   } };
   const doc = typeof document !== 'undefined' ? document : null;
   const root = doc && doc.documentElement;

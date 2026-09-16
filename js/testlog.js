@@ -121,7 +121,7 @@ const TESTLOG = (() => {
   /* ---------------- 1c) one player's row, for the squad table ----------------
      Built only from the functions above so the squad view and the player's own
      stat strip can never disagree — they are the same arithmetic. */
-  function squadRow(dev, home, weekKey) {
+  function squadRow(dev, home, weekKey, opts) {
     dev = dev || {}; const info = dev.info || {};
     const cat = testsFor(!!info.isGK);
     const latest = latestResults(dev.tests || []);
@@ -141,7 +141,128 @@ const TESTLOG = (() => {
       compliance: m.compliance, mood: m.mood, streak: m.streak,
       metres: week ? (+week.total || 0) : 0,
       hasTests: (dev.tests || []).length > 0, hasSwim: (dev.swimWeeks || []).length > 0,
+      training: attendanceSummary(dev.attendance, opts || {}),   // imported from the club's Spond export
+      hasTraining: (dev.attendance || []).length > 0,
     };
+  }
+
+  /* ---------------- 1e) the squad, as numbers a chart can draw ----------------
+     Everything here is built from evaluate() / latestResults() / focusGaps(), the same
+     functions the squad table and a player's own card use, so a chart can never tell a
+     different story from the table above it.
+
+     `players` is [{ id, name, tier, isGK, tests }] — no storage, no DOM.
+
+     Results in this catalogue are measured in seconds, metres, reps and percentages, and
+     every player is measured against the target for THEIR tier. A dot strip therefore plots
+     `ratio`: 1 means "at my own target", below 1 means short of it — the only scale on which
+     a U14 and a U18 keeper can sit in the same row honestly. The raw value travels with it
+     so the coach reads real numbers, never a normalised one. */
+  const RATIO_CAP = 1.5;
+  function progressRatio(test, value, target) {
+    if (value == null || target == null || !isFinite(value) || !isFinite(target) || value <= 0 || target <= 0) return null;
+    const r = test.lower ? target / value : value / target;
+    return +Math.min(RATIO_CAP, Math.max(0, r)).toFixed(3);
+  }
+  function median(values) {
+    const v = values.filter(x => x != null && isFinite(x)).slice().sort((a, b) => a - b);
+    if (!v.length) return null;
+    const mid = v.length >> 1;
+    return v.length % 2 ? v[mid] : +((v[mid - 1] + v[mid]) / 2).toFixed(3);
+  }
+  /* the newest result per test for one player, denied dropped, optionally only recent ones */
+  function newestByTest(tests, cat, opts) {
+    const out = {};
+    (tests || []).forEach(r => {
+      if (!r || !r.test) return;
+      if (normalizeTestStatus(r.status) === 'denied') return;
+      const t = cat.find(x => x.label === r.test) || cat.find(x => x.id === r.test);
+      if (!t) return;
+      if (opts && opts.today && r.date && opts.maxAgeDays) {
+        const ageDays = (Date.parse(opts.today + 'T00:00:00Z') - Date.parse(r.date + 'T00:00:00Z')) / 86400000;
+        if (isFinite(ageDays) && ageDays > opts.maxAgeDays) return;
+      }
+      if (!out[t.id] || String(r.date || '') > String(out[t.id].r.date || '')) out[t.id] = { t, r };
+    });
+    return out;
+  }
+
+  /* squadByTest(players, opts) → one row per test of the catalogue, worst-covered first is the
+     caller's business; the order here is the catalogue's own. opts.gk picks the keeper catalogue. */
+  function squadByTest(players, opts) {
+    opts = opts || {};
+    const gk = !!opts.gk;
+    const cat = testsFor(gk);
+    const mine = (players || []).filter(p => !!(p && p.isGK) === gk);
+    return cat.map(test => {
+      const rows = [];
+      mine.forEach(p => {
+        const hit = newestByTest(p.tests, cat, opts)[test.id];
+        if (!hit) return;
+        const ev = evaluate(test, hit.r.result, p.tier || 0);
+        if (!ev || ev.value == null) return;
+        rows.push({
+          playerId: p.id, name: p.name, value: ev.value, target: ev.target, met: ev.met,
+          ratio: progressRatio(test, ev.value, ev.target), deltaText: ev.deltaText,
+          verified: isOfficialResult(hit.r), date: hit.r.date || '',
+        });
+      });
+      const values = rows.map(r => r.value);
+      return {
+        testId: test.id, label: test.label, unit: test.unit, lower: !!test.lower, piste: !!test.piste,
+        rows, n: rows.length, missing: mine.length - rows.length,
+        metCount: rows.filter(r => r.met === true).length,
+        verifiedCount: rows.filter(r => r.verified).length,
+        median: median(values), best: values.length ? (test.lower ? Math.min(...values) : Math.max(...values)) : null,
+      };
+    });
+  }
+
+  /* playerSeries(tests, testRef, tier) → that test over time, oldest first: the first view in the
+     app that shows a result as anything but a row in a table. */
+  function playerSeries(tests, testRef, tier, isGK) {
+    const test = testById(testRef, !!isGK);
+    if (!test) return [];
+    return (tests || [])
+      .filter(r => r && (r.test === test.label || r.test === test.id) && normalizeTestStatus(r.status) !== 'denied')
+      .map(r => { const ev = evaluate(test, r.result, tier || 0); return ev && ev.value != null ? { date: r.date || '', value: ev.value, target: ev.target, met: ev.met, verified: isOfficialResult(r), ratio: progressRatio(test, ev.value, ev.target) } : null; })
+      .filter(Boolean)
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  }
+
+  /* squadFocus(players, opts) → where the squad is furthest behind, worst first. Each player
+     contributes their own worst gap per focus, so a focus with three tests cannot outweigh one
+     with a single test simply by being measured more often. */
+  function squadFocus(players, opts) {
+    const per = {};
+    (players || []).forEach(p => {
+      const gaps = focusGaps(p.tests, { tier: p.tier || 0, isGK: !!p.isGK, today: opts && opts.today, maxAgeDays: opts && opts.maxAgeDays });
+      const worst = {};
+      gaps.forEach(g => { if (!worst[g.focus] || g.gap > worst[g.focus].gap) worst[g.focus] = g; });
+      Object.keys(worst).forEach(f => {
+        per[f] = per[f] || { focus: f, total: 0, players: 0, worstLabel: null, worstGap: 0 };
+        per[f].total += worst[f].gap; per[f].players += 1;
+        if (worst[f].gap > per[f].worstGap) { per[f].worstGap = worst[f].gap; per[f].worstLabel = worst[f].label; }
+      });
+    });
+    return Object.values(per).map(x => ({ focus: x.focus, gap: +(x.total / x.players).toFixed(3), players: x.players, worstLabel: x.worstLabel }))
+      .sort((a, b) => b.gap - a.gap);
+  }
+
+  /* squadCoverage(players, opts) → how much of the squad this view can actually speak for.
+     A chart drawn from device-local records must say what it does NOT know. */
+  function squadCoverage(players, opts) {
+    const list = players || [];
+    let withAny = 0, withRecent = 0, verified = 0, self = 0;
+    list.forEach(p => {
+      const live = (p.tests || []).filter(r => normalizeTestStatus(r.status) !== 'denied');
+      if (live.length) withAny++;
+      const cat = testsFor(!!p.isGK);
+      if (Object.keys(newestByTest(p.tests, cat, opts)).length) withRecent++;
+      live.forEach(r => { if (isOfficialResult(r)) verified++; else self++; });
+    });
+    return { total: list.length, withAny, withRecent, missing: list.length - withAny, verified, self,
+      verifiedShare: verified + self ? +(verified / (verified + self)).toFixed(3) : null };
   }
 
   /* ---------------- 1d) which training focus a test speaks to ----------------
@@ -299,6 +420,84 @@ const TESTLOG = (() => {
     { key: 'total', label: 'Total', syn: ['total'] }, { key: 'attended', label: 'Sessions attended', syn: ['trainings besucht'] },
     { key: 'possible', label: 'Sessions possible', syn: ['von möglich', 'moeglich', 'möglich'] },
   ];
+  /* Spond's own admin export (.xlsx): one row per person per event. Spond has no API — no public
+     one, no partner programme, no calendar feed — so attendance arrives as a file a club officer
+     exports and the coach imports here. The synonyms cover Spond's English and German exports;
+     the column names are pinned to a real export from the club before this is called finished. */
+  const SPOND_COLS = [
+    { key: 'name', label: 'Name', syn: ['name', 'member', 'mitglied', 'teilnehmer', 'teilnehmerin', 'spieler', 'spielerin'] },
+    { key: 'event', label: 'Event', syn: ['event', 'veranstaltung', 'termin', 'training', 'aktivität', 'aktivitaet'] },
+    { key: 'date', label: 'Date', syn: ['date', 'datum', 'start', 'startdatum', 'start time', 'startzeit'] },
+    { key: 'state', label: 'Attendance', syn: ['attendance', 'attended', 'anwesenheit', 'anwesend', 'status', 'response', 'antwort', 'teilnahme', 'zusage', 'rückmeldung', 'rueckmeldung'] },
+  ];
+  /* Spond's words (and a club's own) → the five states this app counts */
+  const ATTEND_WORDS = {
+    attended: ['attended', 'present', 'yes', 'accepted', 'going', 'anwesend', 'teilgenommen', 'ja', 'zugesagt', 'da'],
+    late: ['late', 'verspätet', 'verspaetet', 'zu spät', 'zu spaet'],
+    excused: ['valid absence', 'excused', 'absent (valid)', 'entschuldigt', 'abgemeldet', 'krank', 'ferien'],
+    declined: ['declined', 'no', 'not going', 'abgesagt', 'nein', 'absent'],
+    invited: ['invited', 'no response', 'unanswered', 'pending', 'waiting list', 'eingeladen', 'keine antwort', 'offen', 'warteliste'],
+  };
+  function normalizeAttendance(raw) {
+    const v = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (!v) return 'invited';
+    for (const state of Object.keys(ATTEND_WORDS)) if (ATTEND_WORDS[state].includes(v)) return state;
+    if (/^(1|true|x|✓)$/.test(v)) return 'attended';
+    if (/^(0|false|-)$/.test(v)) return 'declined';
+    return 'unknown';                                  // never guess: an unknown word counts for nothing
+  }
+  const ATTENDED_STATES = ['attended', 'late'];        // late is training attended, and says so separately
+  const attendanceDate = raw => {
+    const s = String(raw == null ? '' : raw).trim();
+    let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    m = /^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/.exec(s);   // 06.09.2026 and 06/09/2026 are both day-first here
+    return m ? `${m[3]}-${String(m[2]).padStart(2, '0')}-${String(m[1]).padStart(2, '0')}` : '';
+  };
+
+  /* attendanceFrom(rows) → what each person attended, and the sessions themselves.
+     A person counts as invited to a session for every row that names them; `rate` is training
+     attended out of sessions they were invited to, excused absences included in the denominator
+     (a coach asking "who is at training" wants the truth, and the excused count is reported beside it). */
+  function attendanceFrom(rows) {
+    const people = new Map(), events = new Map();
+    (rows || []).forEach(r => {
+      const name = String((r && r.name) || '').trim();
+      const date = attendanceDate(r && r.date);
+      if (!name || !date) return;
+      const state = normalizeAttendance(r.state);
+      if (state === 'unknown') return;
+      const event = String((r && r.event) || '').trim();
+      const key = name.toLowerCase();
+      if (!people.has(key)) people.set(key, { name, key, events: [], attended: 0, late: 0, excused: 0, invited: 0 });
+      const p = people.get(key);
+      if (p.events.some(e => e.date === date && e.event === event)) return;   // the same session twice in one file
+      p.events.push({ date, event, state });
+      p.invited += 1;
+      if (state === 'attended' || state === 'late') p.attended += 1;
+      if (state === 'late') p.late += 1;
+      if (state === 'excused') p.excused += 1;
+      const ek = date + '|' + event;
+      if (!events.has(ek)) events.set(ek, { date, event, attended: 0, invited: 0 });
+      const e = events.get(ek); e.invited += 1; if (state === 'attended' || state === 'late') e.attended += 1;
+    });
+    const list = [...people.values()].map(p => {
+      p.events.sort((a, b) => a.date.localeCompare(b.date));
+      return Object.assign(p, { rate: p.invited ? +(p.attended / p.invited).toFixed(3) : null, lastDate: p.events.length ? p.events[p.events.length - 1].date : null });
+    }).sort((a, b) => a.name.localeCompare(b.name));
+    const all = [...events.values()].sort((a, b) => a.date.localeCompare(b.date));
+    return { players: list, events: all, from: all.length ? all[0].date : null, to: all.length ? all[all.length - 1].date : null };
+  }
+  /* one player's attendance over a window, for the squad table and the charts */
+  function attendanceSummary(events, opts) {
+    const o = opts || {};
+    const since = o.today && o.days ? new Date(Date.parse(o.today + 'T00:00:00Z') - o.days * 86400000).toISOString().slice(0, 10) : null;
+    const live = (events || []).filter(e => e && e.date && (!since || e.date >= since));
+    const attended = live.filter(e => ATTENDED_STATES.includes(e.state)).length;
+    const excused = live.filter(e => e.state === 'excused').length;
+    return { attended, invited: live.length, excused, rate: live.length ? +(attended / live.length).toFixed(3) : null,
+      lastDate: live.length ? live[live.length - 1].date : null };
+  }
+
   const headerMatches = (h, c) => h === c.label.toLowerCase() || h === c.key.toLowerCase() || (c.syn || []).includes(h);
   function rowsFromCSV(rows, cols) {
     if (!rows.length) return [];
@@ -419,8 +618,10 @@ const TESTLOG = (() => {
     TIERS, FIELD_TESTS, GK_TESTS, testsFor, testById, parseResultValue, fmtSeconds, evaluate,
     TEST_STATUSES, normalizeTestStatus, isOfficialResult, latestResults, squadRow,
     TEST_FOCUS, testSpan, focusGaps,
+    squadByTest, playerSeries, squadFocus, squadCoverage, progressRatio, median, RATIO_CAP,
     HOME_ACTIVITIES, mondayOf, weekKeyOf, weekCompliance, streakWeeks, MOODS, mascotState,
-    toCSV, parseCSV, TEST_COLS, SWIM_COLS, rowsFromCSV, rowsFromSheetTable,
+    toCSV, parseCSV, TEST_COLS, SWIM_COLS, SPOND_COLS, rowsFromCSV, rowsFromSheetTable,
+    normalizeAttendance, attendanceFrom, attendanceSummary, ATTENDED_STATES,
     readXLSX, zipEntries,
   };
 })();

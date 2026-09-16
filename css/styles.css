@@ -58,6 +58,9 @@
   --reel-subtitle:#7fd4de; --reel-brand:rgba(232,246,248,.55);
   --fx-confetti-1:#ff7a18; --fx-confetti-2:#16b3c4; --fx-confetti-3:#2bd07a; --fx-confetti-4:#ffd400; --fx-confetti-5:#ffffff; --fx-confetti-6:#e23b3b;
   --mascot-body:#ff7a18; --mascot-edge:#9c3d00; --mascot-seam:#fff; --mascot-eye:#fff; --mascot-ink:#0b1f2c;
+  /* charts (squad development): drawn by code, so they need values, not var() */
+  --chart-ink:#eaf4fb; --chart-muted:#9fb6c9; --chart-grid:#1e3650; --chart-line:#1fc0d4; --chart-target:#ffd166;
+  --chart-good:#2bd07a; --chart-short:#ff6b6b; --chart-bar:#16b3c4; --chart-bar-track:#13263a; --chart-bg:#0f1c2b;
 
   /* metal (theme Phase 1): the polished-silver fill of the active control; used by the Black & Silver look */
   --metal:linear-gradient(180deg,#fbfcfd 0%,#d4d9df 48%,#9aa0a8 100%); --metal-soft:linear-gradient(180deg,#f3f5f7,#aeb4bc); --metal-ink:#0b0c0e; --metal-edge:rgba(255,255,255,.6);
@@ -104,6 +107,7 @@
   --reel-ink:#eceef1; --reel-caption:rgba(5,5,6,0.82); --reel-watermark:rgba(236,238,241,0.55); --reel-title-top:#1a1b1e; --reel-title-bottom:#050506;
   --reel-title:#eceef1; --reel-subtitle:#a7adb6; --reel-brand:rgba(236,238,241,.55);
   --fx-confetti-2:#c9ced5; --fx-confetti-3:#eceef1; --mascot-ink:#101214;
+  --chart-ink:#eceef1; --chart-muted:#a7adb6; --chart-grid:#2a2c30; --chart-line:#c9ced5; --chart-bar:#c9ced5; --chart-bar-track:#1a1b1e; --chart-bg:#111214;
 }
 /* Black & Silver with glass on: a dark tint does the legibility work (tests/smoke.mjs checks text over the brightest
    water through it), the sheen and 18 px blur make it read as glass. No refraction filter: it only works in Chromium. */
@@ -1338,3 +1342,12 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 :root[data-look="silver"] .look-menu .look-opt[aria-pressed="true"]{background:var(--metal);color:var(--metal-ink);border-color:var(--line)}
 .look-menu .look-opt:disabled{opacity:.5;cursor:not-allowed}
 .look-note{margin:0;font-size:12px;line-height:1.45;color:var(--ink-dim);max-width:32ch}
+
+/* charts (squad development): the SVG is drawn by js/chart.js, which owns its colours */
+.dev-charts .chart{display:block;max-width:100%;height:auto}
+.dev-charts .chart-bars{width:min(100%,460px)}
+.dev-chart-head{margin:14px 0 6px;font-size:13px;color:var(--ink-dim);font-weight:600}
+.dev-chart-table td{vertical-align:middle}
+.dev-chart-table td.dev-chart-cell{min-width:200px;width:46%;padding:2px 8px}
+.dev-charts .dev-coach-row{margin-bottom:8px}
+@media (max-width:640px){ .dev-chart-table td.dev-chart-cell{min-width:150px} }
