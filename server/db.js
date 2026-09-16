@@ -241,6 +241,144 @@ const MIGRATIONS = [
       CREATE INDEX calendar_feeds_club ON calendar_feeds(club_id);
     `,
   },
+  {
+    id: 6, name: 'teams-and-rosters',
+    sql: `
+      -- How a session began. Uploading a device's rosters is the one irreversible write of real
+      -- minors' data, so it is allowed only from a session the person opened themselves. A session
+      -- minted by following a pairing, join or recovery link was opened by clicking something
+      -- somebody else sent. Rows from before this migration become 'legacy' and may not upload
+      -- until the next sign-in. Slices 6 and 7 must pass 'pair' and 'recover' from their own
+      -- createSession calls, or the rule quietly reopens.
+      ALTER TABLE sessions ADD COLUMN origin TEXT CHECK (origin IS NULL OR origin IN
+        ('login', 'club-admin', 'staff-invite', 'join', 'pair', 'recover', 'legacy'));
+
+      -- A club's teams. sync_key = HMAC(server_keys['team-sync'], club_id:uploader:local_id), so a
+      -- retried upload by the same coach is a no-op, another coach's upload of a colliding local id
+      -- creates its own team and can neither see nor overwrite theirs, and the device's own id —
+      -- Math.random, and carried between devices in .thplay.json exports — is never stored.
+      -- season is the year the season STARTS (1 Sep, js/eligibility.js seasonOf): without it "same
+      -- category" means "same category ever", and last season's team conflicts with this one's.
+      -- category is CHECKed for shape only: SQLite cannot ALTER a CHECK and the federation
+      -- restructures leagues, so the list of ids lives in the JS module both sides read.
+      CREATE TABLE club_teams (
+        id           TEXT PRIMARY KEY,                     -- 'ct_' + 22 base64url (ID.newId)
+        club_id      TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+        sync_key     TEXT NOT NULL,
+        name         TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 60),
+        category     TEXT NOT NULL CHECK (length(category) BETWEEN 1 AND 16),
+        season       INTEGER NOT NULL CHECK (season BETWEEN 2000 AND 2100),
+        league_label TEXT NOT NULL DEFAULT '' CHECK (length(league_label) <= 60),
+        created_by   TEXT REFERENCES users(id) ON DELETE SET NULL,
+        created_at   INTEGER NOT NULL,
+        updated_at   INTEGER NOT NULL,
+        rev          INTEGER NOT NULL DEFAULT 1,           -- what a conditional UPDATE conditions on
+        archived_at  INTEGER
+      );
+      CREATE UNIQUE INDEX club_teams_sync ON club_teams(club_id, sync_key);
+      CREATE INDEX club_teams_club ON club_teams(club_id, season, category);
+      -- so a staff or member row can name (team_id, club_id) as one reference
+      CREATE UNIQUE INDEX club_teams_id_club ON club_teams(id, club_id);
+
+      -- The club's players. PER CLUB, so adding a licence never says whether another club has that
+      -- player, and one club's name correction never reaches another club's sheet.
+      -- The id is 128 random bits and is NOT derived from the licence: on the device a player's id
+      -- IS 'L' + licence (js/teams.js), and using that as a server id would put a minor's licence
+      -- number into every manifest key and audit detail that carried it — and a licence is the
+      -- same string in every club, which is exactly what member_ref exists to prevent.
+      -- There is deliberately NO json/meta column and NO status column: wpmatch's Eligibility text
+      -- ("Ausländer-Étranger", "Inactive License") is a nationality statement about a named child
+      -- that any holder of the public licence can re-derive in one request, so storing it buys
+      -- nothing and would put it in every backup. The device keeps it in its own offline copy.
+      CREATE TABLE club_players (
+        id           TEXT PRIMARY KEY,                     -- 'cp_' + 22 base64url
+        club_id      TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+        licence      TEXT,                                 -- the wpmatch slug; NULL while it is pending
+        sync_key     TEXT,                                 -- licence-pending players only; carries nothing personal
+        name         TEXT NOT NULL DEFAULT '' CHECK (length(name) <= 80),
+        first_name   TEXT NOT NULL DEFAULT '' CHECK (length(first_name) <= 80),
+        name_edited  INTEGER NOT NULL DEFAULT 0 CHECK (name_edited IN (0, 1)),
+        name_guessed INTEGER NOT NULL DEFAULT 0 CHECK (name_guessed IN (0, 1)),
+        -- A YEAR, and only for a player with no licence yet, because nothing else can supply it.
+        -- wpmatch's \`date\` is a full date of birth and is never fetched (js/wpmatch.js); this is
+        -- that rule written where no code path can forget it. An INTEGER column alone is NOT the
+        -- guard: SQLite stores '2013-04-17' in it as text. typeof() is what refuses it.
+        birth_year   INTEGER CHECK (typeof(birth_year) IN ('null', 'integer')
+                                    AND (birth_year IS NULL OR birth_year BETWEEN 1900 AND 2100)),
+        gender       TEXT NOT NULL DEFAULT '' CHECK (gender IN ('', 'M', 'F')),
+        added_by     TEXT REFERENCES users(id) ON DELETE SET NULL,
+        created_at   INTEGER NOT NULL,
+        updated_at   INTEGER NOT NULL,
+        rev          INTEGER NOT NULL DEFAULT 1,
+        left_at      INTEGER,                              -- no live roster row since then
+        CHECK (licence IS NULL OR (length(licence) BETWEEN 3 AND 6 AND licence NOT GLOB '*[^0-9]*')),
+        CHECK (licence IS NOT NULL OR sync_key IS NOT NULL),
+        -- a licensed player's year and gender come from wpmatch on the coach's own device, never here
+        CHECK (licence IS NULL OR (birth_year IS NULL AND gender = ''))
+      );
+      CREATE UNIQUE INDEX club_players_licence ON club_players(club_id, licence) WHERE licence IS NOT NULL;
+      CREATE UNIQUE INDEX club_players_sync ON club_players(club_id, sync_key) WHERE sync_key IS NOT NULL;
+      CREATE INDEX club_players_club ON club_players(club_id, name);
+      CREATE INDEX club_players_left ON club_players(left_at) WHERE left_at IS NOT NULL;
+
+      -- The roster. cap and gk belong to a TEAM, not to a person: the same player is cap 1 in the
+      -- U16 and cap 7 in the NLB, and a shared column would silently move her on the other team's
+      -- printed sheet. A player who leaves keeps the row with removed_at set — the retention clock,
+      -- "was she on this list in March", and the conflict check all need it, and a hard delete would
+      -- make deleting a team the way to make a conflict warning go away before a match.
+      CREATE TABLE club_team_players (
+        team_id        TEXT NOT NULL REFERENCES club_teams(id) ON DELETE CASCADE,
+        club_player_id TEXT NOT NULL REFERENCES club_players(id) ON DELETE CASCADE,
+        cap            TEXT NOT NULL DEFAULT '' CHECK (length(cap) <= 2 AND cap NOT GLOB '*[^0-9]*'),
+        gk             INTEGER NOT NULL DEFAULT 0 CHECK (gk IN (0, 1)),
+        added_at       INTEGER NOT NULL,
+        added_by       TEXT,
+        removed_at     INTEGER,
+        removed_by     TEXT,
+        PRIMARY KEY (team_id, club_player_id)
+      );
+      CREATE INDEX club_team_players_live ON club_team_players(club_player_id) WHERE removed_at IS NULL;
+
+      -- Who may work on a team. The two references together mean a row cannot name a team of one
+      -- club and a membership of another. They are INTEGRITY, not authorization: a club_members row
+      -- also exists while pending, denied and removed, so every query joins club_members and
+      -- re-checks status = 'approved' and the role. Removal and demotion do not DELETE that row
+      -- (identity.js sets status/role), so the cascade below never fires on its own —
+      -- identity.js loseTeamRoles() is what removes these, inside the caller's transaction.
+      CREATE TABLE club_team_staff (
+        team_id  TEXT NOT NULL,
+        club_id  TEXT NOT NULL,
+        user_id  TEXT NOT NULL,
+        added_at INTEGER NOT NULL,
+        added_by TEXT,
+        PRIMARY KEY (team_id, user_id),
+        FOREIGN KEY (team_id, club_id) REFERENCES club_teams(id, club_id) ON DELETE CASCADE,
+        FOREIGN KEY (club_id, user_id) REFERENCES club_members(club_id, user_id) ON DELETE CASCADE
+      );
+      CREATE INDEX club_team_staff_user ON club_team_staff(club_id, user_id);
+
+      -- The club's MEMBERS on a team: accounts, so a coach knows who they may write to. Deliberately
+      -- a different table from club_team_players — one is an account, the other is a child who has
+      -- none — and nothing here says the two are the same person. That claim needs a one-time code
+      -- handed over in person (slice 7): a name match is a guess, and two members of one club with
+      -- the same folded name are common enough that clubs.js already warns about it.
+      CREATE TABLE club_team_members (
+        team_id  TEXT NOT NULL,
+        club_id  TEXT NOT NULL,
+        user_id  TEXT NOT NULL,
+        added_at INTEGER NOT NULL,
+        added_by TEXT,
+        PRIMARY KEY (team_id, user_id),
+        FOREIGN KEY (team_id, club_id) REFERENCES club_teams(id, club_id) ON DELETE CASCADE,
+        FOREIGN KEY (club_id, user_id) REFERENCES club_members(club_id, user_id) ON DELETE CASCADE
+      );
+      CREATE INDEX club_team_members_user ON club_team_members(club_id, user_id);
+    `,
+    // Existing sessions cannot know how they began. They are 'legacy' and may not upload.
+    run(db) {
+      db.prepare("UPDATE sessions SET origin = 'legacy' WHERE origin IS NULL").run();
+    },
+  },
 ];
 
 function tx(db, fn) {

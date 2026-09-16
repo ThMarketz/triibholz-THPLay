@@ -219,11 +219,14 @@ function createAuth({ db, cfg, now = Date.now }) {
       .run(ch.usedId, t, ch.expiresAt, t).changes === 1;
   }
 
-  function createSession(userId, credentialId, uv, t) {
+  /* `origin` is how this session began — signed in here, or opened by following a link somebody
+     sent. Uploading a club's rosters (server/teams.js) is allowed only from the first kind, so
+     slices 6 and 7 must pass 'pair' and 'recover' from their own calls or the rule quietly reopens. */
+  function createSession(userId, credentialId, uv, t, origin) {
     const token = b64u(crypto.randomBytes(32));
     const idle = isStaff(userId) ? SESSION.staffIdle : SESSION.playerIdle;
-    db.prepare(`INSERT INTO sessions (token_hash, user_id, credential_id, uv, created_at, last_seen_at, expires_at, absolute_expires_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(sha256hex(token), userId, credentialId, uv ? 1 : 0, t, t, t + idle, t + SESSION.absolute);
+    db.prepare(`INSERT INTO sessions (token_hash, user_id, credential_id, uv, created_at, last_seen_at, expires_at, absolute_expires_at, origin)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(sha256hex(token), userId, credentialId, uv ? 1 : 0, t, t, t + idle, t + SESSION.absolute, origin || 'legacy');
     return cookieHeader(cfg, token, Math.floor(SESSION.absolute / 1000));
   }
   const clearCookie = () => cookieHeader(cfg, '', 0);
@@ -243,7 +246,7 @@ function createAuth({ db, cfg, now = Date.now }) {
       s.expires_at = Math.min(t + (isStaff(s.user_id) ? SESSION.staffIdle : SESSION.playerIdle), s.absolute_expires_at);
       db.prepare('UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ?').run(t, s.expires_at, hash);
     }
-    return { tokenHash: hash, userId: s.user_id, credentialId: s.credential_id, uv: !!s.uv, stepupAt: s.stepup_at, createdAt: s.created_at, expiresAt: s.expires_at };
+    return { tokenHash: hash, userId: s.user_id, credentialId: s.credential_id, uv: !!s.uv, stepupAt: s.stepup_at, createdAt: s.created_at, expiresAt: s.expires_at, origin: s.origin };
   }
 
   function whoami(userId, session) {
@@ -252,7 +255,7 @@ function createAuth({ db, cfg, now = Date.now }) {
                               WHERE m.user_id = ? AND m.status IN ('approved', 'pending') ORDER BY c.name`).all(userId)
       .map(c => Object.assign({ id: c.id, name: c.name, role: c.role, status: c.status, memberRef: c.member_ref },
         c.status === 'pending' ? { requestNo: c.request_no, expiresAt: c.requested_at + ID.MEMBERSHIP.pendingTtl } : {}));
-    return { user: { id: user.id, displayName: user.display_name }, clubs, session: session ? { uv: session.uv, expiresAt: session.expiresAt } : undefined };
+    return { user: { id: user.id, displayName: user.display_name }, clubs, session: session ? { uv: session.uv, expiresAt: session.expiresAt, origin: session.origin || 'legacy' } : undefined };
   }
 
   /* ---- routes: each reads its body first, then the clock ---- */
@@ -332,7 +335,8 @@ function createAuth({ db, cfg, now = Date.now }) {
       }
       storeCredential(user.id, v, t, ch.club_id);
       if (previous) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(previous.tokenHash);   // this browser is someone new now
-      return { userId: user.id, cookie: createSession(user.id, v.credentialId, v.uv, t) };
+      // payload.kind comes from the challenge row, never from the request body
+      return { userId: user.id, cookie: createSession(user.id, v.credentialId, v.uv, t, payload.kind) };
     });
     send(res, 200, whoami(out.userId), out.cookie);
   }
@@ -394,7 +398,7 @@ function createAuth({ db, cfg, now = Date.now }) {
       if (r.changes !== 1) throw httpError(401, 'sign-in-failed');   // another sign-in with this counter won the race
       if (previous) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(previous.tokenHash);   // a new session id on every sign-in
       ID.audit(db, { actor: cred.user_id, action: 'session.start', subject: cred.user_id, detail: { credential: cred.id.slice(0, 12), uv: v.uv } }, t);
-      return createSession(cred.user_id, cred.id, v.uv, t);
+      return createSession(cred.user_id, cred.id, v.uv, t, 'login');
     });
     send(res, 200, whoami(cred.user_id), cookie);
   }
@@ -497,6 +501,7 @@ function createAuth({ db, cfg, now = Date.now }) {
     ['POST', /^\/api\/auth\/stepup\/options$/, stepUpOptions],
     ['POST', /^\/api\/auth\/stepup\/verify$/, stepUpVerify],
     ...require('./clubs.js').routes(core),
+    ...require('./teams.js').routes(core),
   ];
 
   /* identity errors → HTTP; a thing that does not exist, or that this person may not see, is one 404 */
@@ -504,6 +509,7 @@ function createAuth({ db, cfg, now = Date.now }) {
     'no-member': [404, 'not-found'], 'no-code': [404, 'not-found'], 'no-club': [404, 'not-found'],
     'request-changed': [409], 'last-admin': [409], 'needs-verified-passkey': [409], 'ask-your-admin': [409], 'too-many-join-codes': [409],
     'too-many-pending': [429], 'too-many-requests-for-club': [429], 'bad-name': [400], 'bad-label': [400], 'bad-days': [400], 'bad-max-pending': [400], 'bad-role': [400], busy: [503],
+    'no-team': [404, 'not-found'], 'too-many-teams': [409], 'too-many-players': [409],
   };
 
   async function handle(req, res, pathname) {

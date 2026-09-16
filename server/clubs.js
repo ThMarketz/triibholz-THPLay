@@ -30,6 +30,19 @@ const DAY = 24 * 3600e3;
 const fold = s => String(s || '').normalize('NFKC').toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
 const mixedScript = s => /\p{Script=Latin}/u.test(s) && /[\p{Script=Cyrillic}\p{Script=Greek}]/u.test(s);
 
+/* Inside a transaction: the caller's approved membership with one of `roles`, or the one 404.
+   server/teams.js shares this rather than writing a second answer to "may they?" — two versions of
+   this function is how a club ends up reachable through the newer of the two. */
+function makeGuard({ db, httpError, freshSession, steppedUp }) {
+  return function guard(session, clubId, { roles, stepUp = false }, t) {
+    const m = db.prepare("SELECT * FROM club_members WHERE club_id = ? AND user_id = ? AND status = 'approved'").get(clubId, session.userId);
+    if (!m || !roles.includes(m.role)) throw httpError(404, 'not-found');
+    if (STAFF.includes(m.role) && !freshSession(session).uv) throw httpError(403, 'user-verification-required');
+    if (stepUp && !steppedUp(session, t)) throw httpError(403, 'step-up-required');
+    return m;
+  };
+}
+
 function routes(core) {
   const { db, now, send, readJson, httpError, tooMany, requireSession, freshSession, steppedUp, overLimit, clientAddress, clearCookie, LIMITS } = core;
 
@@ -42,14 +55,7 @@ function routes(core) {
   });
   const formerRef = (clubId, id) => createHmac('sha256', auditKey).update(clubId + ':' + id).digest('base64url').slice(0, 6);
 
-  /* inside a transaction: the caller's approved membership with one of `roles`, or the one 404 */
-  function guard(session, clubId, { roles, stepUp = false }, t) {
-    const m = db.prepare("SELECT * FROM club_members WHERE club_id = ? AND user_id = ? AND status = 'approved'").get(clubId, session.userId);
-    if (!m || !roles.includes(m.role)) throw httpError(404, 'not-found');
-    if (STAFF.includes(m.role) && !freshSession(session).uv) throw httpError(403, 'user-verification-required');
-    if (stepUp && !steppedUp(session, t)) throw httpError(403, 'step-up-required');
-    return m;
-  }
+  const guard = makeGuard(core);
   const target = (clubId, memberRef, status) => {
     const m = ID.getMemberByRef(db, clubId, memberRef);
     if (!m || (status && ![].concat(status).includes(m.status))) throw httpError(404, 'not-found');
@@ -170,12 +176,26 @@ function routes(core) {
   async function addressees(req, res, clubId) {
     const s = requireSession(req), t = now();
     const out = tx(db, () => {
-      guard(s, clubId, { roles: STAFF }, t);
-      return db.prepare(`SELECT m.member_ref, u.display_name, m.role FROM club_members m JOIN users u ON u.id = m.user_id
+      const m = guard(s, clubId, { roles: STAFF }, t);
+      /* A club admin writes to the whole club, as they always could — they may already read the
+         member list by right. A coach or a trainer writes to the teams they are actually staff of
+         (slice 5): the members of those teams, and the other staff of them. Themselves excluded
+         here rather than in the app, so a client cannot put itself back. A coach who is staff of
+         no team gets an empty list and is told so — never a quiet fall back to everybody. */
+      if (m.role === 'admin') {
+        return { scope: 'club', addressees: db.prepare(`SELECT m.member_ref, u.display_name, m.role FROM club_members m JOIN users u ON u.id = m.user_id
                          WHERE m.club_id = ? AND m.status = 'approved' ORDER BY u.display_name`).all(clubId)
-        .map(r => ({ memberRef: r.member_ref, name: r.display_name, role: r.role }));
+          .map(r => ({ memberRef: r.member_ref, name: r.display_name, role: r.role })) };
+      }
+      const rows = db.prepare(`SELECT DISTINCT m.member_ref, u.display_name, m.role FROM club_team_staff mine
+         JOIN (SELECT team_id, club_id, user_id FROM club_team_members UNION ALL SELECT team_id, club_id, user_id FROM club_team_staff) x
+              ON x.team_id = mine.team_id
+         JOIN club_members m ON m.club_id = x.club_id AND m.user_id = x.user_id AND m.status = 'approved'
+         JOIN users u ON u.id = x.user_id
+         WHERE mine.club_id = ? AND mine.user_id = ? AND x.user_id != ? ORDER BY u.display_name`).all(clubId, s.userId, s.userId);
+      return { scope: 'teams', addressees: rows.map(r => ({ memberRef: r.member_ref, name: r.display_name, role: r.role })) };
     });
-    send(res, 200, { addressees: out });
+    send(res, 200, out);
   }
 
   /* ---- codes ---- */
@@ -362,4 +382,4 @@ function routes(core) {
   ];
 }
 
-module.exports = { routes, fold, mixedScript };
+module.exports = { routes, makeGuard, fold, mixedScript };

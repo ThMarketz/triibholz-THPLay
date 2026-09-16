@@ -67,6 +67,10 @@ answer.
 - **Env**: `PORT` `DATA_DIR` `CONCURRENCY` `MAX_BODY` `MAX_UPLOAD` `FFMPEG` `MODEL_ENDPOINT`.
 - **Accounts** (off unless `ACCOUNTS=1`): `RP_ID` `APP_ORIGINS` `DEV` — checked at startup;
   `node admin.js help` for the operator commands. See `docs/ACCOUNTS.md`.
+- **Teams and rosters** (slice 5, `server/teams.js`): a club's teams and players live under
+  `/api/clubs/:club/teams`. Per club, never global; the payload contract is `js/teamsync.js`, which
+  the server requires directly so a rule cannot be enforced on one side only. Reading a roster and
+  uploading one both need a fresh passkey assertion. See `docs/ACCOUNTS.md`.
 - **Something to look at**: `node admin.js demo` seeds a sandbox club with an invented squad (no
   passkeys — it is not a way in) and prints an invite so a real person can be its admin;
   `demo-remove <club-id>` undoes it. See `server/demo.js`.

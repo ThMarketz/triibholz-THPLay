@@ -23,7 +23,7 @@ the rules below, not a footnote.
 | 2 | Passkey registration and sign-in, sessions, behind `ACCOUNTS=1`; nothing depends on it yet | **done** — server only; the app still signs in the simulated way |
 | 3 | Clubs and memberships: invites, join codes, approvals, roles, removal, step-up, UV for staff | **done** — server only |
 | 4 | The switch, in one release: the app signs in for real; every existing endpoint authorized | **done** — server (5d7733d), app (e366672), the Film Room moment (faf789a), the announcement composer (2d9c24c), the operator's legacy-data commands (bf5df87) and the sandbox club |
-| 5 | Teams, rosters, sheets, templates on the server; read-only offline copy for staff | |
+| 5 | Teams and rosters on the server, per club; team staff and members; the narrowed addressee list | **done** — server; sheets and templates stay on the device on purpose (see below) |
 | 6 | Devices: QR pairing with approval on the old device, devices page, revocation | |
 | 7 | Recovery with a hold period; player and guardian links | |
 | 8 | Release hardening: chunked uploads through the tunnel, FADP package, backups, staging rehearsal | |
@@ -462,20 +462,100 @@ One release, because half-authorized is worse than either state:
 
 ## Server-side teams (slice 5)
 
-- Player records are **per club**: `club_players(club_id, licence, …, UNIQUE(club_id, licence))`.
-  Adding a licence never reveals whether another club has that player, and one club's name
-  correction never changes another club's sheet.
-- The two-teams-same-category check runs within the club only. Staff who are not on both teams are
-  told "conflicts with another team list in this club" without the team's name.
-- The addressee list (`/api/clubs/:club/addressees`, slice 4) is narrowed here from "every
-  approved member of the club" to the members of the teams that coach is actually staff of.
-- Uploading a device's local teams: approved staff only, into a club they pick, idempotent (the
-  local ids are the key — a retried upload creates nothing new), confirmed by a server manifest
-  before the device touches its copy. Never offered in a session that started from a pairing,
-  join or recovery link.
-- A read-only offline copy of the teams a coach is staff of stays on the device for pools without
-  signal (team sheets must work offline), shows when it was last synced, and is wiped on sign-out
-  and never kept in shared-device mode.
+This is the first time real rosters — children's names and licence numbers — are stored anywhere
+but the coach's own device, so the design was critiqued from five lenses (privacy, authorization,
+sync, schema, hostile input) before any of it was written, and 16 of the protections below were
+fault-injected afterwards: removing any one of them fails a check in `tests/teams.mjs`.
+
+**Per club, always.** `club_players` is keyed by `(club_id, licence)` with a partial unique index.
+Adding a licence is an insert that cannot fail because of another club, so it says nothing about
+whether another club has that child, and no correction ever crosses a club boundary. The row's id
+is 128 random bits and is **not** derived from the licence: on the device a player's id *is*
+`L<licence>`, and reusing that on the server would put a minor's licence number into every
+manifest key and audit line that carried it — and a licence is the same string in every club,
+which is exactly what `member_ref` exists to prevent.
+
+**What may never travel.** `js/teamsync.js` is the payload contract, shared by the app and the
+server the way `announce.js` already is, and it is a whitelist: anything else is *refused*, not
+dropped, so a later client cannot quietly start sending a field nobody agreed to.
+
+| Refused | Because |
+|---|---|
+| `date`, `dob`, `birthDate` | a date of birth. `js/wpmatch.js` never fetches one; this is that rule written where no code path can forget it. `birth_year` is `typeof`-CHECKed in SQLite too, because an INTEGER column happily stores `'2013-04-17'` as text |
+| a birth year or gender **for a licensed player** | wpmatch supplies both on the coach's own device, from the public licence. The server has no use for them |
+| `status` | wpmatch's eligibility text ("Ausländer-Étranger", "Inactive License") is a nationality statement about a named child that anyone holding the public licence can re-derive in one request. Storing it buys nothing and would put it in every backup |
+| `availability` | an opinion about a child's body. It stays on the device |
+| `sheets` | the coach's own working document, and what keeps the sheet builder usable at a pool with no signal |
+
+**The device's id is never the key.** Local ids are `Math.random` (`js/teams.js`) and travel
+between devices inside exported `.thplay.json` files, so two coaches can hold the same one. The
+server keys on `HMAC(server key, club:uploader:localId)`: a retried upload by the same coach is a
+no-op, another coach's colliding id makes *their own* team instead of landing in someone else's,
+and the raw id is never stored, audited or logged — it comes back in the manifest only.
+
+**Reading a roster is an export.** Filling a device with children's names is the act worth gating,
+so the roster read *and* the upload both need a fresh passkey assertion, and the upload also needs
+a session the person opened themselves (`sessions.origin` — not one minted by following a pairing,
+join or recovery link somebody sent them). Every session alive before this shipped is `legacy` and
+fails closed: it costs one sign-in. Slices 6 and 7 must pass `pair` and `recover` at their own
+`createSession` calls or the rule quietly reopens.
+
+**Teams have their own staff and their own members**, and they are different tables. Staff may work
+on the team; members are the club's *accounts* attached to it, which is what the addressee list
+reads. Nothing anywhere says a member is the same person as a roster row — that claim needs a code
+handed over in person (slice 7), and a name match is a guess. Whoever creates a team by uploading
+it is staff of it; every other staff row is an admin's deliberate grant, with a step-up. A person
+demoted out of staff loses their team staff rows (but stays a team *member* — a coach who becomes
+a player is still someone a coach may write to); a person who leaves the club loses both.
+
+**The two-teams-same-category check** runs within the club only, scoped by `(season, category)` so
+last season's team is not a conflict, and it is computed **only as a side effect of a write the
+caller was already allowed to make**. There is no lookup route and no dry run: "is this licence in
+this club" is a question this server does not answer to anybody. The finding names the other team
+only when the caller is staff of that team too; otherwise it is the bare fact, which is all a coach
+needs in order to go and ask.
+
+**Nothing is deleted by a sync.** An upload adds and updates, one team per request (a whole device
+would not fit the router's 64 kB body, and a team at a time means a sync that dies half-way leaves
+whole teams behind rather than half of one). Removal is its own route and is soft — the row keeps
+`removed_at`, so "was she on this list in March" still has an answer and deleting a team cannot be
+the way to make a conflict warning go away before a match. Deleting a team makes the coach retype
+its name, and is the undo for a team uploaded into the wrong club.
+
+**The addressee list** (`/api/clubs/:club/addressees`, slice 4) now answers `{ scope, addressees }`:
+a club admin keeps the whole club, a coach or trainer gets the members and fellow staff of the
+teams they are staff of, with themselves excluded server-side. A coach who is staff of no team gets
+an empty list and is told so — never a quiet fall back to everybody.
+
+**Caps**, checked inside the transaction that writes: 40 teams and 800 players per club, 60 players
+per team, 60 syncs per hour and 200 new licences per day per person. Audit details carry counts and
+server ids only — never a licence, a name or a device id.
+
+### Still to do in slice 5
+
+- The app half: the upload flow, the read-only offline copy of the teams a coach is staff of, when
+  it was last synced, and wiping every roster key on sign-out. Until that ships the app still keeps
+  rosters only on the device, and `docs/TEAM_SHEETS.md` is still accurate as written.
+- Shared-device mode does not exist in the app yet; the offline copy has to know about it when it
+  does.
+
+### Questions for the club before this is switched on
+
+These are the club's to answer, not the code's:
+
+1. Should a **club admin** keep the whole-club addressee list, or be narrowed to their own teams
+   like a coach? (Kept club-wide for now: an admin already reads the member list by right.)
+2. Should a **club-wide announcement** become admin-only, forcing coaches to pick a team? Not done:
+   it would take away something coaches can do today, and a small club may want any coach to be
+   able to say that training is cancelled.
+3. Are the **caps** right for this club — 40 teams, 800 players, 60 per team?
+4. When a coach leaves mid-season their team is left with no staff, and it falls to a club admin to
+   reassign or delete it. Is that right, or should the departing coach nominate a successor?
+5. Should a coach be able to **upload on their own** the first time, or should the first upload into
+   a club need an admin's go-ahead? Nothing technical stops the coach; this is a question about who
+   decides that a club now holds minors' data on a server.
+6. Who is told when the "uploaded into the wrong club" undo **deletes** a child's row outright — the
+   club's admins, or is the audit entry enough?
 
 ## Devices (slice 6)
 
@@ -562,6 +642,15 @@ None blocks local development. All are needed before real people sign in.
   operator adopts it — and no further. 8 protections fault-injected; each fails a check.
 - `tests/signin.mjs` — the app against that server in jsdom: the passkey sign-in, the club
   console, and the bell showing a sent moment and playing it inline with its marks.
+- `tests/teams.mjs` — slice 5 over real HTTP: a coach uploading a team and sending it again with
+  nothing created, another coach's colliding local id making its own team, the same licence living
+  in two clubs without either learning of the other, every refused field (a date of birth however
+  it is spelled, a nationality status, a licensed player's birth year, availability, sheets, a
+  field nobody agreed to), a roster read that asks for the passkey again, who may see a team, the
+  two-teams-same-category check and what it will not name, soft removal, team staff and members,
+  the narrowed addressee list, what a demotion and a removal take away, deleting a team by
+  retyping its name, a session from a link that may not upload, and the caps. 16 protections
+  fault-injected; each fails a check.
 - `scripts/test-nginx-realip.sh` — the real nginx image: `CF-Connecting-IP` believed only from
   `TRUSTED_PROXY`, ignored without it or from any other address; bad values refuse to start.
 

@@ -231,6 +231,18 @@ function loseAdmin(db, { clubId, userId, actor }, now) {
   return { revoked, denied };
 }
 
+/* A person who stops being staff of a club stops being staff of its teams: the club_team_staff row
+   is not deleted by any cascade, because a demotion or a removal only CHANGES the club_members row
+   rather than deleting it. Leaving the club takes the team memberships too; a demotion does not —
+   a coach who becomes a player is still on the team a coach may write to.
+   Called inside the caller's transaction, and audits counts only. */
+function loseTeamRoles(db, { clubId, userId, actor, staffOnly = false }, now) {
+  const staff = db.prepare('DELETE FROM club_team_staff WHERE club_id = ? AND user_id = ?').run(clubId, userId).changes;
+  const member = staffOnly ? 0 : db.prepare('DELETE FROM club_team_members WHERE club_id = ? AND user_id = ?').run(clubId, userId).changes;
+  if (staff || member) audit(db, { actor, action: 'team.lose-roles', subject: userId, clubId, detail: { staff, member } }, now);
+  return { staff, member };
+}
+
 function changeRole(db, { clubId, memberRef, role, actor }, now) {
   if (!ROLES.includes(role)) throw fail('bad-role');
   return tx(db, () => {
@@ -243,6 +255,7 @@ function changeRole(db, { clubId, memberRef, role, actor }, now) {
       if (r.changes !== 1) throw fail('request-changed');
     } catch (e) { throw lastAdmin(e); }
     if (m.role === 'admin') loseAdmin(db, { clubId, userId: m.user_id, actor }, now);
+    if (!STAFF_ROLES.includes(role)) loseTeamRoles(db, { clubId, userId: m.user_id, actor, staffOnly: true }, now);
     audit(db, { actor, action: 'member.role', subject: m.user_id, clubId, detail: { from: m.role, to: role } }, now);
     return { ...m, role };
   });
@@ -259,6 +272,7 @@ function endMembership(db, { clubId, memberRef, actor, action = 'member.remove',
       if (r.changes !== 1) throw fail('request-changed');
     } catch (e) { throw lastAdmin(e); }
     loseAdmin(db, { clubId, userId: m.user_id, actor }, now);
+    loseTeamRoles(db, { clubId, userId: m.user_id, actor }, now);
     if (revokeJoinCodes) {
       const n = db.prepare('UPDATE club_join_codes SET revoked_at = ? WHERE club_id = ? AND created_by = ? AND revoked_at IS NULL AND expires_at > ?').run(now, clubId, m.user_id, now).changes;
       if (n) audit(db, { actor, action: 'code.revoke', subject: m.user_id, clubId, detail: { kind: 'join', count: n } }, now);
@@ -522,7 +536,7 @@ module.exports = {
   audit, createUser, getUser, deleteUser,
   createClub, getClub, listClubs, renameClub,
   addMember, getMember, getMemberByRef, updateMember, hasVerifiedPasskey, approvedElsewhere,
-  requestMembership, decideRequest, changeRole, endMembership, withdrawRequest, grantAdmin, loseAdmin,
+  requestMembership, decideRequest, changeRole, loseTeamRoles, endMembership, withdrawRequest, grantAdmin, loseAdmin,
   issueCode, consumeCode, consumeCodeHash, peekCode, revokeCodes, cleanName,
   issueJoinCode, findCode, claimJoinCodeHash, revokeClubCode,
   endSessions, purgeExpired, expireRequests, purgeAbandonedAccounts, housekeeping,
