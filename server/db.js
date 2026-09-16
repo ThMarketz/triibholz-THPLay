@@ -210,6 +210,37 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    id: 5, name: 'assets-and-feeds',
+    sql: `
+      -- Who a stored file belongs to: match videos, the clips cut from them, analysis jobs and
+      -- generated clips. A file with no row here is from before accounts existed: nobody may read
+      -- it over HTTP (the operator can still reach the volume).
+      CREATE TABLE assets (
+        id            TEXT PRIMARY KEY,
+        kind          TEXT NOT NULL CHECK (kind IN ('video', 'clip', 'job', 'videogen')),
+        club_id       TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+        owner_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        created_at    INTEGER NOT NULL,
+        meta          TEXT
+      );
+      CREATE INDEX assets_club ON assets(club_id, kind);
+      CREATE INDEX assets_owner ON assets(owner_user_id);
+
+      -- A calendar feed is a capability URL: a calendar app fetches it with no cookie, so the token
+      -- IS the permission. The server issues it (one a client invented is refused), only a club's
+      -- staff may, and any of them can be revoked.
+      CREATE TABLE calendar_feeds (
+        token_hash TEXT PRIMARY KEY,
+        club_id    TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+        label      TEXT,
+        created_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at INTEGER NOT NULL,
+        revoked_at INTEGER
+      );
+      CREATE INDEX calendar_feeds_club ON calendar_feeds(club_id);
+    `,
+  },
 ];
 
 function tx(db, fn) {

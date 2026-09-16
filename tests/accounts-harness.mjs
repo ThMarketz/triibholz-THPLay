@@ -20,13 +20,14 @@ export async function startServer(port, env = {}) {
 
 let addr = 0;
 export function makeCall(port) {
-  return function call(method, path, { body, origin = ORIGIN, cookie, type = 'application/json', ip, raw } = {}) {
+  return function call(method, path, { body, origin = ORIGIN, cookie, type = 'application/json', ip, raw, headers: extra } = {}) {
     return new Promise((resolve, reject) => {
       const payload = raw !== undefined ? raw : body === undefined ? (method === 'GET' ? '' : '{}') : JSON.stringify(body);
       const headers = { 'x-real-ip': ip || `10.8.${(++addr >> 8) & 255}.${addr & 255}` };
       if (origin) headers.origin = origin;
       if (type && method !== 'GET') headers['content-type'] = type;
       if (cookie) headers.cookie = cookie;
+      Object.assign(headers, extra || {});
       if (method !== 'GET') headers['content-length'] = Buffer.byteLength(payload);
       const req = http.request({ host: '127.0.0.1', port, method, path, headers }, res => {
         const chunks = []; res.on('data', c => chunks.push(c));

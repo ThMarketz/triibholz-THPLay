@@ -32,13 +32,15 @@ const ANNOUNCE = (() => {
     const title = clean(input.title, MAX_TITLE).trim();
     const body = clean(input.body, MAX_BODY).trim();
     if (!title || !body) return { ok: false, error: 'title-and-body-required' };
-    if (scope === 'player' && !isEmail(input.to)) return { ok: false, error: 'player-scope-needs-a-valid-to-email' };
+    // a player is addressed by their per-club member ref once accounts exist, by e-mail before that
+    const toRef = /^m_[A-Za-z0-9_-]{22}$/.test(String(input.to || ''));
+    if (scope === 'player' && !isEmail(input.to) && !toRef) return { ok: false, error: 'player-scope-needs-a-valid-to-email' };
     const plays = (Array.isArray(input.plays) ? input.plays : []).slice(0, MAX_PLAYS).filter(p => p && typeof p === 'object');
     return {
       ok: true,
       value: {
         scope,
-        to: scope === 'player' ? String(input.to).trim().toLowerCase() : null,
+        to: scope === 'player' ? (/^m_[A-Za-z0-9_-]{22}$/.test(String(input.to || '')) ? String(input.to) : String(input.to).trim().toLowerCase()) : null,
         team: clean(input.team, 60) || 'club',
         from: { name: clean(input.fromName, MAX_NAME), email: clean(input.fromEmail, MAX_NAME).toLowerCase() },
         title, body,

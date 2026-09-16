@@ -1,5 +1,11 @@
 # Training attendance from Spond
 
+> **Parked (16 September 2026).** Exporting attendance needs admin rights in the club's Spond
+> group, which we do not have. The importer and the coach's attendance view are built and tested
+> against a synthetic file; they stay in the app, unused, until someone with those rights exports a
+> real file. Nothing else waits on this.
+
+
 The club runs training in Spond. A coach asked to see that attendance here, beside the test
 results. This is how it works, and why it is a file and not a live connection.
 

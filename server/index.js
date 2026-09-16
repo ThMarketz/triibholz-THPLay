@@ -54,14 +54,23 @@ const MAX_BODY = +(process.env.MAX_BODY || 200 * 1024 * 1024);   // 200 MB
 const MAX_UPLOAD = +(process.env.MAX_UPLOAD || 4 * 1024 * 1024 * 1024);   // 4 GB — video uploads stream to disk, never into memory
 [DATA_DIR, VIDEO_DIR, JOB_DIR, CAL_DIR, CLIP_DIR, DEBRIEF_DIR, ANNOUNCE_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
 const safeToken = t => String(t || '').replace(/[^\w.\-]/g, '').slice(0, 64);
+/* A feed's events are stored under the hash of its token, never the token itself (it is a password).
+   Feeds published before accounts keep their old file name so a calendar already subscribed to one
+   does not break on upgrade. */
+const calFile = token => access.on
+  ? require('node:crypto').createHash('sha256').update(String(token)).digest('hex').slice(0, 32) + '.json'
+  : safeToken(token) + '.json';
 
 /* ---- accounts: off unless ACCOUNTS=1. When on, a wrong configuration or a database written by a
    newer build stops the server here, before it listens. No route uses accounts yet (slice 1). */
-let ACCOUNTS, accountsDb = null, auth = null;
+let ACCOUNTS, accountsDb = null, auth = null, access = require('./access.js').openAccess();
 try {
   ACCOUNTS = require('./config.js').assertConfig();
   if (ACCOUNTS.accounts) accountsDb = require('./db.js').open(path.join(DATA_DIR, 'triibholz.db'));
   if (accountsDb) auth = require('./auth.js').createAuth({ db: accountsDb, cfg: ACCOUNTS });
+  access = accountsDb
+    ? require('./access.js').createAccess({ db: accountsDb, auth, cfg: ACCOUNTS, clipInDebrief })
+    : require('./access.js').openAccess();
 } catch (e) {
   if (require.main !== module) throw e;
   console.error('[triibholz-analysis] not starting — ' + e.message);
@@ -138,6 +147,9 @@ function cors(res) {
   // API answers carry personal data (announcements, debriefs, soon rosters): no browser, proxy or
   // service worker may keep a copy
   res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  // with accounts on the app is same-origin and nothing else may read these answers: no CORS at all
+  if (access.on) return;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'content-type,x-calibration,x-video-ref');
@@ -181,6 +193,23 @@ const debriefPath = id => path.join(DEBRIEF_DIR, safeToken(id) + '.json');
 const loadDebrief = id => { try { return JSON.parse(fs.readFileSync(debriefPath(id), 'utf8')); } catch (e) { return null; } };
 const saveDebrief = d => fs.writeFileSync(debriefPath(d.id), JSON.stringify(d));
 const clean = (v, n) => String(v == null ? '' : v).slice(0, n || 400);
+/* what the session knows about a person, for records that show a name or address one member */
+const displayNameOf = userId => { try { const u = accountsDb.prepare('SELECT display_name FROM users WHERE id = ?').get(userId); return u ? u.display_name : null; } catch (e) { return null; } };
+const memberRefOf = (clubId, userId) => { try { const m = accountsDb.prepare("SELECT member_ref FROM club_members WHERE club_id = ? AND user_id = ? AND status = 'approved'").get(clubId, userId); return m ? m.member_ref : null; } catch (e) { return null; } };
+const staffIn = (who, clubId) => ['admin', 'coach', 'trainer'].includes(who.clubs.get(clubId));
+/* a note is for the whole club, for one member, or — either way — for the staff of that club */
+const announcementFor = (a, who) => access.visibleRecord(a, who) && (a.scope === 'team' || a.to === memberRefOf(a.clubId, who.userId) || staffIn(who, a.clubId));
+const memberOfClub = (clubId, memberRef) => { try { return !!accountsDb.prepare("SELECT 1 FROM club_members WHERE club_id = ? AND member_ref = ? AND status = 'approved'").get(clubId, String(memberRef || '')); } catch (e) { return false; } };
+
+/* a clip a debrief of that club shows: the one case where a player may watch someone else's clip */
+function clipInDebrief(clipId, clubId) {
+  try {
+    return fs.readdirSync(DEBRIEF_DIR).filter(f => f.endsWith('.json')).some(f => {
+      const d = loadDebrief(f.replace(/\.json$/, ''));
+      return d && d.clubId === clubId && (d.items || []).some(it => it && it.clipUrl && it.clipUrl.includes(clipId));
+    });
+  } catch (e) { return false; }
+}
 const announcePath = id => path.join(ANNOUNCE_DIR, safeToken(id) + '.json');
 const loadAnnounce = id => { try { return JSON.parse(fs.readFileSync(announcePath(id), 'utf8')); } catch (e) { return null; } };
 const saveAnnounce = a => fs.writeFileSync(announcePath(a.id), JSON.stringify(a));
@@ -195,12 +224,15 @@ const server = http.createServer(async (req, res) => {
       if (!auth) { res.writeHead(404, { 'content-type': 'application/json', 'cache-control': 'no-store' }); return res.end(JSON.stringify({ error: 'accounts-off' })); }
       return auth.handle(req, res, p);
     }
-    if (req.method === 'OPTIONS') { cors(res); res.writeHead(204); return res.end(); }
+    if (req.method === 'OPTIONS') { if (access.on) return send(res, 405, { error: 'method-not-allowed' }); cors(res); res.writeHead(204); return res.end(); }
+    // one gate for every route below: a current client, an allowed Origin, the right content type
+    if (access.on && p !== '/api/health' && !/^\/api\/calendar\/[\w.\-]+\.ics$/.test(p)) access.gate(req, p);
 
     if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, accounts: !!accountsDb, engine: 'server', detector: makeDetector({ modelEndpoint: MODEL_ENDPOINT }).name, ffmpeg: hasFfmpeg, videoProvider: VIDEO_PROVIDER || null, queued: queue.length, running, maxUploadMB: Math.round(MAX_UPLOAD / 1048576) });
 
     // photoreal text-to-video: submit a prompt → a normalised video URL (or an async job)
     if (req.method === 'POST' && p === '/api/videogen') {
+      access.requireStaff(access.requireActor(req));
       const body = await readBody(req);
       let request; try { request = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
       if (!request.prompt) return send(res, 400, { error: 'no-prompt' });
@@ -214,14 +246,17 @@ const server = http.createServer(async (req, res) => {
     }
     // upload a video once → { videoRef }; then enqueue { videoRef, calibration, scout:true } on /api/jobs
     if (req.method === 'POST' && p === '/api/upload') {
-      const ref = uid() + '.mp4', fp = path.join(VIDEO_DIR, ref);
+      const who = access.requireActor(req), club = access.requireStaff(who);
+      const ref = (access.on ? access.newId('vid') : uid()) + '.mp4', fp = path.join(VIDEO_DIR, ref);
       const bytes = await streamToFile(req, fp, MAX_UPLOAD);
       if (!bytes) { try { fs.unlinkSync(fp); } catch (e) {} return send(res, 400, { error: 'empty-body' }); }
+      access.recordAsset({ id: ref, kind: 'video', clubId: club.clubId, ownerUserId: who.userId, meta: { bytes } });
       return send(res, 200, { videoRef: ref, bytes });
     }
 
     // anonymous learning — accepts ONLY identifier-free pattern features, stores counts, reports k-anonymously
     if (req.method === 'POST' && p === '/api/insights') {
+      access.requireStaff(access.requireActor(req));
       const body = await readBody(req);
       let data; try { data = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
       const f = data.features || data;
@@ -231,29 +266,38 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ok: true, n: agg.n });
     }
     if (req.method === 'GET' && p === '/api/insights') {
+      access.requireStaff(access.requireActor(req));
       const agg = loadInsights();
       return send(res, 200, { k: PRIVACY.K_MIN, n: agg.n, report: PRIVACY.report(agg) });
     }
 
     // subscribable calendar feed — publish events, then any device subscribes to the .ics
-    if (req.method === 'POST' && /^\/api\/calendar\/[\w.\-]+$/.test(p)) {
-      const token = safeToken(p.split('/').pop());
+    if (req.method === 'POST' && (p === '/api/calendar' || /^\/api\/calendar\/[\w.\-]+$/.test(p))) {
+      const who = access.requireActor(req);
       const body = await readBody(req);
       let data; try { data = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
       if (!Array.isArray(data.events)) return send(res, 400, { error: 'no-events' });
-      fs.writeFileSync(path.join(CAL_DIR, token + '.json'), JSON.stringify({ name: data.name || 'Triibholz', events: data.events, updated: Date.now() }));
-      return send(res, 200, { ok: true, ics: '/api/calendar/' + token + '.ics', events: data.events.length });
+      let token;
+      if (access.on) {
+        // the token IS the permission (a calendar app sends no cookie), so only the server makes one
+        if (p !== '/api/calendar') return send(res, 410, { error: 'client-made-feed-tokens-are-gone' });
+        token = access.issueFeed(who, safeToken(req.headers['x-club'] || '') || null, data.name).token;
+      } else token = safeToken(p.split('/').pop());
+      fs.writeFileSync(path.join(CAL_DIR, calFile(token)), JSON.stringify({ name: data.name || 'Triibholz', events: data.events, updated: Date.now() }));
+      return send(res, 200, { ok: true, token, ics: '/api/calendar/' + token + '.ics', events: data.events.length });
     }
     const cm = p.match(/^\/api\/calendar\/([\w.\-]+)\.ics$/);
     if (req.method === 'GET' && cm) {
-      const token = safeToken(cm[1]);
-      let data; try { data = JSON.parse(fs.readFileSync(path.join(CAL_DIR, token + '.json'), 'utf8')); } catch (e) { return send(res, 404, { error: 'no-such-calendar' }); }
+      const token = cm[1];
+      if (access.on && !access.feedFor(token)) return send(res, 404, { error: 'no-such-calendar' });
+      let data; try { data = JSON.parse(fs.readFileSync(path.join(CAL_DIR, calFile(token)), 'utf8')); } catch (e) { return send(res, 404, { error: 'no-such-calendar' }); }
       const ics = CALENDAR.toICS(data.events, { name: data.name });
       cors(res); res.writeHead(200, { 'content-type': 'text/calendar; charset=utf-8', 'content-disposition': 'inline; filename="' + token + '.ics"' }); return res.end(ics);
     }
 
     const vm = p.match(/^\/api\/videogen\/([\w.\-]+)$/);
     if (req.method === 'GET' && vm) {
+      access.requireStaff(access.requireActor(req));
       const cfg = videoJobs.get(vm[1]) || videoCfg({});
       if (!cfg.provider) return send(res, 404, { error: 'unknown-job' });
       try {
@@ -265,6 +309,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && p === '/api/analyse') {
+      const rawWho = access.requireActor(req), rawClub = access.requireStaff(rawWho);
       const ct = (req.headers['content-type'] || '');
       let request;
       if (ct.includes('application/json')) {
@@ -274,8 +319,9 @@ const server = http.createServer(async (req, res) => {
         if (!hasFfmpeg) return send(res, 501, { error: 'ffmpeg-unavailable' });
         const body = await readBody(req);
         if (!body.length) return send(res, 400, { error: 'empty-body' });
-        const ref = uid() + '.mp4';
+        const ref = (access.on ? access.newId('vid') : uid()) + '.mp4';
         fs.writeFileSync(path.join(VIDEO_DIR, ref), body);
+        access.recordAsset({ id: ref, kind: 'video', clubId: rawClub.clubId, ownerUserId: rawWho.userId, meta: { bytes: body.length } });
         let calibration = {}; try { calibration = JSON.parse(req.headers['x-calibration'] || '{}'); } catch (e) {}
         let opts = {}; try { opts = JSON.parse(req.headers['x-opts'] || '{}'); } catch (e) {}
         request = { videoRef: ref, calibration, opts };
@@ -285,17 +331,22 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && p === '/api/jobs') {
+      const who = access.requireActor(req), club = access.requireStaff(who);
       const body = await readBody(req);
       let request; try { request = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
-      const job = { id: uid(), status: 'queued', createdAt: Date.now(), request };
+      if (access.on && request.videoRef) access.ownedVideo(who, safeToken(request.videoRef));
+      const job = { id: access.on ? access.newId('job') : uid(), status: 'queued', createdAt: Date.now(), request };
+      access.recordAsset({ id: job.id, kind: 'job', clubId: club.clubId, ownerUserId: who.userId });
       saveJob(job); enqueue(job.id);
       return send(res, 202, { id: job.id, status: job.status });
     }
 
     // ---- clips: cut a possession out of an uploaded match → a small mp4 served back
     if (req.method === 'POST' && p === '/api/clip') {
+      const who = access.requireActor(req), club = access.requireStaff(who);
       const body = await readBody(req);
       let cr; try { cr = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
+      if (access.on) access.ownedVideo(who, safeToken(cr.videoRef));
       const vp = path.join(VIDEO_DIR, safeToken(cr.videoRef));
       if (!cr.videoRef || !fs.existsSync(vp)) return send(res, 404, { error: 'video-not-found' });   // an unknown video is 404 with or without ffmpeg
       if (!hasFfmpeg) return send(res, 503, { error: 'ffmpeg-unavailable' });
@@ -309,10 +360,12 @@ const server = http.createServer(async (req, res) => {
         // cut-off file doesn't have: never cache or serve that as a clip (the coach would get a player that never plays)
         if (!(await engine.probeDuration(out, process.env.FFMPEG) > 0)) { try { fs.unlinkSync(out); } catch (_) {} return send(res, 422, { error: 'clip-empty' }); }
       }
+      access.recordAsset({ id: id + '.mp4', kind: 'clip', clubId: club.clubId, ownerUserId: who.userId, meta: { videoRef: safeToken(cr.videoRef), start, end } });
       return send(res, 200, { id, clipUrl: '/api/clips/' + id + '.mp4', start, end, bytes: fs.statSync(out).size });
     }
     const clipM = p.match(/^\/api\/clips\/([\w\-]+\.mp4)$/);
     if (req.method === 'GET' && clipM) {
+      if (access.on) access.requireAssetRead(access.requireActor(req), safeToken(clipM[1]), ['clip']);
       const fp = path.join(CLIP_DIR, safeToken(clipM[1])); if (!fs.existsSync(fp)) return send(res, 404, { error: 'not-found' });
       const size = fs.statSync(fp).size; const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
       cors(res); res.setHeader('Accept-Ranges', 'bytes'); res.setHeader('Content-Type', 'video/mp4');
@@ -322,33 +375,40 @@ const server = http.createServer(async (req, res) => {
 
     // ---- debriefs: a shared match review (plan vs reality + clips + board plays) with comments
     if (req.method === 'POST' && p === '/api/debriefs') {
+      const who = access.requireActor(req), club = access.requireStaff(who, safeToken(req.headers['x-club'] || '') || null);
       const body = await readBody(req);
       let d; try { d = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
       if (!d.title || !Array.isArray(d.items)) return send(res, 400, { error: 'title-and-items-required' });
-      const deb = { id: uid(), team: safeToken(d.team || 'club'), title: clean(d.title, 120), matchTitle: clean(d.matchTitle, 120), author: clean(d.author, 80), us: d.us === 'dark' ? 'dark' : 'white', createdAt: Date.now(),
+      const deb = { id: access.on ? access.newId('deb') : uid(), clubId: club.clubId, authorUserId: who.userId, team: safeToken(d.team || 'club'), title: clean(d.title, 120), matchTitle: clean(d.matchTitle, 120), author: clean(d.author, 80), us: d.us === 'dark' ? 'dark' : 'white', createdAt: Date.now(),
         summary: (Array.isArray(d.summary) ? d.summary : []).slice(0, 12).map(x => clean(x, 300)),
         plan: (Array.isArray(d.plan) ? d.plan : []).slice(0, 12).map(x => ({ id: clean(x.id, 40), label: clean(x.label, 80), side: x.side === 'defense' ? 'defense' : 'offense', attacks: +x.attacks || 0, unread: +x.unread || 0, followed: +x.followed || 0, followedPct: x.followedPct == null ? null : +x.followedPct, whenFollowed: x.whenFollowed || { n: 0, shots: 0, goals: 0 }, whenNot: x.whenNot || { n: 0, shots: 0, goals: 0 }, verdict: clean(x.verdict, 200) })),
         items: d.items.slice(0, 24).map(it => ({ id: uid(), t0: +it.t0 || 0, t1: +it.t1 || 0, title: clean(it.title, 120), note: clean(it.note, 400), result: clean(it.result, 40), asked: clean(it.asked, 120), followed: it.followed == null ? null : !!it.followed, clipUrl: /^\/api\/clips\/[\w\-]+\.mp4$/.test(it.clipUrl || '') ? it.clipUrl : null, frames: Array.isArray(it.frames) ? it.frames.slice(0, 8) : [], notes: it.notes && typeof it.notes === 'object' ? it.notes : {} })),
         comments: [] };
+      if (access.on) deb.author = displayNameOf(who.userId) || deb.author;   // never the name the request claimed
       saveDebrief(deb);
       return send(res, 201, { id: deb.id, createdAt: deb.createdAt });
     }
     if (req.method === 'GET' && p === '/api/debriefs') {
+      const who = access.on ? access.requireActor(req) : null;
       const team = safeToken(url.searchParams.get('team') || 'club');
-      const list = fs.readdirSync(DEBRIEF_DIR).filter(f => f.endsWith('.json')).map(f => loadDebrief(f.replace(/\.json$/, ''))).filter(d => d && d.team === team)
+      const list = fs.readdirSync(DEBRIEF_DIR).filter(f => f.endsWith('.json')).map(f => loadDebrief(f.replace(/\.json$/, '')))
+        .filter(d => access.on ? access.visibleRecord(d, who) : (d && d.team === team))
         .sort((a, b) => b.createdAt - a.createdAt).slice(0, 50)
         .map(d => ({ id: d.id, title: d.title, matchTitle: d.matchTitle, author: d.author, createdAt: d.createdAt, items: d.items.length, comments: d.comments.length }));
       return send(res, 200, { debriefs: list });
     }
-    const dm = p.match(/^\/api\/debriefs\/([\w]+)(\/comments)?$/);
+    const dm = p.match(/^\/api\/debriefs\/([\w-]+)(\/comments)?$/);
     if (dm) {
       const deb = loadDebrief(dm[1]); if (!deb) return send(res, 404, { error: 'not-found' });
+      const dwho = access.on ? access.requireActor(req) : null;
+      if (access.on && !access.visibleRecord(deb, dwho)) return send(res, 404, { error: 'not-found' });
       if (req.method === 'GET' && !dm[2]) return send(res, 200, deb);
       if (req.method === 'POST' && dm[2]) {
         const body = await readBody(req);
         let c; try { c = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
         if (!clean(c.text, 1000).trim()) return send(res, 400, { error: 'empty-comment' });
-        const cm2 = { id: uid(), author: clean(c.author, 80) || 'Anonymous', text: clean(c.text, 1000).trim(), itemId: c.itemId ? safeToken(c.itemId) : null, at: Date.now() };
+        const cm2 = { id: access.on ? access.newId('cmt') : uid(), author: access.on ? (displayNameOf(dwho.userId) || 'Member') : (clean(c.author, 80) || 'Anonymous'),
+          authorUserId: access.on ? dwho.userId : null, text: clean(c.text, 1000).trim(), itemId: c.itemId ? safeToken(c.itemId) : null, at: Date.now() };
         deb.comments.push(cm2); if (deb.comments.length > 500) deb.comments = deb.comments.slice(-500); saveDebrief(deb);
         return send(res, 201, cm2);
       }
@@ -356,38 +416,49 @@ const server = http.createServer(async (req, res) => {
 
     // ---- announcements: a coach's note to one player, or a broadcast to the whole team
     if (req.method === 'POST' && p === '/api/announcements') {
+      const who = access.requireActor(req), club = access.requireStaff(who, safeToken(req.headers['x-club'] || '') || null);
       const body = await readBody(req);
       let raw; try { raw = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
       const r = ANNOUNCE.sanitize(raw);
       if (!r.ok) return send(res, 400, { error: r.error });
-      const a = Object.assign({ id: uid(), createdAt: Date.now(), readBy: [] }, r.value);
+      const a = Object.assign({ id: access.on ? access.newId('ann') : uid(), createdAt: Date.now(), readBy: [] }, r.value);
+      if (access.on) {
+        // the club, the author and who it is for come from the session and this club's own members
+        if (a.scope === 'player' && !memberOfClub(club.clubId, a.to)) return send(res, 404, { error: 'not-found' });
+        Object.assign(a, { clubId: club.clubId, authorUserId: who.userId, from: { name: displayNameOf(who.userId) || '', email: '' } });
+      }
       saveAnnounce(a);
       return send(res, 201, { id: a.id, createdAt: a.createdAt });
     }
     if (req.method === 'GET' && p === '/api/announcements') {
+      const who = access.on ? access.requireActor(req) : null;
       const team = safeToken(url.searchParams.get('team') || 'club');
-      const forEmail = String(url.searchParams.get('for') || '').trim().toLowerCase();
-      const list = listAnnounces().filter(a => ANNOUNCE.visibleTo(a, { team, email: forEmail }))
+      const forEmail = access.on ? '' : String(url.searchParams.get('for') || '').trim().toLowerCase();
+      const list = listAnnounces()
+        .filter(a => access.on ? announcementFor(a, who) : ANNOUNCE.visibleTo(a, { team, email: forEmail }))
         .sort((a, b) => b.createdAt - a.createdAt).slice(0, 100)
-        .map(a => ANNOUNCE.summarize(a, { for: forEmail }));
+        .map(a => ANNOUNCE.summarize(a, { for: access.on ? who.userId : forEmail }));
       return send(res, 200, { announcements: list, unread: list.filter(s => !s.read).length });
     }
-    const anm = p.match(/^\/api\/announcements\/([\w]+)(\/read)?$/);
+    const anm = p.match(/^\/api\/announcements\/([\w-]+)(\/read)?$/);
     if (anm) {
       const a = loadAnnounce(anm[1]); if (!a) return send(res, 404, { error: 'not-found' });
+      const awho = access.on ? access.requireActor(req) : null;
+      if (access.on && !announcementFor(a, awho)) return send(res, 404, { error: 'not-found' });
       if (req.method === 'GET' && !anm[2]) return send(res, 200, a);
       if (req.method === 'POST' && anm[2]) {
         const body = await readBody(req);
         let rb; try { rb = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
-        const by = String(rb.by || '').trim().toLowerCase();
+        const by = access.on ? awho.userId : String(rb.by || '').trim().toLowerCase();   // who read it comes from the session
         if (!by) return send(res, 400, { error: 'by-required' });
         if (!a.readBy.includes(by)) { a.readBy.push(by); saveAnnounce(a); }
         return send(res, 200, { ok: true });
       }
     }
 
-    const jm = p.match(/^\/api\/jobs\/([\w]+)(\/result)?$/);
+    const jm = p.match(/^\/api\/jobs\/([\w-]+)(\/result)?$/);
     if (req.method === 'GET' && jm) {
+      if (access.on) access.requireAssetRead(access.requireActor(req), jm[1], ['job']);
       const job = loadJob(jm[1]); if (!job) return send(res, 404, { error: 'not-found' });
       if (jm[2]) {
         if (job.status !== 'done') return send(res, 409, { error: 'not-ready', status: job.status });
@@ -398,6 +469,7 @@ const server = http.createServer(async (req, res) => {
 
     return send(res, 404, { error: 'no-route' });
   } catch (e) {
+    if (e.status) return send(res, e.status, Object.assign({ error: e.error }, e.extra || {}));
     if (e.code === 'too-large') res.setHeader('Connection', 'close');
     return send(res, e.code === 'too-large' ? 413 : 500, e.code === 'too-large' ? { error: 'too-large', maxUploadMB: Math.round(MAX_UPLOAD / 1048576) } : { error: e.code || 'server-error' });
   }
