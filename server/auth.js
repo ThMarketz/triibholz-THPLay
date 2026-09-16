@@ -128,15 +128,18 @@ function createAuth({ db, cfg, now = Date.now }) {
   }
 
   /* fixed-window counter: counts this request and says whether it is over the limit */
-  function overLimit(key, { max, windowMs }, t) {
+  /* `cost` is how much this one request spends: 1 for an attempt, more when a single request does
+     the work of many (a roster upload adds a whole team's licences at once — server/teams.js). */
+  function overLimit(key, { max, windowMs }, t, cost = 1) {
+    const n = Math.max(1, Math.min(10000, Math.floor(cost) || 1));
     return tx(db, () => {
       const row = db.prepare('SELECT window_start, count FROM rate_limits WHERE key = ?').get(key);
       if (row && t - row.window_start < windowMs) {
         if (row.count >= max) return true;
-        db.prepare('UPDATE rate_limits SET count = count + 1 WHERE key = ?').run(key);
+        db.prepare('UPDATE rate_limits SET count = count + ? WHERE key = ?').run(n, key);
         return false;
       }
-      db.prepare('INSERT INTO rate_limits (key, window_start, count) VALUES (?, ?, 1) ON CONFLICT(key) DO UPDATE SET window_start = excluded.window_start, count = 1').run(key, t);
+      db.prepare('INSERT INTO rate_limits (key, window_start, count) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET window_start = excluded.window_start, count = excluded.count').run(key, t, n);
       return false;
     });
   }

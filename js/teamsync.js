@@ -43,7 +43,8 @@ const TEAMSYNC = (() => {
   /* never stored, never echoed: a field whose presence means the client and this file disagree */
   const REFUSED = ['availability', 'sheets', 'sheet', 'status', 'date', 'dob', 'birthDate', 'birthdate', 'meta', 'notes', 'wpId', 'checkedAt', 'email', 'phone', 'address'];
 
-  const TEAM_KEYS = ['localId', 'name', 'category', 'season', 'leagueLabel', 'rev', 'players'];
+  const TEAM_KEYS = ['localId', 'teamId', 'name', 'category', 'season', 'leagueLabel', 'rev', 'players'];
+  const TEAM_ID = /^ct_[A-Za-z0-9_-]{22}$/;
   const PLAYER_KEYS = ['localId', 'licence', 'name', 'firstName', 'nameEdited', 'nameGuessed', 'birthYear', 'gender', 'cap', 'gk', 'rev'];
 
   /* no control or bidi-override characters: these names are printed on an official form and shown
@@ -82,7 +83,7 @@ const TEAMSYNC = (() => {
     return {
       ok: true,
       value: {
-        localId: licence ? null : String(input.localId),
+        localId: LOCAL_ID.test(String(input.localId || '')) ? String(input.localId) : null,
         licence: licence || null,
         name, firstName: clean(input.firstName, MAX_NAME),
         nameEdited: !!input.nameEdited, nameGuessed: !!input.nameGuessed,
@@ -98,6 +99,9 @@ const TEAMSYNC = (() => {
     const extra = extraKey(input, TEAM_KEYS);
     if (extra) return bad('bad-field');
     if (!LOCAL_ID.test(String(input.localId || ''))) return bad('bad-team');
+    // a device that took this roster down from the club already knows which team it is: it says so,
+    // rather than minting a second team at the club under its own local id
+    if (input.teamId !== undefined && input.teamId !== null && !TEAM_ID.test(String(input.teamId))) return bad('bad-team');
     const name = clean(input.name, MAX_TEAM_NAME);
     if (!name) return bad('bad-team');
     if (!CATEGORIES.includes(input.category)) return bad('bad-category');
@@ -112,12 +116,13 @@ const TEAMSYNC = (() => {
       players.push(r.value);
     }
     // the same child twice on one list is the device's bug, not the server's to guess at
-    const keys = players.map(p => p.licence ? 'L' + p.licence : 'm' + p.localId);
+    const keys = players.map(p => p.licence ? 'L' + p.licence : 'm' + p.localId);   // a licence is the identity when there is one
     if (new Set(keys).size !== keys.length) return bad('duplicate-player');
     return {
       ok: true,
       value: {
-        localId: String(input.localId), name, category: input.category, season,
+        localId: String(input.localId), teamId: input.teamId ? String(input.teamId) : null,
+        name, category: input.category, season,
         leagueLabel: clean(input.leagueLabel, MAX_LABEL),
         rev: Number.isInteger(input.rev) && input.rev > 0 ? input.rev : null,
         players,
@@ -135,7 +140,7 @@ const TEAMSYNC = (() => {
     return sent.players.every(p => answered.has(p.licence ? 'L' + p.licence : 'm' + p.localId));
   }
 
-  return { CATEGORIES, LIMITS, LICENCE, MAX_NAME, MAX_TEAM_NAME, REFUSED, PLAYER_KEYS, TEAM_KEYS,
+  return { CATEGORIES, LIMITS, LICENCE, TEAM_ID, MAX_NAME, MAX_TEAM_NAME, REFUSED, PLAYER_KEYS, TEAM_KEYS,
            clean, normLicence, isLicence, sanitizePlayer, sanitizeTeam, manifestOk };
 })();
 

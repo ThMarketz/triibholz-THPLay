@@ -2168,7 +2168,11 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
 
     const licensed = { pid: 'L50101', licence: '50101', name: 'Huber', firstName: 'Mia', birthYear: '2013', gender: 'F', status: 'Ausländer-Étranger', cap: '4', gk: false, edited: true, wpId: 3400 };
     const sent = TM.forUpload(licensed);
-    ok('a licensed player travels as a licence, a name and a cap — nothing else', JSON.stringify(Object.keys(sent).sort()) === JSON.stringify(['cap', 'firstName', 'gk', 'licence', 'name', 'nameEdited', 'nameGuessed'].sort()));
+    ok('a licensed player travels as a licence, a name and a cap — nothing else', JSON.stringify(Object.keys(sent).sort()) === JSON.stringify(['cap', 'firstName', 'gk', 'licence', 'localId', 'name', 'nameEdited', 'nameGuessed', 'localId'].filter((v, i, a) => a.indexOf(v) === i).sort()));
+    // the device's own id for her goes too, so that when her licence finally arrives the club
+    // recognises the same child instead of keeping a second row for ever. For a licensed player
+    // that id IS 'L' + her licence, so it says nothing the licence did not already say.
+    ok('…and the device id it carries tells the club nothing new', sent.localId === 'L' + sent.licence);
     ok('…so their birth year never leaves the device', sent.birthYear === undefined && !('birthYear' in sent));
     ok('…and neither does what wpmatch says about their nationality', !JSON.stringify(sent).includes('Ausl') && sent.status === undefined);
     const pending = TM.forUpload({ pid: 'm7a', licence: '', name: 'Neue', firstName: 'Spielerin', birthYear: '2013', gender: 'F' });
@@ -2180,10 +2184,15 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('a whole team is built into something the contract accepts', TS.sanitizeTeam(payload).ok === true && payload.players.length === 1);
     ok('…carrying no availability and no sheets', payload.availability === undefined && payload.sheets === undefined);
     ok('…and a season, so last season’s team is not this season’s', Number.isInteger(payload.season) && payload.season >= 2024);
+    // a squad belongs to the season it plays: syncing an old team must not drag it into this one
+    const old2 = TM.payloadFor(store, Object.assign({}, store.teams[0], { season: 2021 }));
+    ok('a team keeps the season it was made for, however long after it is synced', old2.season === 2021);
 
     // what the device does when the club's answer is not a confirmation, and what it never sends
-    const realApi = window.__T.SESSION.api;
+    const realApi = window.__T.SESSION.api, realOn = window.__T.SESSION.on;
     let asked = 0, lastBody = null;
+    ok('with no club server, a roster is not sent anywhere at all', (await TM.syncTeam('c_stub', { id: 'tX', name: 'U14', category: 'U14', players: [] })).error === 'no-club');
+    window.__T.SESSION.on = () => true;
     window.localStorage.setItem(TM.KEY, JSON.stringify({ version: 1, templates: [], sheets: [],
       teams: [{ id: 'tX', name: 'U14 blue', category: 'U14', leagueLabel: '', players: ['L50101'] },
               { id: 'tBad', name: 'Nonsense', category: 'U13', leagueLabel: '', players: [] }],
@@ -2193,10 +2202,23 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('an answer that quietly dropped a player is not a confirmation', dropped.ok === false && dropped.error === 'manifest-mismatch');
     ok('…and the device does not mark that team as sent', (TM.syncStateOf('c_stub', 'tX') || {}).state !== 'confirmed');
     ok('…while what it did send carried the licence and no birth year', !!lastBody && lastBody.players[0].licence === '50101' && lastBody.players[0].birthYear === undefined);
+    /* A team that reached the club once and then fails to sync must not lose the id the club knows
+       it by: without it the coach's own team comes back as a stranger's, and ✕ can no longer reach
+       the club's copy of a child. */
+    window.__T.SESSION.api = async () => ({ at: 9, team: { localId: 'tX', id: 'ct_AAAAAAAAAAAAAAAAAAAAAA' }, players: [{ licence: '50101', id: 'cp_known', rev: 1 }] });
+    await TM.syncTeam('c_stub', TM.load().teams[0]);
+    ok('a team that reached the club is remembered by the id the club gave it', (TM.syncStateOf('c_stub', 'tX') || {}).serverId === 'ct_AAAAAAAAAAAAAAAAAAAAAA');
+    window.__T.SESSION.api = async () => { throw Object.assign(new Error('offline'), { status: 0, error: 'offline' }); };
+    const lost = await TM.syncTeam('c_stub', TM.load().teams[0]);
+    ok('a later attempt that fails says so', lost.ok === false && lost.error === 'offline');
+    ok('…and does not forget where that team lives', (TM.syncStateOf('c_stub', 'tX') || {}).serverId === 'ct_AAAAAAAAAAAAAAAAAAAAAA');
+    ok('…nor which id the club knows each player by', ((TM.syncStateOf('c_stub', 'tX') || {}).players || {}).L50101 === 'cp_known');
+
+    window.__T.SESSION.api = async (path, opts) => { asked++; lastBody = opts && opts.body; return { at: 1, team: { localId: 'tX', id: 'ct_stub' }, players: [] }; };
     const before = asked;
     const refused = await TM.syncTeam('c_stub', TM.load().teams[1]);
     ok('a team the shared contract refuses never leaves the device at all', refused.ok === false && refused.error === 'bad-category' && asked === before);
-    window.__T.SESSION.api = realApi;
+    window.__T.SESSION.api = realApi; window.__T.SESSION.on = realOn;
     ok('the upload is not offered in a session opened by following somebody’s link', TM.maySync({ origin: 'join' }) === false && TM.maySync({ origin: 'recover' }) === false && TM.maySync({ origin: 'login' }) === true);
 
     window.localStorage.setItem(TM.MIRROR_KEY, JSON.stringify({ clubs: { c_x: { syncedAt: 1, teams: [] } } }));

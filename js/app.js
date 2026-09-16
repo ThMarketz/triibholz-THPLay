@@ -72,6 +72,18 @@
   function loadSession() { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch(e){ return null; } }
   function saveSession(u) { try { localStorage.setItem(SESSION_KEY, JSON.stringify({ email: u.email })); } catch(e){} }
   function clearSession() { try { localStorage.removeItem(SESSION_KEY); } catch(e){} }
+  /* Signing out, wherever it is asked for. There are three buttons (the top bar, and the two on the
+     "waiting to be approved" and "not approved" screens), and they must all do the same three
+     things: end the session at the club, take the club's children off this device, and forget who
+     was here. A second button that quietly did less than the first is how a roster survives a
+     sign-out on a shared laptop. The wipe never waits on the network — a wipe that depends on a
+     server being reachable is not a wipe. */
+  function signOutEverything() {
+    if (realAccounts && typeof SESSION !== 'undefined') SESSION.signOut().catch(()=>{});
+    if (typeof TEAMS !== 'undefined') TEAMS.wipeDevice();
+    clearSession();
+    state.user = null;
+  }
 
   /* ---------------- real accounts (js/session.js) ----------------
      Switched on by the server, not by the app: /api/health says whether this deployment has
@@ -3584,8 +3596,8 @@
     $('setup-continue').onclick = submitSetup;
 
     $('pending-recheck').onclick = ()=>{ const u=DATA.findUserByEmail(state.user.email); if(u&&u.status!=='pending'){ routeUser(u); toast(T(u.status==='approved'?'ui.approvedWelcome':'ui.accessDeclined')); } else toast(T('ui.stillPendingApproval')); };
-    $('pending-signout').onclick = ()=>{ clearSession(); state.user=null; show('auth-screen'); };
-    $('denied-signout').onclick = ()=>{ clearSession(); state.user=null; show('auth-screen'); };
+    $('pending-signout').onclick = ()=>{ signOutEverything(); show('auth-screen'); };
+    $('denied-signout').onclick = ()=>{ signOutEverything(); show('auth-screen'); };
 
     document.querySelectorAll('#main-nav .nav-btn').forEach(b=> b.onclick=()=>switchView(b.dataset.view));
 
@@ -3730,7 +3742,7 @@
     $('ed-phase').onchange = (e)=>{ edit.scenario.phase=e.target.value; };
     if ($('ed-visibility')) $('ed-visibility').onchange = (e)=>{ edit.scenario.visibility=e.target.value; };
 
-    $('logout-btn').onclick = (e)=>{ e.stopPropagation(); if (realAccounts && typeof SESSION!=='undefined') SESSION.signOut().catch(()=>{}); if (typeof TEAMS!=='undefined') TEAMS.wipeDevice(); clearSession(); state.user=null; if (typeof SHARE!=='undefined' && $('auth-share-note')) $('auth-share-note').hidden = !SHARE.fromHash(location.hash); show('auth-screen'); };
+    $('logout-btn').onclick = (e)=>{ e.stopPropagation(); signOutEverything(); if (typeof SHARE!=='undefined' && $('auth-share-note')) $('auth-share-note').hidden = !SHARE.fromHash(location.hash); show('auth-screen'); };
     $('editor-modal').onclick = (e)=>{ if(e.target===$('editor-modal')) closeEditor(); };
   }
 

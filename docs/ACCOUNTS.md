@@ -553,6 +553,42 @@ Still to do: shared-device mode does not exist in the app yet; the offline copy 
 it when it does. And the offline copy is currently the team *list* — opening a full roster with no
 signal comes with slice 6, when a device is a thing the server knows about.
 
+### What an adversarial review found, and what it changed
+
+Slice 5 was reviewed after it was written — five dimensions, then every finding reproduced against
+a running server or refuted. 36 held up, seven of them blockers. That is written here rather than
+quietly fixed because the shape of the mistakes is worth keeping:
+
+| Found | What it meant |
+|---|---|
+| **The Sync button could never work** | The upload asks for the passkey again, and the Teams screen had no way to give it. The test passed only because it had stepped up minutes earlier in the same run. The app now answers the request and retries once; one prompt covers a whole sync. |
+| **A removal never stuck** | The next routine upload cleared `removed_at` *and* `left_at` — putting a child the club had removed back on the list and restarting the retention clock, with nothing in the audit. An upload is not a decision: it now leaves a removal alone and tells the device which players the club has taken off. Adding one back by hand still works, because that *is* a decision. |
+| **There was no way to take a roster back** | ✕ on a child and deleting a team happened only on the device; the club's copy kept them for ever, and `left_at` was never stamped, so even a future retention sweep would not have seen them. Both now reach the club. |
+| **A roster could not follow a coach to a second device** | The commit message claimed it did. Only the team *list* came back, not the rosters — so the claim was false. A team can now be copied down from the club, and a device that has one names it on the next sync instead of minting a parallel team. |
+| **1 September rewrote last season's squad** | The device stamped today's season on every upload and the team key ignored the season, so on the first day of a new season an old team was rewritten into it, carrying last season's children. A team now keeps the season it was made for, and the key carries it. |
+| **A revoked coach could still delete their team** | Deleting checked "staff of the club, and you made it" rather than "staff of *this team*", so revoking a coach's access did not revoke deletion. |
+| **A club could never be deleted at all** | The last-admin trigger fired on the cascade, so `DELETE FROM clubs` was always refused — and a club holds children's data. Migration 7 replaces the trigger with one that protects the last admin of a club that is *staying*. |
+
+Smaller ones fixed in the same pass: adding a player by hand needed no fresh passkey and its answer
+revealed whether a licence was already in the club; the rate limit was charged before the membership
+check, so an invented club id wrote a row and a refused sync got its budget back; a bulk upload
+never counted the licences it added; a failed attempt deleted the device's record of where a team
+lives; a player whose licence arrived later became a second row keeping her birth year for ever; a
+sync still in the air could write roster data back *after* a sign-out wipe; and two other sign-out
+buttons ended neither the session nor the device's copy.
+
+### Still true, and not fixed
+
+- **Two staff of one team overwrite each other's name corrections.** The app does not send the `rev`
+  it last saw, so the last upload wins. Conflicts are surfaced and the roster belongs to the club,
+  so either correction is legitimate — but it is last-writer-wins, not a merge.
+- **A date of birth typed into a name field is stored.** The column refuses one in `birth_year` and
+  the payload refuses the field by name, but nothing can tell a date from a name inside a name.
+- **`added_by` / `removed_by` on the three join tables have no foreign key**, so a deleted account's
+  id stays in the club's tables. Slice 8 work, with a migration of its own.
+- **The offline copy is the team list and the rosters a coach has taken down**, not everything the
+  club holds. A team nobody has copied to this device cannot be opened without a connection.
+
 ### Questions for the club before this is switched on
 
 These are the club's to answer, not the code's:
@@ -663,8 +699,11 @@ None blocks local development. All are needed before real people sign in.
   field nobody agreed to), a roster read that asks for the passkey again, who may see a team, the
   two-teams-same-category check and what it will not name, soft removal, team staff and members,
   the narrowed addressee list, what a demotion and a removal take away, deleting a team by
-  retyping its name, a session from a link that may not upload, and the caps. 16 protections
-  fault-injected; each fails a check.
+  retyping its name, a session from a link that may not upload, and the caps. Then the fixes the
+  adversarial review forced: a removal that survives the next sync, a season that does not move, a
+  licence that arrives late for a player already on the list, a roster that follows a coach to a
+  second device, and an add-player route that answers the same way whether or not the club already
+  had that licence. 31 protections fault-injected; each fails a check.
 - `scripts/test-nginx-realip.sh` — the real nginx image: `CF-Connecting-IP` believed only from
   `TRUSTED_PROXY`, ignored without it or from any other address; bad values refuse to start.
 

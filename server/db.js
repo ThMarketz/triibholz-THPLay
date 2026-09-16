@@ -379,6 +379,29 @@ const MIGRATIONS = [
       db.prepare("UPDATE sessions SET origin = 'legacy' WHERE origin IS NULL").run();
     },
   },
+  {
+    id: 7, name: 'a-club-can-be-deleted',
+    sql: `
+      -- The last-admin rule says a club must always keep one approved admin, and it is enforced by
+      -- a trigger on club_members. That trigger also fired when the CLUB itself was being deleted:
+      -- deleting a club cascades into its members, the first admin row raised 'last-admin', and the
+      -- whole delete was refused. So a club could never be removed at all — and from slice 6 a club
+      -- holds children's names and licence numbers, which makes "there is no way to delete it" a
+      -- retention problem rather than a curiosity.
+      --
+      -- SQLite has no way to ask "am I inside a cascade", but it does not need one: on a cascade
+      -- the parent row is gone by the time the child rows are deleted, so requiring the club to
+      -- still exist says exactly what is meant — protect the last admin of a club that is staying.
+      -- Migrations are append-only, so the trigger is replaced here rather than edited in place.
+      DROP TRIGGER club_keeps_an_admin_on_delete;
+      CREATE TRIGGER club_keeps_an_admin_on_delete
+      BEFORE DELETE ON club_members
+      WHEN OLD.role = 'admin' AND OLD.status = 'approved'
+       AND EXISTS (SELECT 1 FROM clubs WHERE id = OLD.club_id)
+       AND (SELECT count(*) FROM club_members WHERE club_id = OLD.club_id AND role = 'admin' AND status = 'approved') = 1
+      BEGIN SELECT RAISE(ABORT, 'last-admin'); END;
+    `,
+  },
 ];
 
 function tx(db, fn) {

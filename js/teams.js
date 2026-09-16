@@ -168,19 +168,29 @@ const TEAMS = (() => {
      that is already public, and the club's server has no use for a nationality note about a child. */
   function forUpload(p) {
     const o = { name: p.name || '', firstName: p.firstName || '', nameEdited: !!p.edited, nameGuessed: !!p.nameGuessed, cap: p.cap || '', gk: !!p.gk };
+    o.localId = p.pid;                       // how this device has always known them
     if (p.licence) o.licence = p.licence;
     else {
-      o.localId = p.pid;
       if (/^\d{4}$/.test(String(p.birthYear || ''))) o.birthYear = +p.birthYear;
       if (p.gender === 'M' || p.gender === 'F') o.gender = p.gender;
     }
     return o;
   }
-  const payloadFor = (d, t) => ({
-    localId: t.id, name: t.name || '', category: t.category, leagueLabel: t.leagueLabel || '',
-    season: (typeof ELIGIBILITY !== 'undefined' ? ELIGIBILITY.seasonOf(new Date().toISOString()).start : new Date().getFullYear()),
-    players: roster(d, t).map(forUpload),
-  });
+  const thisSeason = () => (typeof ELIGIBILITY !== 'undefined' ? ELIGIBILITY.seasonOf(new Date().toISOString()).start : new Date().getFullYear());
+  /* The season a team was made for, kept on the team — not "today". A squad belongs to the season
+     it plays; stamping the current one on every upload would move last season's team into this one
+     on 1 September, taking last season's children with it and inventing a conflict with the real
+     squad. Teams made before this existed are read as the season they are first synced in. */
+  const seasonOf = t => (Number.isInteger(t.season) ? t.season : thisSeason());
+  function payloadFor(d, t, clubId) {
+    const st = clubId ? syncStateOf(clubId, t.id) : null;
+    return {
+      localId: t.id, teamId: (st && st.serverId) || null,
+      name: t.name || '', category: t.category, leagueLabel: t.leagueLabel || '',
+      season: seasonOf(t),
+      players: roster(d, t).map(forUpload),
+    };
+  }
 
   /* Send one team. The device writes "sending" before it asks and "confirmed" only after the
      answer accounts for everything it sent (TEAMSYNC.manifestOk) — so a proxy that truncated the
@@ -188,18 +198,42 @@ const TEAMS = (() => {
      copy exactly as it was, and the coach is told it did not go. */
   async function syncTeam(clubId, t) {
     const d = load();
-    const payload = payloadFor(d, t);
+    const payload = payloadFor(d, t, clubId);
     const checked = TEAMSYNC.sanitizeTeam(payload);
     if (!checked.ok) return { ok: false, error: checked.error, localId: t.id };
-    const log = loadSyncLog();
-    log[clubId + ':' + t.id] = { state: 'sending', at: Date.now() };
+    if (typeof SESSION === 'undefined' || !SESSION.on || !SESSION.on()) return { ok: false, error: 'no-club', localId: t.id };
+    const since = stamp();
+    const log = loadSyncLog(), was = log[clubId + ':' + t.id] || null;
+    log[clubId + ':' + t.id] = Object.assign({}, was, { state: 'sending', at: Date.now() });
     if (!writeJson(SYNC_KEY, log)) return { ok: false, error: 'no-room', localId: t.id };
+    /* An attempt that fails puts back what was known before it. Dropping the record instead would
+       lose the id the club knows this team by — and then the coach's own team comes back in the
+       mirror as a stranger's, and ✕ can no longer reach the club's copy of a child. */
+    const give = why => {
+      if (stale(since)) return why;                 // signed out meanwhile: leave nothing behind
+      const l = loadSyncLog();
+      if (was) l[clubId + ':' + t.id] = was; else delete l[clubId + ':' + t.id];
+      writeJson(SYNC_KEY, l);
+      return why;
+    };
+    /* Sending a club's children needs the passkey again — the server asks for it, so the app has to
+       be able to answer. One prompt covers the whole run: the first team opens the five-minute
+       window and the rest of the run rides it. Without this the button could never succeed for a
+       coach who signed in an hour ago, which is every coach. */
+    const post = () => SESSION.api(`/api/clubs/${clubId}/teams`, { method: 'POST', body: payload });
     let answer;
-    try { answer = await SESSION.api(`/api/clubs/${clubId}/teams`, { method: 'POST', body: payload }); }
-    catch (e) { return { ok: false, error: e.error || 'failed', status: e.status, localId: t.id }; }
-    if (!TEAMSYNC.manifestOk(checked.value, answer)) return { ok: false, error: 'manifest-mismatch', localId: t.id };
+    try { answer = await post(); }
+    catch (e) {
+      if (!(e.status === 403 && e.error === 'step-up-required')) return give({ ok: false, error: e.error || 'failed', status: e.status, localId: t.id });
+      try { await SESSION.stepUp(); answer = await post(); }
+      catch (e2) { return give({ ok: false, error: e2.error || 'failed', status: e2.status, localId: t.id }); }
+    }
+    if (!TEAMSYNC.manifestOk(checked.value, answer)) return give({ ok: false, error: 'manifest-mismatch', localId: t.id });
+    if (stale(since)) return { ok: false, error: 'signed-out', localId: t.id };
+    const byPid = {};
+    (answer.players || []).forEach(x => { const pid = x.licence ? 'L' + x.licence : x.localId; if (pid && x.id) byPid[pid] = x.id; });
     const log2 = loadSyncLog();
-    log2[clubId + ':' + t.id] = { state: 'confirmed', at: answer.at, serverId: answer.team.id, rev: answer.team.rev };
+    log2[clubId + ':' + t.id] = { state: 'confirmed', at: answer.at, serverId: answer.team.id, rev: answer.team.rev, players: byPid };
     writeJson(SYNC_KEY, log2);
     return { ok: true, localId: t.id, manifest: answer };
   }
@@ -207,16 +241,24 @@ const TEAMS = (() => {
   /* Every team this device holds, then the club's own list back — so the coach sees the teams a
      colleague uploaded as well, read-only, with the moment the server said it was. */
   async function syncAll(clubId, onStep) {
+    const since = stamp();
     const d = load();
-    const out = { sent: 0, failed: 0, conflicts: [], errors: [] };
+    const out = { sent: 0, failed: 0, conflicts: [], removedAtClub: [], errors: [] };
     for (const t of d.teams) {
       if (onStep) onStep(t.name);
       const r = await syncTeam(clubId, t);
-      if (r.ok) { out.sent++; (r.manifest.conflicts || []).forEach(c => out.conflicts.push(c)); }
+      if (r.ok) {
+        out.sent++;
+        const cs = Array.isArray(r.manifest.conflicts) ? r.manifest.conflicts : [];
+        cs.forEach(c => { if (c && Array.isArray(c.players)) out.conflicts.push(c); });
+        const gone = Array.isArray(r.manifest.removedAtClub) ? r.manifest.removedAtClub : [];
+        gone.forEach(x => out.removedAtClub.push(x && (x.licence || x.localId)));
+      }
       else { out.failed++; out.errors.push(r); }
     }
     try {
       const list = await SESSION.api(`/api/clubs/${clubId}/teams`);
+      if (stale(since)) return out;                 // the coach signed out while this was in the air
       const m = loadMirror();
       m.clubs[clubId] = { syncedAt: list.at, scope: list.scope, teams: list.teams };
       writeJson(MIRROR_KEY, m);
@@ -225,11 +267,106 @@ const TEAMS = (() => {
     return out;
   }
 
+  /* ---- taking a roster down.
+
+     The club holds it; this device may not. A coach on a new phone, or one an admin has just added
+     to a colleague's team, asks for it here. It arrives as an ordinary local team — editable, like
+     any other — and the device records which team at the club it came from, so the next sync
+     updates that list instead of minting a parallel one under a new local id. Reading a roster is
+     an export, so the server asks for the passkey again and this answers it. */
+  async function pullTeam(serverId) {
+    const club = syncClub();
+    if (!club) return { ok: false, error: 'no-club' };
+    const get = () => SESSION.api(`/api/clubs/${club.id}/teams/${serverId}`);
+    let answer;
+    try { answer = await get(); }
+    catch (e) {
+      if (!(e.status === 403 && e.error === 'step-up-required')) return { ok: false, error: e.error || 'failed', status: e.status };
+      try { await SESSION.stepUp(); answer = await get(); }
+      catch (e2) { return { ok: false, error: e2.error || 'failed', status: e2.status }; }
+    }
+    const d = load();
+    const already = d.teams.find(t => { const st = syncStateOf(club.id, t.id); return st && st.serverId === serverId; });
+    const t = already || { id: uid('t'), templateId: 'sa-2025', staff: {}, rules: {}, wpmatch: null };
+    Object.assign(t, { name: answer.team.name, category: answer.team.category, leagueLabel: answer.team.leagueLabel || '', season: answer.team.season });
+    const pids = [], byPid = {};
+    (answer.players || []).forEach(p => {
+      const pid = p.licence ? 'L' + p.licence : (p.id || uid('m'));
+      const prev = d.players[pid] || {};
+      d.players[pid] = Object.assign({}, prev, {
+        pid, licence: p.licence || '', name: p.name || '', firstName: p.firstName || '',
+        nameGuessed: !!p.nameGuessed, edited: !!p.nameEdited,
+        birthYear: p.birthYear || prev.birthYear || '', gender: p.gender || prev.gender || '',
+        // the club never holds these: whatever wpmatch told THIS device is all there is
+        status: prev.status || '', cap: p.cap || prev.cap || '', gk: !!p.gk,
+        source: prev.source || 'club',
+      });
+      pids.push(pid); byPid[pid] = p.id;
+    });
+    t.players = pids;
+    if (!already) d.teams.push(t);
+    if (!save(d)) return { ok: false, error: 'no-room' };
+    db = d;
+    const log = loadSyncLog();
+    log[club.id + ':' + t.id] = { state: 'confirmed', at: answer.at, serverId, rev: answer.team.rev, players: byPid };
+    writeJson(SYNC_KEY, log);
+    return { ok: true, localId: t.id, players: pids.length };
+  }
+
+  /* ---- taking it back again.
+
+     Uploading a roster without a way to take it back would be the worst thing in this file: the
+     club's copy would only ever grow, a child taken off a sheet would stay on the server for good,
+     and the retention clock would never start because nothing would ever stamp left_at. So the two
+     acts a coach already has — ✕ on a player, and deleting a team — reach the club too, whenever
+     that team has been synced. If the club cannot be reached the local change still happens and
+     the coach is told the club still has its copy; saying nothing would be a lie by omission. */
+  async function removeAtClub(t, serverPid) {
+    const club = syncClub();
+    const st = club && syncStateOf(club.id, t.id);
+    if (!club || !st || st.state !== 'confirmed' || !serverPid) return { ok: true, skipped: true };
+    const call = () => SESSION.api(`/api/clubs/${club.id}/teams/${st.serverId}/players/${serverPid}/remove`, { method: 'POST', body: {} });
+    try { await call(); return { ok: true }; }
+    catch (e) {
+      if (e.status === 403 && e.error === 'step-up-required') {
+        try { await SESSION.stepUp(); await call(); return { ok: true }; } catch (e2) { return { ok: false, error: e2.error, status: e2.status }; }
+      }
+      if (e.status === 404) return { ok: true, skipped: true };      // already gone at the club
+      return { ok: false, error: e.error, status: e.status };
+    }
+  }
+  async function deleteAtClub(t) {
+    const club = syncClub();
+    const st = club && syncStateOf(club.id, t.id);
+    if (!club || !st || st.state !== 'confirmed') return { ok: true, skipped: true };
+    const call = () => SESSION.api(`/api/clubs/${club.id}/teams/${st.serverId}/delete`, { method: 'POST', body: { name: t.name } });
+    try { await call(); }
+    catch (e) {
+      if (e.status === 403 && e.error === 'step-up-required') {
+        try { await SESSION.stepUp(); await call(); } catch (e2) { return { ok: false, error: e2.error, status: e2.status }; }
+      } else if (e.status !== 404) return { ok: false, error: e.error, status: e.status };
+    }
+    const log = loadSyncLog(); delete log[club.id + ':' + t.id]; writeJson(SYNC_KEY, log);
+    return { ok: true };
+  }
+  /* which id the club knows a local player by — the manifest is what maps the two */
+  const serverIdOf = (clubId, localTeamId, pid) => {
+    const st = syncStateOf(clubId, localTeamId);
+    return (st && st.players && st.players[pid]) || null;
+  };
+
   /* Sign-out leaves nothing behind. Everything a roster touches, plus the module's own state — a
      shared laptop at a club is the ordinary case, not the exotic one. The server is asked to end
      the session separately; this runs either way, because a wipe that depends on the network is
      not a wipe. */
+  let wipedAt = 0;
+  /* A sync that was already in the air when the coach signed out must not land afterwards. Every
+     write below checks the stamp it started under: a request that comes back late finds the world
+     changed and drops its answer instead of putting the club's children back on the device. */
+  const stamp = () => wipedAt;
+  const stale = since => since !== wipedAt;
   function wipeDevice() {
+    wipedAt++;
     [KEY, MIRROR_KEY, SYNC_KEY, CARD_KEY].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
     db = blank();
     ui.teamId = null; ui.sheetId = null; ui.tplId = null; ui.tab = 'teams'; ui.notice = ''; ui.progress = '';
@@ -286,6 +423,8 @@ const TEAMS = (() => {
     if (e.status === 403 && e.error === 'full-sign-in-required') return T('tm.whyNeedsSignIn');
     if (e.status === 403) return T('tm.whyNeedsPasskey');
     if (e.status === 409 && e.error === 'too-many-teams') return T('tm.whyTooManyTeams');
+    if (e.status === 409 && e.error === 'too-many-players') return T('tm.whyClubFull');
+    if (e.status === 400 && e.error === 'team-full') return T('tm.whyTeamFull');
     if (e.status === 409) return T('tm.whyChanged');
     if (e.status === 429) return T('tm.whyTooOften');
     if (e.error === 'manifest-mismatch') return T('tm.whyNotConfirmed');
@@ -330,7 +469,8 @@ const TEAMS = (() => {
     return `<details class="film-panel tm-mirror"><summary><h3>${T('tm.mirrorTitle', { n: others.length })}</h3></summary>
       <p class="fa-note">${T('tm.mirrorNote')}</p>
       <ul class="tm-mirror-list">${others.map(t => `<li><strong>${esc(t.name)}</strong> <span class="tag">${esc(catLabel(t.category))}</span>
-        <span class="muted">${T('tm.nPlayers', { n: t.players })}${t.mine ? '' : ' · ' + T('tm.mirrorTheirs')}</span></li>`).join('')}</ul></details>`;
+        <span class="muted">${T('tm.nPlayers', { n: t.players })}${t.mine ? '' : ' · ' + T('tm.mirrorTheirs')}</span>
+        ${t.mine ? `<button class="btn-ghost xs" data-pull="${esc(t.id)}">${T('tm.pull')}</button>` : ''}</li>`).join('')}</ul></details>`;
   }
 
   /* ---------- team list */
@@ -575,6 +715,14 @@ const TEAMS = (() => {
 
   function wire() {
     $$('[data-tab]').forEach(b => b.onclick = () => { ui.tab = b.dataset.tab; draw(); });
+    $$('[data-pull]').forEach(b => b.onclick = async () => {
+      if (ui.busy) return;
+      ui.busy = T('tm.pulling'); ui.notice = ''; draw();
+      const r = await pullTeam(b.dataset.pull);
+      ui.busy = '';
+      ui.notice = r.ok ? T('tm.pulled', { n: r.players }) : T('tm.pullFailed', { why: syncWhy(r) });
+      draw();
+    });
     on('#tm-sync', 'click', async () => {
       const club = syncClub();
       if (!club || ui.busy) return;
@@ -584,6 +732,7 @@ const TEAMS = (() => {
       const said = [];
       if (r.sent) said.push(T('tm.syncSent', { n: r.sent }));
       if (r.failed) said.push(T('tm.syncFailed', { n: r.failed, why: syncWhy(r.errors[0]) }));
+      if (r.removedAtClub.length) said.push(T('tm.syncRemoved', { n: r.removedAtClub.length }));
       r.conflicts.forEach(c => said.push(c.team
         ? T('tm.syncConflictNamed', { players: c.players.join(', '), team: c.team })
         : T('tm.syncConflict', { players: c.players.join(', ') })));
@@ -591,7 +740,7 @@ const TEAMS = (() => {
       draw();
     });
     on('#tm-new-team', 'click', () => {
-      const t = { id: uid('t'), name: T('tm.newTeamName'), category: 'U14', club: '', leagueLabel: '', templateId: 'sa-2025', staff: {}, rules: {}, players: [], wpmatch: null };
+      const t = { id: uid('t'), name: T('tm.newTeamName'), category: 'U14', club: '', leagueLabel: '', templateId: 'sa-2025', staff: {}, rules: {}, players: [], wpmatch: null, season: thisSeason() };
       db.teams.push(t); persist(); ui.teamId = t.id; ui.notice = ''; draw();
     });
     $$('[data-team]').forEach(b => b.onclick = () => { ui.teamId = b.dataset.team; ui.notice = ''; ui.progress = ''; draw(); });
@@ -626,8 +775,10 @@ const TEAMS = (() => {
   function wireTeam(t) {
     on('#tm-back', 'click', () => { ui.teamId = null; ui.notice = ''; ui.progress = ''; draw(); });
     on('#tm-save-team', 'click', () => { readTeamForm(t); persist(); toast(T('tm.teamSaved')); draw(); });
-    on('#tm-delete-team', 'click', () => {
+    on('#tm-delete-team', 'click', async () => {
       if (!confirm(T('tm.confirmDeleteTeam', { name: t.name }))) return;
+      const atClub = await deleteAtClub(t);
+      if (!atClub.ok) { toast(T('tm.deleteNotAtClub', { why: syncWhy(atClub) })); return; }
       db.teams = db.teams.filter(x => x.id !== t.id); db.sheets = db.sheets.filter(x => x.teamId !== t.id);
       persist(); ui.teamId = null; draw();
     });
@@ -682,7 +833,14 @@ const TEAMS = (() => {
       persist();
     });
     edit('data-pname', 'name'); edit('data-pfirst', 'firstName'); edit('data-cap', 'cap'); edit('data-pgk', 'gk');
-    $$('[data-premove]').forEach(b => b.onclick = () => { t.players = (t.players || []).filter(x => x !== b.dataset.premove); persist(); draw(); });
+    $$('[data-premove]').forEach(b => b.onclick = async () => {
+      const pid = b.dataset.premove, club = syncClub();
+      const serverPid = club ? serverIdOf(club.id, t.id, pid) : null;
+      t.players = (t.players || []).filter(x => x !== pid); persist(); draw();
+      const r = await removeAtClub(t, serverPid);
+      if (!r.ok) toast(T('tm.removeNotAtClub', { why: syncWhy(r) }));
+      else if (!r.skipped) toast(T('tm.removedAtClub'));
+    });
 
     on('#tm-new-sheet', 'click', () => {
       const tpl = templateById(db, t.templateId);
@@ -904,7 +1062,8 @@ const TEAMS = (() => {
 
   return { KEY, CARD_KEY, MIRROR_KEY, SYNC_KEY, CATEGORY_ORDER, render, renderPlayerCard, load, save, upsertPlayers, autoOrder, lineupOf, allTemplates,
            availOf, setAvailability, availabilityCounts, availablePool,
-           syncClub, maySync, payloadFor, forUpload, syncTeam, syncAll, loadMirror, syncStateOf, wipeDevice };
+           syncClub, maySync, payloadFor, forUpload, syncTeam, syncAll, loadMirror, syncStateOf, wipeDevice,
+           removeAtClub, deleteAtClub, serverIdOf, seasonOf, pullTeam };
 })();
 
 // Node/CommonJS interop (no-op in the browser)

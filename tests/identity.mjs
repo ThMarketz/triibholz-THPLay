@@ -188,6 +188,18 @@ section('[6] A club always keeps an approved admin', () => {
   ID.deleteUser(db, { userId: p, actor: p }, T0);
   ok('anyone else can delete their account; memberships go with it', !ID.getUser(db, p) && !ID.getMember(db, c, p));
   ok('each change is audited with before and after', JSON.parse(db.prepare("SELECT detail FROM audit WHERE action = 'member.update' AND subject = ? ORDER BY id DESC").get(a).detail).from.role === 'admin');
+  /* The rule protects the last admin of a club that is STAYING. It must not also make the club
+     impossible to delete: from slice 5 a club holds children's names and licence numbers, so
+     "there is no way to remove it" would be a retention problem, not a curiosity. */
+  db.prepare("INSERT INTO club_players (id, club_id, licence, created_at, updated_at) VALUES ('cp_last', ?, '59901', ?, ?)").run(c, T0, T0);
+  db.prepare('DELETE FROM clubs WHERE id = ?').run(c);
+  ok('a club can be deleted, and takes its members and its roster with it', !ID.getClub(db, c)
+    && db.prepare('SELECT count(*) AS n FROM club_members WHERE club_id = ?').get(c).n === 0
+    && db.prepare('SELECT count(*) AS n FROM club_players WHERE club_id = ?').get(c).n === 0);
+  const c2 = ID.createClub(db, { name: 'Still Here WPC', actor: 'operator' }, T0);
+  const a2 = ID.createUser(db, { displayName: 'Only Admin' }, T0).id;
+  ID.addMember(db, { clubId: c2, userId: a2, role: 'admin', status: 'approved', actor: 'operator', action: 'member.add' }, T0);
+  ok('…while the last admin of a club that is staying is protected exactly as before', throwsCode(() => db.prepare('DELETE FROM club_members WHERE user_id = ?').run(a2), 'last-admin') && !!ID.getMember(db, c2, a2));
   db.close();
 });
 

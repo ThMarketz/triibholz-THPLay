@@ -125,10 +125,24 @@ function routes(core) {
      a licence-pending one by the hash of the device id that made them. Nothing is ever matched by
      name: two children in one club share a name often enough that clubs.js already warns about it. */
   function upsertPlayer(clubId, userId, p, t) {
-    const key = p.licence ? null : syncKey(clubId, userId, p.localId);
-    const row = p.licence
+    const key = p.localId ? syncKey(clubId, userId, p.localId) : null;
+    let row = p.licence
       ? db.prepare('SELECT * FROM club_players WHERE club_id = ? AND licence = ?').get(clubId, p.licence)
-      : db.prepare('SELECT * FROM club_players WHERE club_id = ? AND sync_key = ?').get(clubId, key);
+      : (key ? db.prepare('SELECT * FROM club_players WHERE club_id = ? AND sync_key = ?').get(clubId, key) : null);
+    /* Her licence has come through. She is already here as a signing with no licence yet, known by
+       the id this device gave her — so she is the SAME child, not a new one. Storing a second row
+       would leave the first behind for ever with the birth year only the device could supply, on
+       every roster twice, and invisible to the two-teams check. The licence takes over as her
+       identity, and the year and gender go with the change: nothing may hold both. */
+    if (!row && p.licence && key) {
+      const pending = db.prepare('SELECT * FROM club_players WHERE club_id = ? AND sync_key = ? AND licence IS NULL').get(clubId, key);
+      if (pending) {
+        db.prepare('UPDATE club_players SET licence = ?, birth_year = NULL, gender = \'\', updated_at = ?, rev = rev + 1 WHERE id = ? AND club_id = ?')
+          .run(p.licence, t, pending.id, clubId);
+        ID.audit(db, { actor: userId, action: 'player.licence', clubId, detail: { player: pending.id } }, t);
+        row = db.prepare('SELECT * FROM club_players WHERE id = ?').get(pending.id);
+      }
+    }
     if (!row) {
       const total = db.prepare('SELECT count(*) AS n FROM club_players WHERE club_id = ?').get(clubId).n;
       if (total >= TEAMSYNC.LIMITS.playersPerClub) throw httpError(409, 'too-many-players');
@@ -139,20 +153,28 @@ function routes(core) {
       return { id, created: true, changed: false };
     }
     // the name is the only thing an upload may change about a player who is already here
+    if (p.rev && p.rev !== row.rev) throw httpError(409, 'request-changed');
     const same = row.name === p.name && row.first_name === p.firstName && !!row.name_edited === !!p.nameEdited;
     if (same) return { id: row.id, created: false, changed: false };
-    if (p.rev && p.rev !== row.rev) throw httpError(409, 'request-changed');
     const r = db.prepare('UPDATE club_players SET name = ?, first_name = ?, name_edited = ?, name_guessed = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND club_id = ? AND rev = ?')
       .run(p.name, p.firstName, p.nameEdited ? 1 : 0, p.nameGuessed ? 1 : 0, t, row.id, clubId, row.rev);
     if (r.changes !== 1) throw httpError(409, 'request-changed');
     return { id: row.id, created: false, changed: true };
   }
 
-  /* a player is on a team, with the cap and the keeper flag that team gives them */
-  function putOnTeam(teamId, playerId, p, userId, t) {
+  /* A player is on a team, with the cap and the keeper flag that team gives them.
+
+     `revive` is the difference between the two ways a player arrives. Adding one by hand is a
+     decision, so it may put back somebody who was taken off. A ROUTINE UPLOAD is not a decision:
+     the coach's device still holds everyone it held last week, including whoever the club removed
+     in the meantime, so an upload that cleared removed_at would undo every removal on the next
+     sync — and clearing left_at with it would restart the retention clock, so the record would
+     never be swept either. The club's removal stands, and the upload is told so. */
+  function putOnTeam(teamId, playerId, p, userId, t, { revive = true } = {}) {
     const row = db.prepare('SELECT * FROM club_team_players WHERE team_id = ? AND club_player_id = ?').get(teamId, playerId);
+    if (row && row.removed_at && !revive) return { removed: true };
     if (!row) {
-      if (liveCount(teamId) >= TEAMSYNC.LIMITS.playersPerTeam) throw httpError(400, 'too-many-players');
+      if (liveCount(teamId) >= TEAMSYNC.LIMITS.playersPerTeam) throw httpError(400, 'team-full');
       db.prepare('INSERT INTO club_team_players (team_id, club_player_id, cap, gk, added_at, added_by) VALUES (?, ?, ?, ?, ?, ?)')
         .run(teamId, playerId, p.cap, p.gk ? 1 : 0, t, userId);
     } else {
@@ -161,6 +183,7 @@ function routes(core) {
     }
     // back on a list somewhere: the retention clock stops
     db.prepare('UPDATE club_players SET left_at = NULL WHERE id = ? AND left_at IS NOT NULL').run(playerId);
+    return { removed: false };
   }
   /* off every live list in this club → the clock that slice 8's retention sweep will read starts now */
   function stampLeft(playerId, t) {
@@ -208,12 +231,30 @@ function routes(core) {
     if (!OWN_SIGN_IN.includes(s.origin || 'legacy')) throw httpError(403, 'full-sign-in-required');
     const clean = TEAMSYNC.sanitizeTeam(body);
     if (!clean.ok) throw httpError(400, clean.error);
-    if (overLimit(`teams-sync:${clubId}:${s.userId}`, { max: TEAMSYNC.LIMITS.syncsPerHour, windowMs: HOUR }, t)) throw tooMany(HOUR);
     const v = clean.value;
+    const allowed = tx(db, () => guard(s, clubId, { roles: STAFF, stepUp: true }, t));
+    /* Charged after the membership check and outside the write, so: a club id somebody invented
+       never writes a row into the shared table, and a sync that is then refused for a reason of
+       its own (a stale rev, a full club) does not get its budget back by rolling the counter up
+       with it. A coach who presses Sync twenty times in a minute is the case this is for. */
+    if (overLimit(`teams-sync:${clubId}:${s.userId}`, { max: TEAMSYNC.LIMITS.syncsPerHour, windowMs: HOUR }, t)) throw tooMany(HOUR);
+    const newLicences = v.players.filter(p => p.licence).length;
+    if (newLicences && overLimit(`players:${clubId}:${s.userId}`, { max: TEAMSYNC.LIMITS.newLicencesPerDay, windowMs: DAY }, t, newLicences)) throw tooMany(DAY);
     const out = tx(db, () => {
       const m = guard(s, clubId, { roles: STAFF, stepUp: true }, t);
-      const key = syncKey(clubId, s.userId, v.localId);
-      let team = db.prepare('SELECT * FROM club_teams WHERE club_id = ? AND sync_key = ?').get(clubId, key);
+      /* the key carries the season, so when a season turns the same local team syncs into a NEW
+         server team: last season's row keeps last season's children instead of being rewritten
+         under them. TEAMSYNC's local ids cannot contain ':', so this can never collide with the
+         licence-pending player key below. */
+      const key = syncKey(clubId, s.userId, `${v.season}:${v.localId}`);
+      /* A device that took this roster down from the club names the team it means. That is how a
+         coach's second device, or a colleague an admin added to the team, updates the SAME list
+         instead of minting a parallel one — but it is only a claim, so it is checked like any
+         other: staff of that team, in this club, or the ordinary 404. */
+      let team = v.teamId
+        ? (db.prepare('SELECT * FROM club_teams WHERE id = ? AND club_id = ?').get(v.teamId, clubId) || null)
+        : db.prepare('SELECT * FROM club_teams WHERE club_id = ? AND sync_key = ?').get(clubId, key);
+      if (v.teamId && (!team || (m.role !== 'admin' && !staffRow(team.id, s.userId)))) throw httpError(404, 'not-found');
       let created = false;
       if (!team) {
         const teams = db.prepare('SELECT count(*) AS n FROM club_teams WHERE club_id = ? AND archived_at IS NULL').get(clubId).n;
@@ -239,24 +280,26 @@ function routes(core) {
         }
       }
       let added = 0, changed = 0;
-      const manifest = [];
+      const manifest = [], removedAtClub = [];
       for (const p of v.players) {
         const r = upsertPlayer(clubId, s.userId, p, t);
-        putOnTeam(team.id, r.id, p, s.userId, t);
-        if (r.created) added++; else if (r.changed) changed++;
+        const put = putOnTeam(team.id, r.id, p, s.userId, t, { revive: false });
+        if (put.removed) removedAtClub.push({ localId: p.localId, licence: p.licence });
+        else if (r.created) added++; else if (r.changed) changed++;
         manifest.push({ localId: p.localId, licence: p.licence, id: r.id });
       }
       const conflicts = conflictsFor(clubId, team.id, team.season, team.category, manifest.map(x => x.id), s.userId, m.role === 'admin');
       ID.audit(db, { actor: s.userId, action: created ? 'team.create' : 'team.update', clubId,
-                     detail: { team: team.id, category: team.category, season: team.season, playersAdded: added, playersChanged: changed, players: v.players.length } }, t);
+                     detail: { team: team.id, category: team.category, season: team.season, playersAdded: added, playersChanged: changed, playersLeftRemoved: removedAtClub.length, players: v.players.length } }, t);
       // read back what is actually stored, so the device is told the truth rather than its own hopes
-      const stored = db.prepare('SELECT p.id, p.licence, p.rev, p.sync_key FROM club_team_players tp JOIN club_players p ON p.id = tp.club_player_id WHERE tp.team_id = ? AND tp.removed_at IS NULL').all(team.id);
+      const stored = db.prepare('SELECT p.id, p.rev FROM club_team_players tp JOIN club_players p ON p.id = tp.club_player_id WHERE tp.team_id = ?').all(team.id);
       const byId = new Map(stored.map(r => [r.id, r]));
       return {
         at: t,
         team: { localId: v.localId, id: team.id, rev: team.rev },
         players: manifest.filter(x => byId.has(x.id)).map(x => ({ localId: x.localId, licence: x.licence, id: x.id, rev: byId.get(x.id).rev })),
-        conflicts, counts: { added, changed, unchanged: v.players.length - added - changed },
+        conflicts, removedAtClub,
+        counts: { added, changed, removed: removedAtClub.length, unchanged: v.players.length - added - changed - removedAtClub.length },
       };
     });
     send(res, 200, out);
@@ -270,12 +313,16 @@ function routes(core) {
     if (!clean.ok) throw httpError(400, clean.error);
     const p = clean.value;
     const out = tx(db, () => {
-      const { member, team } = guardTeam(s, clubId, teamId, {}, t);
+      const { member, team } = guardTeam(s, clubId, teamId, { stepUp: true }, t);
       if (p.licence && overLimit(`players:${clubId}:${s.userId}`, { max: TEAMSYNC.LIMITS.newLicencesPerDay, windowMs: DAY }, t)) throw tooMany(DAY);
-      const r = upsertPlayer(clubId, s.userId, p, t);
+      // a caller has no legitimate rev for a player they have never read, and honouring one would
+      // let them ask "is this child already here?" by watching which revs are refused
+      const r = upsertPlayer(clubId, s.userId, Object.assign({}, p, { rev: null }), t);
       putOnTeam(team.id, r.id, p, s.userId, t);
       ID.audit(db, { actor: s.userId, action: 'player.add', clubId, detail: { team: team.id, player: r.id, created: r.created } }, t);
-      return { player: Object.assign(playerOut(db.prepare('SELECT * FROM club_players WHERE id = ?').get(r.id)), { cap: p.cap, gk: p.gk }),
+      // what the caller sent, not what is stored: a rev of 1 versus 2 would say whether the row existed
+      return { player: { id: r.id, licence: p.licence, name: p.name, firstName: p.firstName, nameEdited: p.nameEdited,
+                         nameGuessed: p.nameGuessed, birthYear: p.birthYear, gender: p.gender, cap: p.cap, gk: p.gk },
                conflicts: conflictsFor(clubId, team.id, team.season, team.category, [r.id], s.userId, member.role === 'admin') };
     });
     send(res, 200, out);
@@ -344,9 +391,9 @@ function routes(core) {
     const body = await readJson(req);
     const t = now(), s = requireSession(req);
     const out = tx(db, () => {
-      const m = guard(s, clubId, { roles: STAFF, stepUp: true }, t);
-      const team = db.prepare('SELECT * FROM club_teams WHERE id = ? AND club_id = ?').get(teamId, clubId);
-      if (!team) throw httpError(404, 'not-found');
+      // a live staff row is needed to delete a team exactly as it is to read one: revoking the row
+      // has to revoke everything, or an admin cannot actually take a team away from a coach
+      const { member: m, team } = guardTeam(s, clubId, teamId, { stepUp: true }, t);
       if (m.role !== 'admin' && team.created_by !== s.userId) throw httpError(404, 'not-found');
       if (TEAMSYNC.clean(body.name, TEAMSYNC.MAX_TEAM_NAME) !== team.name) throw httpError(400, 'bad-team');
       const held = db.prepare('SELECT club_player_id FROM club_team_players WHERE team_id = ?').all(teamId).map(r => r.club_player_id);

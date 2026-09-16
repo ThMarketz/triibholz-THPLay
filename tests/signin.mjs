@@ -62,6 +62,7 @@ const authenticator = new SoftAuthenticator();
 const toBuf = b => { const u = fromB64u(b); return u.buffer.slice(u.byteOffset, u.byteOffset + u.byteLength); };
 const fromBuf = b => b64u(Buffer.from(b instanceof ArrayBuffer ? new Uint8Array(b) : b));
 window.PublicKeyCredential = function () {};
+const asked = { get: 0 };
 window.navigator.credentials = {
   async create({ publicKey }) {
     const c = authenticator.create({ rpId: publicKey.rp.id, origin: ORIGIN, challenge: fromBuf(publicKey.challenge), userHandle: fromBuf(publicKey.user.id) });
@@ -69,6 +70,7 @@ window.navigator.credentials = {
       response: { clientDataJSON: toBuf(c.response.clientDataJSON), attestationObject: toBuf(c.response.attestationObject), getTransports: () => ['internal'] } };
   },
   async get({ publicKey }) {
+    asked.get++;
     const c = authenticator.get({ rpId: publicKey.rpId, origin: ORIGIN, challenge: fromBuf(publicKey.challenge) });
     return { id: c.id, rawId: toBuf(c.rawId), type: 'public-key',
       response: { clientDataJSON: toBuf(c.response.clientDataJSON), authenticatorData: toBuf(c.response.authenticatorData), signature: toBuf(c.response.signature),
@@ -229,6 +231,36 @@ await section('[3d] The coach sends a team to the club, and the club has it', as
   q('#tm-sync').click();
   await settle(80);
   ok('pressing it again changes nothing at the club', db.prepare('SELECT count(*) AS n FROM club_teams WHERE club_id = ?').get(clubId).n === again);
+
+  /* A coach who signed in this morning has no fresh assertion by the afternoon. The server asks for
+     the passkey again before it takes a club's children — so the app has to be able to answer, or
+     the button can never work for anybody. */
+  db.prepare('UPDATE sessions SET stepup_at = NULL').run();
+  TM.save(Object.assign(TM.load(), { teams: TM.load().teams.map(t => Object.assign(t, { name: 'U14 blue (afternoon)' })) }));
+  const before = asked.get;
+  q('#tm-sync').click();
+  await settle(100);
+  ok('a coach whose sign-in has gone cold is asked for the passkey, once', asked.get === before + 1);
+  ok('…and the team reaches the club anyway', db.prepare('SELECT name FROM club_teams WHERE club_id = ?').get(clubId).name === 'U14 blue (afternoon)');
+});
+
+await section('[3e] Taking a player back off the club’s copy', async () => {
+  const { TEAMS: TM } = window.__T;
+  const teamRow = db.prepare('SELECT id FROM club_teams WHERE club_id = ?').get(clubId);
+  const live = () => db.prepare('SELECT count(*) AS n FROM club_team_players WHERE team_id = ? AND removed_at IS NULL').get(teamRow.id).n;
+  ok('the club holds both players to start with', live() === 2);
+  q('.nav-btn[data-view="teams"]').click();
+  await settle(30);
+  q('#view-teams .tm-card').click();
+  await settle(40);
+  const x = q('#view-teams [data-premove="L50401"]');
+  ok('the coach has a ✕ against the player', !!x);
+  x.click();
+  await settle(90);
+  ok('…and pressing it takes her off the club’s list too, not only this device', live() === 1);
+  const row = db.prepare("SELECT cp.left_at FROM club_players cp WHERE cp.club_id = ? AND cp.licence = '50401'").get(clubId);
+  ok('…and starts the clock that says when her record may be forgotten', row.left_at > 0);
+  ok('…while she is gone from the device as well', !(TM.load().teams[0].players || []).includes('L50401'));
 });
 
 await section('[4] Signing out and back in with the passkey alone', async () => {
@@ -236,6 +268,14 @@ await section('[4] Signing out and back in with the passkey alone', async () => 
   await settle(30);
   ok('signing out returns to the sign-in screen', q('#auth-screen').classList.contains('active'));
   ok('…and takes the club’s children off this device with it', !window.localStorage.getItem(window.__T.TEAMS.KEY) && !window.localStorage.getItem(window.__T.TEAMS.MIRROR_KEY));
+  ok('…and every other sign-out button does exactly the same, not less', (() => {
+    // the "waiting to be approved" and "not approved" screens have their own sign-out buttons;
+    // a second button that quietly did less is how a roster survives a sign-out on a shared laptop
+    const src = readFileSync(join(APP, 'js/app.js'), 'utf8');
+    const buttons = src.match(/\$\('[a-z-]*signout[a-z-]*'\)\.onclick|\$\('logout-btn'\)\.onclick/g) || [];
+    const viaOne = (src.match(/signOutEverything\(\)/g) || []).length;
+    return buttons.length >= 3 && viaOne >= buttons.length;
+  })());
   ok('…while the club still has its own copy', db.prepare('SELECT count(*) AS n FROM club_players WHERE club_id = ?').get(clubId).n === 2);
   ok('…and the server has ended the session', (await window.fetch('/api/auth/me')).status === 401);
   q('#signin-passkey').click();

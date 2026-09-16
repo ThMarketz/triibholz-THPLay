@@ -180,6 +180,97 @@ await section('[8] Taking a player off a list', async () => {
   ok('putting her back is an ordinary add', back.status === 200 && back.json.player.licence === '50101');
 });
 
+await section('[8b] A removal sticks, and the next sync does not undo it', async () => {
+  await A.coach.stepUp();
+  const fresh = await up(A.coach, A, team('t8', { name: 'U16 removals', category: 'U16', players: [P('50601', 'Erste'), P('50602', 'Zweite')] }));
+  const teamId = fresh.json.team.id;
+  const one = (await A.coach.get(`${A.base}/teams/${teamId}`)).json.players.find(p => p.licence === '50601');
+  const gone = await A.coach.post(`${A.base}/teams/${teamId}/players/${one.id}/remove`, {});
+  ok('a coach takes a player off the list', gone.status === 200 && gone.json.leftClub === true);
+  const stamped = db.prepare('SELECT left_at FROM club_players WHERE id = ?').get(one.id).left_at;
+  ok('…and the clock that says when she may be forgotten starts', stamped > 0);
+  // the coach's device still holds her — it was never told — so the next routine sync re-sends her
+  const again = await up(A.coach, A, team('t8', { name: 'U16 removals', category: 'U16', players: [P('50601', 'Erste'), P('50602', 'Zweite')] }));
+  ok('the next sync does NOT put her back', again.status === 200
+    && db.prepare('SELECT removed_at FROM club_team_players WHERE team_id = ? AND club_player_id = ?').get(teamId, one.id).removed_at > 0);
+  ok('…and does not restart the clock either', db.prepare('SELECT left_at FROM club_players WHERE id = ?').get(one.id).left_at === stamped);
+  ok('…the device is told, rather than left believing she is still on the club’s list', (again.json.removedAtClub || []).some(x => x.licence === '50601'));
+  ok('…and the answer still accounts for everyone it was sent, so the sync is not read as a failure',
+    TEAMSYNC.manifestOk(TEAMSYNC.sanitizeTeam(team('t8', { name: 'U16 removals', category: 'U16', players: [P('50601', 'Erste'), P('50602', 'Zweite')] })).value, again.json));
+  ok('…and the audit says a removal was honoured, not that nothing happened', (() => {
+    const row = db.prepare("SELECT detail FROM audit WHERE action = 'team.update' ORDER BY at DESC LIMIT 1").get();
+    return row && JSON.parse(row.detail).playersLeftRemoved === 1;
+  })());
+  const back = await A.coach.post(`${A.base}/teams/${teamId}/players`, P('50601', 'Erste'));
+  ok('putting her back by hand is still allowed — that is a decision, not a stale copy', back.status === 200
+    && !db.prepare('SELECT removed_at FROM club_team_players WHERE team_id = ? AND club_player_id = ?').get(teamId, one.id).removed_at);
+});
+
+await section('[8c] A season ends, and last season’s squad stays where it was', async () => {
+  await A.coach.stepUp();
+  const y1 = await up(A.coach, A, team('tSeason', { name: 'U12 squad', category: 'U12', season: 2026, players: [P('50701', 'Alt')] }));
+  const y2 = await up(A.coach, A, team('tSeason', { name: 'U12 squad', category: 'U12', season: 2027, players: [P('50702', 'Neu')] }));
+  ok('the same team in a new season becomes a new list, not a rewrite of the old one', y1.json.team.id !== y2.json.team.id);
+  ok('…and last season’s children stay on last season’s list', (await A.coach.get(`${A.base}/teams/${y1.json.team.id}`)).json.players.length === 1);
+  ok('…so the two seasons do not conflict with each other', (y2.json.conflicts || []).length === 0);
+});
+
+await section('[8d] Adding a player by hand is not a way to ask questions', async () => {
+  const c = await club('Oracle WPC');
+  await c.coach.stepUp();
+  const t1 = (await up(c.coach, c, team('o1', { players: [P('50801', 'Bekannt')] }))).json.team.id;
+  // a member of staff who wants to know whether a licence is already in the club
+  const probeKnown = await c.coach.post(`${c.base}/teams/${t1}/players`, P('50801', 'Geraten'));
+  const probeNew = await c.coach.post(`${c.base}/teams/${t1}/players`, P('50899', 'Geraten'));
+  ok('the answer for a licence the club has and one it does not is the same shape', probeKnown.status === probeNew.status
+    && JSON.stringify(Object.keys(probeKnown.json.player).sort()) === JSON.stringify(Object.keys(probeNew.json.player).sort()));
+  ok('…and neither answer carries a stored rev that would say which was already here', probeKnown.json.player.rev === undefined && probeNew.json.player.rev === undefined);
+  ok('…and it echoes what was sent, not what is stored', probeKnown.json.player.name === 'Geraten');
+  await c.coach.login();                                   // a fresh session, no step-up yet
+  ok('adding a player needs the passkey again, like every other write of a child’s details', (await c.coach.post(`${c.base}/teams/${t1}/players`, P('50802', 'Neu'))).status === 403);
+});
+
+await section('[8e] A licence arrives for a player who was already on the list', async () => {
+  const c = await club('Licence WPC');
+  await c.coach.stepUp();
+  const first = await up(c.coach, c, team('L1', { players: [PENDING('mNew', 'Späte Lizenz', { birthYear: 2012, gender: 'F' })] }));
+  ok('a signing with no licence yet is stored with the year only the device could supply', first.json.counts.added === 1
+    && db.prepare('SELECT birth_year FROM club_players WHERE club_id = ?').get(c.clubId).birth_year === 2012);
+  // weeks later the licence comes through: the device keeps calling her by the id it always used
+  const after = await up(c.coach, c, team('L1', { players: [Object.assign(P('50901', 'Späte Lizenz'), { localId: 'mNew' })] }));
+  ok('she is the same child, not a second one', after.status === 200
+    && db.prepare('SELECT count(*) AS n FROM club_players WHERE club_id = ?').get(c.clubId).n === 1);
+  const row = db.prepare('SELECT * FROM club_players WHERE club_id = ?').get(c.clubId);
+  ok('…now known by her licence', row.licence === '50901');
+  ok('…and the birth year goes with the change, because nothing may hold both', row.birth_year === null && row.gender === '');
+  ok('…and she is on the list once, not twice', db.prepare('SELECT count(*) AS n FROM club_team_players WHERE removed_at IS NULL AND team_id = ?').get(after.json.team.id).n === 1);
+  ok('…which the audit records as what it was', !!db.prepare("SELECT 1 FROM audit WHERE action = 'player.licence'").get());
+});
+
+await section('[8f] The roster follows the coach to a second device', async () => {
+  const c = await club('Second Device WPC');
+  await c.coach.stepUp();
+  const made = await up(c.coach, c, team('d1', { name: 'U18 squad', category: 'U18', players: [P('51101', 'Eine'), P('51102', 'Andere')] }));
+  const serverId = made.json.team.id;
+  // the same coach, a new phone: it holds nothing, so it asks the club for the roster
+  const phone = dev();
+  ok('a roster can be taken down again by the coach who put it there', (await c.coach.get(`${c.base}/teams/${serverId}`)).json.players.length === 2);
+  // …and syncing from that phone updates the SAME list rather than minting a parallel one
+  const fromPhone = await up(c.coach, c, Object.assign(team('WHOLLY-DIFFERENT-LOCAL-ID', {
+    name: 'U18 squad', category: 'U18', players: [P('51101', 'Eine'), P('51102', 'Andere'), P('51103', 'Dritte')] }), { teamId: serverId }));
+  ok('a device that names the team updates that one, not a second copy of it', fromPhone.status === 200
+    && fromPhone.json.team.id === serverId
+    && db.prepare('SELECT count(*) AS n FROM club_teams WHERE club_id = ?').get(c.clubId).n === 1);
+  ok('…and the new player lands on it', db.prepare('SELECT count(*) AS n FROM club_team_players WHERE team_id = ? AND removed_at IS NULL').get(serverId).n === 3);
+  ok('…so nobody is in conflict with themselves across two copies of one squad', (fromPhone.json.conflicts || []).length === 0);
+  // naming a team is a claim, and it is checked like any other
+  await c.other.stepUp();
+  ok('a coach who is not staff of that team cannot name it to write to it', (await up(c.other, c, Object.assign(team('x1', { name: 'Mine now' }), { teamId: serverId }))).status === 404);
+  await B.coach.stepUp();
+  ok('…and neither can another club', (await up(B.coach, B, Object.assign(team('x2', { name: 'Ours now' }), { teamId: serverId }))).status === 404);
+  ok('a team id that is not one is refused by the contract, before anything is sent', TEAMSYNC.sanitizeTeam(Object.assign(team('x3'), { teamId: 'ct_nope' })).error === 'bad-team');
+});
+
 await section('[9] Team staff, team members, and who a coach may write to', async () => {
   await A.admin.stepUp();
   const s1 = await A.admin.post(`${A.base}/teams/${A.teamId}/staff`, { memberRef: A.other.memberRef });
@@ -227,6 +318,15 @@ await section('[11] Deleting a team', async () => {
   ok('the name has to match, so a mis-tap cannot take a season’s roster', wrong.status === 400 && wrong.json.error === 'bad-team');
   await B.coach.stepUp();
   ok('another club cannot delete it', (await B.coach.post(`${A.base}/teams/${A.teamId}/delete`, { name: 'U14 blue (autumn)' })).status === 404);
+  // an admin takes the team away from its creator: that has to take deletion away too
+  await A.admin.stepUp();
+  await A.admin.post(`${A.base}/teams/${A.teamId}/staff`, { memberRef: A.coach.memberRef, remove: true });
+  await A.coach.stepUp();
+  ok('a coach whose access an admin revoked can no longer delete the team they made',
+    (await A.coach.post(`${A.base}/teams/${A.teamId}/delete`, { name: 'U14 blue (autumn)' })).status === 404
+    && !!db.prepare('SELECT 1 FROM club_teams WHERE id = ?').get(A.teamId));
+  await A.admin.stepUp();
+  await A.admin.post(`${A.base}/teams/${A.teamId}/staff`, { memberRef: A.coach.memberRef });
   await A.coach.stepUp();
   const r = await A.coach.post(`${A.base}/teams/${A.teamId}/delete`, { name: 'U14 blue (autumn)' });
   ok('its own coach can, by retyping the name', r.status === 200 && r.json.deleted === true);
