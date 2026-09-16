@@ -22,7 +22,7 @@ the rules below, not a footnote.
 | 1 | Database, migrations, `tx()`, configuration checks, operator CLI, last-admin rule | **done** (02d9042) |
 | 2 | Passkey registration and sign-in, sessions, behind `ACCOUNTS=1`; nothing depends on it yet | **done** — server only; the app still signs in the simulated way |
 | 3 | Clubs and memberships: invites, join codes, approvals, roles, removal, step-up, UV for staff | **done** — server only |
-| 4 | The switch, in one release: the app signs in for real; every existing endpoint authorized | **done** — server (5d7733d), app (e366672) and sending a cut moment from the Film Room; the announcement composer, a demo sandbox and legacy-data tools are still to come |
+| 4 | The switch, in one release: the app signs in for real; every existing endpoint authorized | **done** — server (5d7733d), app (e366672), sending a cut moment from the Film Room (faf789a) and the announcement composer; a demo sandbox and legacy-data tools are still to come |
 | 5 | Teams, rosters, sheets, templates on the server; read-only offline copy for staff | |
 | 6 | Devices: QR pairing with approval on the old device, devices page, revocation | |
 | 7 | Recovery with a hold period; player and guardian links | |
@@ -413,7 +413,9 @@ One release, because half-authorized is worse than either state:
   video before the note is stored, and `ANNOUNCE.sanitize()` refuses any `clip.url` that is not
   `/api/clips/<id>.mp4`, so an outside URL cannot be smuggled into a note and played in the app.
 - `GET /api/clubs/:club/addressees` gives staff the names and member refs they may write to, and
-  nothing else. It is an interim — slice 5 narrows it to the teams that coach actually has.
+  nothing else. It is an interim — slice 5 narrows it to the teams that coach actually has. The
+  bell's ＋New composer reads it too, so a coach picks a player by name and the note is addressed
+  by member ref; `team=`/`for=` are no longer sent at all, and the author is stamped server-side.
 - **Calendar feeds** get server-issued, revocable tokens created by the team's staff; old
   client-made tokens are refused. No venue for youth training unless the club turns it on.
 - Files already on the volume (announcements, debriefs, videos, clips, calendars) have no owner:

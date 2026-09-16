@@ -2449,7 +2449,9 @@
     if (!state.user) return;
     const base = feedBase().replace(/\/+$/, '');
     try {
-      const r = await API.fetch(`${base}/api/announcements?team=${encodeURIComponent(announceTeam())}&for=${encodeURIComponent(state.user.email)}`);
+      // with accounts on the server reads neither of these from the request — it uses the session
+      const q = realAccounts ? '' : `?team=${encodeURIComponent(announceTeam())}&for=${encodeURIComponent(state.user.email)}`;
+      const r = await API.fetch(`${base}/api/announcements${q}`);
       if (!r.ok) throw new Error('list-' + r.status);
       const data = await r.json();
       announce.list = data.announcements || []; announce.unread = data.unread || 0; announce.reachable = true;
@@ -2531,8 +2533,24 @@
     if (n) { DATA.save(state.scenarios); renderLibrary(); toast(T('ui.nPlaysAddedToPlaybook', { n: n })); }
     else toast(T('ui.alreadyInYourPlaybook'));
   }
-  function openAnnounceCompose() {
-    const roster = DATA.loadUsers().filter(u => u.role === 'player' && u.status === 'approved').sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  /* Who a coach may write to. With accounts on that is the club's approved members, from the
+     server — a name and a member ref, nothing else (the old local user list is gone). */
+  async function announceAddressees() {
+    if (!realAccounts) {
+      return DATA.loadUsers().filter(u => u.role === 'player' && u.status === 'approved')
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        .map(u => ({ to: u.email, label: (u.name || u.email) + (u.position ? ' · Pos ' + u.position : '') }));
+    }
+    try {
+      const club = SESSION.activeClub(state.user && state.user.clubId);
+      if (!club) return [];
+      return (await SESSION.api(`/api/clubs/${club.id}/addressees`)).addressees
+        .filter(p => p.memberRef !== state.user.memberRef)
+        .map(p => ({ to: p.memberRef, label: p.name }));
+    } catch (e) { return []; }
+  }
+  async function openAnnounceCompose() {
+    const roster = await announceAddressees();
     const matches = CALENDAR.agenda(CALENDAR.load(), new Date(), 120).filter(e => e.type === 'match');
     const myPlays = (state.scenarios || []).filter(s => !s.builtIn).slice(0, 30);
     const ov = document.createElement('div'); ov.className = 'modal-backdrop'; ov.id = 'announce-compose-modal';
@@ -2545,7 +2563,7 @@
           <label><input type="radio" name="ann-scope" value="team" checked> ${T('ui.wholeTeam')}</label>
           <label><input type="radio" name="ann-scope" value="player"> ${T('ui.onePlayer')}</label>
         </div>
-        <select id="ann-to" hidden>${roster.map(u => `<option value="${escapeHtml(u.email)}">${escapeHtml(u.name || u.email)}${u.position ? ' · Pos ' + escapeHtml(u.position) : ''}</option>`).join('') || `<option value="">${T('ui.noApprovedPlayersYet')}</option>`}</select>
+        <select id="ann-to" hidden>${roster.map(u => `<option value="${escapeHtml(u.to)}">${escapeHtml(u.label)}</option>`).join('') || `<option value="">${T('ui.noApprovedPlayersYet')}</option>`}</select>
         <input type="text" id="ann-title" placeholder="${T('ui.titleEGThis')}">
         <textarea id="ann-body" rows="4" placeholder="${T('ui.whatDoTheyNeed')}"></textarea>
         <select id="ann-match"><option value="">${T('ui.notTiedToA')}</option>${matches.map(m => `<option value="${escapeHtml(m.id)}" data-label="${escapeHtml(fmtDay(m.start) + ' · ' + m.title)}">${escapeHtml(fmtDay(m.start))} · ${escapeHtml(m.title)}</option>`).join('')}</select>
@@ -2566,8 +2584,9 @@
       const matchSel = ov.querySelector('#ann-match'), matchOpt = matchSel.selectedOptions[0];
       const plays = [...ov.querySelectorAll('.ann-plays-pick input:checked')].slice(0, ANNOUNCE.MAX_PLAYS)
         .map(cb => state.scenarios.find(s => s.id === cb.value)).filter(Boolean).map(s => SHARE.pack(s));
+      // with accounts on the club and the author come from the session; the app does not name itself
       const payload = { team: announceTeam(), scope, to: scope === 'player' ? toSel.value : null,
-        fromName: state.user.name, fromEmail: state.user.email, title, body,
+        fromName: realAccounts ? undefined : state.user.name, fromEmail: realAccounts ? undefined : state.user.email, title, body,
         matchLabel: matchOpt && matchOpt.value ? matchOpt.dataset.label : null,
         matchEventId: matchOpt && matchOpt.value ? matchOpt.value : null, plays };
       const btn = ov.querySelector('#ann-send'); btn.disabled = true; btn.textContent = T('ui.sending');

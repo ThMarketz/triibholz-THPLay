@@ -168,6 +168,35 @@ await section('[3b] A clip sent from the Film Room arrives in the app, with its 
   ok('…with what the coach marked on the moment', /6 on 6/.test(open.textContent) && /near post/.test(open.textContent));
 });
 
+await section('[3c] Writing to one player, picked by name from the club', async () => {
+  q('#announce-btn').click();
+  await settle(20);
+  q('#announce-new').click();
+  await settle(40);                                   // the list of who a coach may write to is fetched
+  const modal = document.getElementById('announce-compose-modal');
+  const to = modal.querySelector('#ann-to');
+  ok('the composer offers the club’s approved members, by name', [...to.options].some(o => o.textContent === 'Pia Player'));
+  ok('…as member refs, never as e-mail addresses or u_ ids', [...to.options].every(o => /^m_[A-Za-z0-9_-]{22}$/.test(o.value)));
+  ok('…and never the coach writing the note', ![...to.options].some(o => o.textContent === 'Ada Admin'));
+  modal.querySelector('[name="ann-scope"][value="player"]').click();
+  await settle(10);
+  ok('picking “one player” reveals the list', to.hidden === false);
+  to.value = [...to.options].find(o => o.textContent === 'Pia Player').value;
+  modal.querySelector('#ann-title').value = 'Your 2-metre position';
+  modal.querySelector('#ann-body').value = 'Half a metre further out and you are free.';
+  modal.querySelector('#ann-send').click();
+  await settle(60);
+  ok('the note is sent and the composer closes', !document.getElementById('announce-compose-modal'));
+  const asApp = (d, path) => call('GET', path, { cookie: d.cookie, headers: { 'x-thp-client': '4' } });
+  const mine = (await asApp(player, '/api/announcements')).json.announcements;
+  ok('the player it was written to has it', mine.some(a => a.title === 'Your 2-metre position' && a.scope === 'player'));
+  const stored = JSON.parse(readFileSync(join(S.DATA, 'announcements', mine.find(a => a.title === 'Your 2-metre position').id + '.json'), 'utf8'));
+  ok('the server stamped who wrote it from the session, not from the app', stored.from.name === 'Ada Admin' && stored.from.email === '' && stored.to === playerRef);
+  const outsider = new Device(call, undefined, ORIGIN);
+  await outsider.register(ID.issueCode(db, { kind: 'club-admin', clubId: ID.createClub(db, { name: 'Elsewhere WPC', actor: 'operator' }, Date.now()), role: 'admin', actor: 'operator' }, Date.now()).code, 'Other Club');
+  ok('another club sees nothing of it', !((await asApp(outsider, '/api/announcements')).json.announcements || []).some(a => a.title === 'Your 2-metre position'));
+});
+
 await section('[4] Signing out and back in with the passkey alone', async () => {
   q('#logout-btn').click();
   await settle(30);

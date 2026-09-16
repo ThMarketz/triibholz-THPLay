@@ -34,7 +34,9 @@ per attached play.
 
 The same bell, plus **＋ New**:
 
-- **Whole team** or **One player** (picked from the approved roster)
+- **Whole team** or **One player** — with accounts on the list is the club's approved members,
+  fetched from the server as `{ memberRef, name }` (the coach is never offered themselves);
+  without accounts it is the local approved roster, by e-mail
 - a title and a message
 - optionally *"for the match on…"*, chosen from upcoming matches already in the calendar
 - optionally **attach plays** from their own library (up to 6), packed with the same
@@ -100,11 +102,13 @@ a.team === reader.team && (a.scope === 'team' || a.to === reader.email)
   panel is opened. There is no OS-level push anywhere in this app, and adding it would
   need infrastructure (and, on iOS, an installed PWA or a native wrapper) that doesn't
   exist yet.
-- **Identity is the app's simulated sign-in**, same as the rest of the prototype. The
-  server trusts the email a client sends in `for=`; this is a club tool on a trusted
-  network, not a hardened multi-tenant service. Anyone who can reach the backend could
-  ask for another player's notes. That is a deliberate, documented limit of the current
-  auth model — not a property of this feature specifically.
+- **Identity depends on whether accounts are on.** With `ACCOUNTS=1` (slice 4 of
+  `docs/ACCOUNTS.md`) the club, the author and the reader all come from the session: `team=`
+  and `for=` are ignored, `from` is stamped with the signed-in person's name, a note may only
+  be addressed to an approved member of the poster's own club, and another club sees nothing.
+  With accounts off the server still trusts the email a client sends in `for=` — a club tool
+  on a trusted network, not a hardened service. That is the pre-accounts mode, kept so a
+  development build works with no database at all.
 - **Announcements are kept, not pruned.** There is no delete or retention policy yet; the
   list endpoint caps at the newest 100 per reader.
 - Attached plays are copies, not links. Editing the original later does not change what a
