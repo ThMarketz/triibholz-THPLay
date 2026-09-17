@@ -73,21 +73,36 @@ pre‑seeded team, plays, activity and progress.
 | `handouts/` | “ÜSI 14” locker‑room poster (Schweizerdeutsch, PNG + print PDF) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA |
 
-## Quality gates (in-repo: `tests/`)
+## Quality gates
+
 ```bash
 cd tests && npm install          # once
-node smoke.mjs                   # headless regression suite (jsdom)
-node browser.mjs                 # real-Firefox walkthrough incl. drag tests (app on :8088)
 ```
-- **Headless suite**: 71 checks — auth → approvals → shuffled trivia (both sets)
-  → playbook/editor → Problem→Solution → Adjust mode → Basics/i18n → Film Room
-  (board, tagging, staged-frame rebuild) → approval gate → challenge → demo.
-- **Real-browser QA**: 33 steps in Firefox with real mouse drags (Adjust mode,
-  film board), live YouTube embed, desktop + 375 px mobile, zero console errors.
+
+| gate | what it covers | at last run |
+|---|---|---|
+| `node tests/smoke.mjs` | the whole app headless (jsdom) — sign-in → playbook → Film Room → team sheets → scouting → service worker → the icon wiring | 854 |
+| `node tests/teams.mjs` | the device↔club roster contract (`js/teamsync.js`) | 114 |
+| `node tests/signin.mjs` | passkey sign-in and registration | 51 |
+| `node tests/clubs.mjs` | club membership, roles, addressees | 127 |
+| `node tests/auth.mjs` | WebAuthn verification, sessions, step-up, rate limits | 153 |
+| `node tests/identity.mjs` | who a person is, and what losing a role takes with it | 124 |
+| `node tests/authz.mjs` | what each role may and may not reach | 69 |
+| `node tests/server.mjs` | the backend end to end | 84 (17 skipped) |
+| `node tests/i18n-scan.mjs` | untranslated UI chrome — a ratchet, must stay 0 | 0 |
+| `node tests/browser.mjs` | real Firefox, real mouse drags, desktop + 375 px (app on :8088) | 187 |
+| `python3 scripts/build-icons.py --check` | the icon **pixels** — redrawn from `brand/` and compared | 5 icons |
+| `node scripts/sw-stamp.mjs --check` | the SW cache name still matches what it precaches | — |
+| `bash scripts/test-nginx-canonical.sh` | the canonical-host redirect, against the real image | 9 |
+| `bash scripts/test-nginx-assets.sh` | a path naming a file resolves or 404s — never the HTML shell | 15 |
+| `bash scripts/test-nginx-realip.sh` | the visitor's address behind the tunnel | — |
+
+The two script gates are separate from `smoke.mjs` on purpose: the icon one needs Pillow, and a
+suite that skips itself when an import is missing is not a gate. See `brand/README.md`.
 
 ## Known limits (v1 prototype scope)
-- Accounts, approvals and saved plays live in the **browser (localStorage)** —
-  per device. Real Apple/Google OAuth + a small backend is the next milestone
-  and makes approvals/rosters sync across devices.
+- Plays, film cuts and player cards live in the **browser (localStorage)** — per
+  device. Accounts are **passkeys** against the club's own server (`docs/ACCOUNTS.md`),
+  not Apple/Google OAuth; rosters sync per club, and device pairing is slice 6.
 - Simulated sign‑in; the approval flow is fully functional within one browser.
 - Tactical content (play names, coaching notes, basics text) is English‑first.

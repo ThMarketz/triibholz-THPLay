@@ -1,5 +1,10 @@
 /* Triibholz (THPLAY) service worker — offline app shell + fresh rule books. */
-const CACHE = 'triibholz-v86';
+/* The cache name carries a digest of everything ASSETS lists (scripts/sw-stamp.mjs). A service
+   worker only refills its cache when this string changes, so tying it to the bytes means a changed
+   asset can never ship behind an unchanged cache name — which is how new icons nearly went out
+   while every installed app kept the old ones. The vNN in front is for reading in devtools. */
+const ASSET_STAMP = '367e468a70a6';
+const CACHE = 'triibholz-v87-' + ASSET_STAMP;
 const ASSETS = [
   './', './index.html',
   './css/styles.css',

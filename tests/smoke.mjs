@@ -2568,6 +2568,79 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('rules.json: a server error does not replace the cached rule book', rules.out && rules.out.body === 'cached-rules' && store.get('https://club.example/data/rules.json').body === 'cached-rules');
   }
 
+  console.log('\n[17] The app icon — the brand mark, and the wiring that silently breaks');
+  {
+    /* An icon fault never throws: a missing file is a blank tile, a transparent PNG is a black
+       box on an iOS home screen, a size that does not match what the manifest claims is a blurry
+       one, and an icon left out of the precache list is the only asset missing offline. None of
+       that shows up in any other test, and none of it is visible until the app is installed on
+       somebody's phone. So the wiring is asserted here.
+
+       The PIXELS are a separate gate — `python3 scripts/build-icons.py --check` redraws all five
+       from brand/ and fails on any difference — because it needs Pillow, and a suite that skips
+       itself when an import is missing is not a gate. It is listed with the other standalone
+       gates in README.md. */
+    const manifest = JSON.parse(readFileSync(join(APP, 'manifest.webmanifest'), 'utf8'));
+    const swSrc = readFileSync(join(APP, 'sw.js'), 'utf8');
+    const onDisk = readdirSync(join(APP, 'icons')).filter(f => f.endsWith('.png')).sort();
+
+    /* PNG header: 8-byte signature, then IHDR with width, height, bit depth and colour type.
+       Colour type 4 and 6 carry an alpha channel; a tRNS chunk makes any of the others
+       transparent too. Either way the launcher gets holes it will fill with black. */
+    const png = (name) => {
+      let b; try { b = readFileSync(join(APP, 'icons', name)); } catch { return null; }   // a missing icon is the assertion above's to report, not a crash
+      const sig = b.subarray(0, 8).toString('hex') === '89504e470d0a1a0a';
+      return { sig, w: b.readUInt32BE(16), h: b.readUInt32BE(20), colour: b[25], tRNS: b.includes('tRNS') };
+    };
+
+    const declared = manifest.icons.map(i => i.src.replace(/^\.?\//, ''));
+    const linked = [...html.matchAll(/(?:href|content)="(icons\/[^"]+)"/g)].map(m => m[1]);
+    const missing = [...declared, ...linked].filter(p => !onDisk.includes(p.replace('icons/', '')));
+    ok('every icon the manifest and index.html name is actually on disk', missing.length === 0);
+    ok('every icon on disk is precached, so an installed app is not missing one offline',
+      onDisk.every(f => swSrc.includes(`icons/${f}`)));
+    ok('nothing is precached that no longer exists',
+      [...swSrc.matchAll(/icons\/([\w.-]+\.png)/g)].every(m => onDisk.includes(m[1])));
+
+    ok('each icon really is the size the manifest claims it is',
+      manifest.icons.every(i => { const p = png(i.src.replace(/^\.?\//, '').replace('icons/', '')); return p && `${p.w}x${p.h}` === i.sizes; }));
+    ok('every icon is a real PNG and is fully opaque (a transparent app icon is a black box)',
+      onDisk.every(f => { const p = png(f); return p && p.sig && ![4, 6].includes(p.colour) && !p.tRNS; }));
+
+    const maskable = manifest.icons.filter(i => (i.purpose || '').split(/\s+/).includes('maskable'));
+    ok('exactly one icon is declared maskable, and it is the one drawn small for the crop',
+      maskable.length === 1 && maskable[0].src.includes('maskable'));
+    ok('the regular icons are NOT declared maskable (Android would shrink them a second time)',
+      manifest.icons.filter(i => !i.src.includes('maskable')).every(i => !i.purpose));
+    ok('the manifest keeps its id — it can only be set before the first install', manifest.id === '/');
+
+    /* The one that would have shipped silently today: five icons changed and the cache name did
+       not, so every installed app would have kept the old art for good. The name now carries a
+       digest of everything ASSETS lists, and this checks it is the digest of what is on disk. */
+    const { stampFor } = await import('../scripts/sw-stamp.mjs');
+    const stamped = (swSrc.match(/const ASSET_STAMP = '([0-9a-f]*)'/) || [])[1];
+    ok('the service-worker cache name is the digest of what it precaches, and is current',
+      stamped && stamped === stampFor(swSrc));
+    ok('…and the cache name actually uses it, so a changed asset changes the cache',
+      /const CACHE = 'triibholz-v\d+-' \+ ASSET_STAMP;/.test(swSrc));
+
+    /* The mark is vector, and which master an icon is built from is a correctness question, not
+       a taste one: the navy master is 1.61:1 against the app's ground, which is invisible. */
+    const svg = (n) => readFileSync(join(APP, 'brand', n), 'utf8');
+    const fills = (s) => [...s.matchAll(/fill="([^"]+)"/g)].map(m => m[1].toLowerCase());
+    ok('the brand masters are present and are the source the icons are drawn from',
+      ['thplay-mark.svg', 'thplay-mark-dark.svg', 'thplay-mark-mono.svg'].every(n => svg(n).includes('<svg') && svg(n).includes('viewBox')));
+    ok('the dark master — the one the icons use — is white on the body, never navy',
+      fills(svg('thplay-mark-dark.svg'))[0] === '#ffffff');
+    ok('the light master keeps the brand navy, for print and anything on white',
+      fills(svg('thplay-mark.svg'))[0] === '#283655');
+    ok('the inline master follows the surrounding text colour, so it works in both looks',
+      fills(svg('thplay-mark-mono.svg')).every(f => f === 'currentcolor'));
+    ok('every path is filled even-odd — nonzero would flood the ball’s seams',
+      ['thplay-mark.svg', 'thplay-mark-dark.svg', 'thplay-mark-mono.svg']
+        .every(n => (svg(n).match(/fill-rule="evenodd"/g) || []).length === (svg(n).match(/<path/g) || []).length));
+  }
+
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);
   process.exit(fail?1:0);
  } catch(e){ console.error('THREW:', e && e.stack || e); process.exit(2); }
