@@ -367,6 +367,33 @@ section('[8c] A sandbox club to look at — with no way in of its own', () => {
   db4.close();
 });
 
+section('[8d] The database remembers which domain its passkeys belong to', () => {
+  const dir = tmp();
+  const env = d => ({ ...process.env, DATA_DIR: dir, ACCOUNTS: '1', RP_ID: d, APP_ORIGINS: 'https://' + d, NODE_NO_WARNINGS: '1' });
+  const start = d => spawnSync(process.execPath, ['-e', `require(${JSON.stringify(join(SERVER, 'index.js'))})`],
+    { env: env(d), encoding: 'utf8', timeout: 20000 });
+
+  ok('a fresh database takes the domain it is first started with', start('thplay.ch').status !== 1
+    && DB.open(join(dir, 'triibholz.db')).prepare('SELECT rp_id FROM deployment WHERE id = 1').get().rp_id === 'thplay.ch');
+  /* while nobody has registered the owner is still deciding, so it may change freely */
+  ok('…and while nobody has a passkey yet, the domain may still change', start('triibholz.ch').status !== 1
+    && DB.open(join(dir, 'triibholz.db')).prepare('SELECT rp_id FROM deployment WHERE id = 1').get().rp_id === 'triibholz.ch');
+
+  // one real person registers: from here a changed domain locks everybody out for good
+  const db2 = DB.open(join(dir, 'triibholz.db'));
+  const uid = ID.createUser(db2, { displayName: 'First Coach' }, T0).id;
+  db2.prepare("INSERT INTO credentials (id, user_id, public_key_jwk, alg, created_at) VALUES ('cred_real', ?, '{}', -7, ?)").run(uid, T0);
+  db2.close();
+
+  const moved = start('thplay.ch');
+  ok('once a passkey exists, a different domain stops the server instead of locking everyone out', moved.status === 1);
+  ok('…and says which domain it belongs to, how many passkeys, and how to put it back',
+    moved.stderr.includes('belongs to RP_ID "triibholz.ch"') && /1 passkey/.test(moved.stderr) && moved.stderr.includes('RP_ID=triibholz.ch'));
+  ok('…while the domain it does belong to still starts', start('triibholz.ch').status !== 1);
+  ok('…and that is recorded as locked, not merely remembered',
+    !!DB.open(join(dir, 'triibholz.db')).prepare('SELECT locked_at FROM deployment WHERE id = 1').get().locked_at);
+});
+
 section('[9] Server startup', () => {
   const run = (env) => spawnSync(process.execPath, ['-e', `require(${JSON.stringify(join(SERVER, 'index.js'))})`], { env: { ...process.env, NODE_NO_WARNINGS: '1', DATA_DIR: tmp(), ...env }, encoding: 'utf8', timeout: 20000 });
   const off = run({ ACCOUNTS: '' });

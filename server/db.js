@@ -402,7 +402,63 @@ const MIGRATIONS = [
       BEGIN SELECT RAISE(ABORT, 'last-admin'); END;
     `,
   },
+  {
+    id: 8, name: 'deployment-identity',
+    sql: `
+      -- Which domain this database's passkeys were made for.
+      --
+      -- A passkey is bound to its RP_ID inside the authenticator — an iPhone's keychain, a laptop's
+      -- password manager, a security key — and cannot be moved. Until now nothing on this side
+      -- remembered which domain that was: RP_ID lived only in the environment, so changing it (a
+      -- rename, a redeploy that lost a character, www instead of the apex) started the server
+      -- perfectly happily and then failed every single sign-in with "that did not work". Nobody
+      -- would be told the domain had changed, and with no recovery flow built yet, a coach locked
+      -- out this way cannot get back into their account at all — only make a second one, which
+      -- re-uploads their roster as a duplicate.
+      --
+      -- So the database records it, and the server refuses to start on a mismatch. The value is
+      -- free to change while nobody has registered — that is exactly when the owner is still
+      -- deciding — and locks the moment the first real passkey exists.
+      CREATE TABLE deployment (
+        id            INTEGER PRIMARY KEY CHECK (id = 1),
+        rp_id         TEXT NOT NULL,
+        first_seen_at INTEGER NOT NULL,
+        locked_at     INTEGER
+      );
+    `,
+  },
 ];
+
+/* The domain this database's passkeys belong to — the same kind of rule as refusing a database
+   written by a newer build, and for the same reason: run the wrong one and the damage is silent.
+
+   A passkey lives in the person's authenticator bound to RP_ID and cannot be moved. RP_ID used to
+   live only in the environment, so changing it — a rename, a redeploy that dropped a character,
+   `www` instead of the apex — started the server perfectly and then failed every sign-in with a
+   flat "that did not work". Nobody was told the domain had changed, and with no recovery flow built
+   yet a coach locked out that way cannot get their account back at all: they can only make a second
+   one, which re-uploads their roster as a duplicate.
+
+   So it is written down here. It stays free to change while nobody has registered — exactly while
+   the owner is still deciding — and locks itself the moment the first real passkey exists. */
+function lockDomain(db, rpId) {
+  const now = Date.now();
+  const row = db.prepare('SELECT rp_id, locked_at FROM deployment WHERE id = 1').get();
+  const enrolled = db.prepare('SELECT count(*) AS n FROM credentials').get().n;
+  if (!row) {
+    db.prepare('INSERT INTO deployment (id, rp_id, first_seen_at, locked_at) VALUES (1, ?, ?, ?)').run(rpId, now, enrolled ? now : null);
+    return;
+  }
+  if (row.rp_id === rpId) {
+    if (enrolled && !row.locked_at) db.prepare('UPDATE deployment SET locked_at = ? WHERE id = 1').run(now);
+    return;
+  }
+  if (!enrolled) { db.prepare('UPDATE deployment SET rp_id = ?, first_seen_at = ?, locked_at = NULL WHERE id = 1').run(rpId, now); return; }
+  throw Object.assign(new Error(
+    `this database belongs to RP_ID "${row.rp_id}", but RP_ID is now "${rpId}". ${enrolled} passkey(s) are bound to ` +
+    `"${row.rp_id}" and cannot be moved — nobody would be able to sign in, and there is no way to give them their ` +
+    `account back. Put RP_ID=${row.rp_id} back, or start a new database.`), { code: 'rp-id-changed' });
+}
 
 function tx(db, fn) {
   const nested = db.isTransaction;
@@ -452,4 +508,4 @@ function open(file, { migrations = MIGRATIONS, now } = {}) {
   return db;
 }
 
-module.exports = { open, tx, migrate, MIGRATIONS };
+module.exports = { open, lockDomain, tx, migrate, MIGRATIONS };

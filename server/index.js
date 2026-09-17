@@ -67,6 +67,7 @@ let ACCOUNTS, accountsDb = null, auth = null, access = require('./access.js').op
 try {
   ACCOUNTS = require('./config.js').assertConfig();
   if (ACCOUNTS.accounts) accountsDb = require('./db.js').open(path.join(DATA_DIR, 'triibholz.db'));
+  if (accountsDb) require('./db.js').lockDomain(accountsDb, ACCOUNTS.rpId);
   if (accountsDb) auth = require('./auth.js').createAuth({ db: accountsDb, cfg: ACCOUNTS });
   access = accountsDb
     ? require('./access.js').createAccess({ db: accountsDb, auth, cfg: ACCOUNTS, clipShownTo })
