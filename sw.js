@@ -1,5 +1,5 @@
 /* Triibholz (THPLAY) service worker — offline app shell + fresh rule books. */
-const CACHE = 'triibholz-v85';
+const CACHE = 'triibholz-v86';
 const ASSETS = [
   './', './index.html',
   './css/styles.css',
@@ -7,7 +7,7 @@ const ASSETS = [
   './js/gameplan.js', './js/share.js', './js/announce.js', './js/wpmatch.js', './js/sheetdoc.js', './js/eligibility.js', './js/teamsheet.js', './js/scout.js', './js/teamsync.js', './js/teams.js', './js/api.js', './js/session.js', './js/analysis.js', './js/film.js', './js/app.js',
   './data/rules.json',
   './manifest.webmanifest',
-  './icons/icon-192.png', './icons/icon-512.png',
+  './icons/favicon-64.png', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png',
 ];
 
 /* `cache: 'reload'` is load-bearing. A plain addAll() is allowed to satisfy itself from the

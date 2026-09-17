@@ -1,6 +1,7 @@
 {
   "name": "Triibholz — Water Polo Playbook",
   "short_name": "Triibholz",
+  "id": "/",
   "description": "Water polo strategies, movement patterns, basics & live rule books.",
   "lang": "en",
   "start_url": "./",
@@ -10,8 +11,26 @@
   "background_color": "#070f17",
   "theme_color": "#0e7c86",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/favicon-64.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
