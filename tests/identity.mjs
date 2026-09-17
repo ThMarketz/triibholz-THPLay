@@ -392,6 +392,20 @@ section('[8d] The database remembers which domain its passkeys belong to', () =>
   ok('…while the domain it does belong to still starts', start('triibholz.ch').status !== 1);
   ok('…and that is recorded as locked, not merely remembered',
     !!DB.open(join(dir, 'triibholz.db')).prepare('SELECT locked_at FROM deployment WHERE id = 1').get().locked_at);
+
+  /* Turning accounts off again is an exposure, not a rollback: with ACCOUNTS unset every route
+     falls back to open access and the sign-in screen offers demo personas to the public. A restart
+     that simply loses the environment must not do that quietly. */
+  const off = spawnSync(process.execPath, ['-e', `require(${JSON.stringify(join(SERVER, 'index.js'))})`],
+    { env: { ...process.env, DATA_DIR: dir, NODE_NO_WARNINGS: '1' }, encoding: 'utf8', timeout: 20000 });
+  ok('a database that has run with accounts on refuses to start without them', off.status === 1);
+  ok('…and says what would have been served, and how to fix it', /accounts ON/.test(off.stderr)
+    && /ACCOUNTS=1/.test(off.stderr) && /move the database aside/.test(off.stderr));
+  ok('…while a genuinely fresh install is untouched by the rule', (() => {
+    const fresh = spawnSync(process.execPath, ['-e', `require(${JSON.stringify(join(SERVER, 'index.js'))})`],
+      { env: { ...process.env, DATA_DIR: tmp(), NODE_NO_WARNINGS: '1', PORT: '4401' }, encoding: 'utf8', timeout: 20000 });
+    return fresh.status !== 1;
+  })());
 });
 
 section('[9] Server startup', () => {

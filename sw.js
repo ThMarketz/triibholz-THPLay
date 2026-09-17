@@ -1,5 +1,5 @@
 /* Triibholz (THPLAY) service worker — offline app shell + fresh rule books. */
-const CACHE = 'triibholz-v84';
+const CACHE = 'triibholz-v85';
 const ASSETS = [
   './', './index.html',
   './css/styles.css',
@@ -10,14 +10,27 @@ const ASSETS = [
   './icons/icon-192.png', './icons/icon-512.png',
 ];
 
+/* `cache: 'reload'` is load-bearing. A plain addAll() is allowed to satisfy itself from the
+   browser's own HTTP cache, so a new service worker can install a new cache name filled with the
+   OLD bytes — the app then looks updated and is not, and no amount of bumping CACHE fixes it.
+   This is the trap docs/ROLLOUT_ROADMAP.md warns about, and it bit this project during testing. */
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
+      // the page that is open right now was rendered from the PREVIOUS cache: cache-first means a
+      // returning visitor always sees the old build once. Tell it, so it can offer a reload rather
+      // than leaving a coach on last week's app with no way to know.
+      .then(() => self.clients.matchAll({ type: 'window' }))
+      .then(cs => cs.forEach(c => { try { c.postMessage({ type: 'sw-updated', cache: CACHE }); } catch (err) {} }))
   );
 });
 
@@ -45,9 +58,11 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // everything else: cache-first, then network, with the shell as offline fallback
+  // everything else: cache-first, then network. The shell is the offline fallback for a NAVIGATION
+  // only — handing index.html back for a failed image, JSON or video range makes the app look like
+  // it loaded when it did not, and the caller gets HTML where it expected bytes.
   e.respondWith(
     caches.match(req).then(hit => hit || fetch(req).then(r => keep(req, r))
-      .catch(() => caches.match('./index.html')))
+      .catch(() => (req.mode === 'navigate' ? caches.match('./index.html') : Response.error())))
   );
 });

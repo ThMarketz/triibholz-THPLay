@@ -30,9 +30,9 @@ features after launch.
 
 ## Phase 0 — the domain. Do this first, and do not rush it
 
-**Recommended: `triibholz.ch`** — with `treibholz.ch` bought alongside it and redirected, if it is
-free. See "Choosing the domain" at the foot of this document for the reasoning and the
-alternatives.
+**Bought: `thplay.ch`.** Short, unambiguous to type and to dictate, and it sidesteps the spelling
+trap `triibholz.ch` would have had. Set `CANONICAL_HOST=thplay.ch` so every other hostname is
+redirected to it, and keep `RP_ID=thplay.ch` — the apex, never `www`.
 
 A passkey is bound permanently to its domain (`RP_ID`). **Change the domain later and every coach
 and every parent has to register again.** This is the one decision in the whole launch that cannot
@@ -165,6 +165,42 @@ parent channel — in that order.
 
 
 ---
+
+## The launch checklist — what a review found, and what is fixed
+
+The move to `thplay.ch` was reviewed adversarially before anything was switched on: **40 confirmed
+problems, 9 blockers, 14 of them irreversible.** The point of the review was that most of these are
+silent — the app looks healthy and the damage only appears later, after people have registered.
+
+### Fixed in the code
+
+| Was | Now |
+|---|---|
+| **RP_ID lived only in the environment.** A rename, a redeploy that dropped a character, `www` instead of the apex — the server started fine and then failed every sign-in with "that did not work". Nobody is told the domain changed, and with recovery unbuilt a locked-out coach can only make a *second* account, duplicating their roster | The database records its domain (migration 8) and refuses to open under another one once a real passkey exists. Free to change before that — which is exactly while the decision is still being made |
+| **Turning accounts back off was an exposure, not a rollback.** `ACCOUNTS` is an exact compare against `1` and compose defaults it to empty, so a reboot or a shell without the variable served every club's rosters, videos and notes to anyone, with demo sign-in on the front page | A database that has run with accounts on refuses to start without them, and says what would have been served |
+| **`www.thplay.ch` served the whole app and then refused every invite code** as `bad-origin`, because nginx answers any hostname but the Origin check knows one. It was also a second browser origin: its own storage, its own passkeys, a parallel account | `CANONICAL_HOST` 301s every other hostname to the canonical one before the app is served. `scripts/test-nginx-canonical.sh` proves it against the real image |
+| **A deploy could not reach a device that already had the app.** `addAll()` may be satisfied from the browser's own HTTP cache, so a new service worker installs a new cache name full of *old* bytes | Assets are fetched with `cache: 'reload'` on install, and the page is told when a new build takes over so it can offer a reload |
+| **Port 8088 was published on `0.0.0.0`**, so every device on the network reached the app directly — and could forge `CF-Connecting-IP` once `TRUSTED_PROXY` was set | Bound to `127.0.0.1`. The tunnel reaches the container over the Docker network |
+| The offline fallback returned the HTML shell for *any* failed request, including images and JSON | Navigations only |
+
+### Still open — do these before switching on
+
+- **`TRUSTED_PROXY` has no correct value yet.** cloudflared is not on the app's Docker network, so
+  there is nothing safe to trust. Until it is, every visitor shares one rate-limit bucket and club
+  onboarding stops at 30 accounts an hour.
+- **Cloudflare caps request bodies at 100 MB** while `/api/health` still advertises 4 GB, so a
+  video upload fails with an error that comes from the edge, not the app.
+- **Cloudflare's WAF/bot challenge on `POST /api/auth/*`** will break sign-in for some visitors.
+  Exclude those paths.
+- **Devices using the app today keep their data at the old address.** Plays, rosters, player cards
+  and film cuts are in `localhost:8088`'s storage and do not travel. Export before the move.
+- **Every calendar feed dies at the switch** — client-made tokens are refused once accounts are on.
+  Republish and hand out the new links.
+- **No backup and no rehearsed restore exist.** The first registration is when that starts to matter.
+- **Staging cannot run from this compose file** (fixed container names and ports), and it must not
+  live on a subdomain of `thplay.ch` — any subdomain is inside the passkey scope.
+
+The full findings are in the review output; this table is the actionable part.
 
 ## Choosing the domain
 

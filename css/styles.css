@@ -1413,3 +1413,7 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 .disc.under .disc-ripple{opacity:calc(0.15 + 0.5 * var(--under, 0))}
 .disc.under .disc-body{opacity:calc(1 - 0.75 * var(--under, 0));stroke-dasharray:3.2 2.6}
 .disc.under text{opacity:calc(1 - 0.85 * var(--under, 0))}
+
+/* "a new build is ready" — the page you are on came from the previous cache */
+.sw-update{position:sticky;bottom:0;z-index:60;display:flex;gap:10px;align-items:center;justify-content:center;
+  flex-wrap:wrap;padding:10px 14px;background:var(--panel2);border-top:1px solid var(--line);font-size:13.5px}

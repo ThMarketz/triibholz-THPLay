@@ -66,6 +66,13 @@ const calFile = token => access.on
 let ACCOUNTS, accountsDb = null, auth = null, access = require('./access.js').openAccess();
 try {
   ACCOUNTS = require('./config.js').assertConfig();
+  /* Turning accounts back off is not a rollback — it is an exposure. With ACCOUNTS unset every
+     route falls back to openAccess(): no session is required, every club's debriefs, videos, clips
+     and announcements are readable by anyone who can reach the server, and the app offers one-tap
+     demo personas to the public. A restart that loses the environment (a reboot, launchd, a
+     different shell, a `docker compose up` without the .env) would do exactly that, silently.
+     So: once a database has been used with accounts on, it refuses to start without them. */
+  if (!ACCOUNTS.accounts) require('./db.js').refuseSilentReopen(path.join(DATA_DIR, 'triibholz.db'));
   if (ACCOUNTS.accounts) accountsDb = require('./db.js').open(path.join(DATA_DIR, 'triibholz.db'));
   if (accountsDb) require('./db.js').lockDomain(accountsDb, ACCOUNTS.rpId);
   if (accountsDb) auth = require('./auth.js').createAuth({ db: accountsDb, cfg: ACCOUNTS });

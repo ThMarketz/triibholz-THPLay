@@ -460,6 +460,31 @@ function lockDomain(db, rpId) {
     `account back. Put RP_ID=${row.rp_id} back, or start a new database.`), { code: 'rp-id-changed' });
 }
 
+/* A database that has been run with accounts on must never be served with them off.
+
+   ACCOUNTS is an exact string compare against '1', and docker-compose defaults it to empty. A
+   restart that loses the environment therefore does not fail — it succeeds, with every club's data
+   readable by anyone and demo personas on the sign-in screen. This makes that loud. Opening the
+   file read-only avoids creating one where none existed, so a genuinely fresh install is unaffected. */
+function refuseSilentReopen(file) {
+  const fs = require('node:fs');
+  if (!fs.existsSync(file)) return;                       // no database: nothing was ever protected
+  let db;
+  try { db = new DatabaseSync(file, { readOnly: true }); } catch (e) { return; }
+  try {
+    const used = db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'deployment'").get().n;
+    if (!used) return;
+    const row = db.prepare('SELECT rp_id FROM deployment WHERE id = 1').get();
+    if (!row) return;
+    const people = db.prepare('SELECT count(*) AS n FROM credentials').get().n;
+    throw Object.assign(new Error(
+      `this database has been running with accounts ON for ${row.rp_id} (${people} passkey(s)). Starting without ` +
+      `ACCOUNTS=1 would serve every club's rosters, videos and notes to anyone who can reach this server, and offer ` +
+      `demo sign-in to the public. Set ACCOUNTS=1 (and RP_ID / APP_ORIGINS), or move the database aside first.`),
+      { code: 'accounts-were-on' });
+  } finally { try { db.close(); } catch (e) {} }
+}
+
 function tx(db, fn) {
   const nested = db.isTransaction;
   const sp = nested ? 'tx_' + (tx._n = (tx._n || 0) + 1) : null;
@@ -508,4 +533,4 @@ function open(file, { migrations = MIGRATIONS, now } = {}) {
   return db;
 }
 
-module.exports = { open, lockDomain, tx, migrate, MIGRATIONS };
+module.exports = { open, lockDomain, refuseSilentReopen, tx, migrate, MIGRATIONS };

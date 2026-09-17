@@ -4,10 +4,16 @@ services:
     image: triibholz-thplay:latest
     container_name: triibholz
     ports:
-      - "8088:80"        # open http://localhost:8088 — the API is at /api on the same address
+      # loopback only. Published on 0.0.0.0 the app is reachable from every device on the same
+      # network, which also means CF-Connecting-IP can be forged by anyone on the LAN once
+      # TRUSTED_PROXY is set — the header is only trustworthy from the tunnel. In production the
+      # tunnel reaches the container over the Docker network, not this published port.
+      - "127.0.0.1:8088:80"   # open http://localhost:8088 — the API is at /api on the same address
     environment:
       # behind a tunnel: the tunnel's own fixed address, so rate limits see real visitors (docs/ACCOUNTS.md)
       - TRUSTED_PROXY=${TRUSTED_PROXY:-}
+      # every other hostname is 301'd to this one, before the app is served (deploy/nginx-canonical-host.sh)
+      - CANONICAL_HOST=${CANONICAL_HOST:-}
     depends_on:
       - analysis
     restart: unless-stopped

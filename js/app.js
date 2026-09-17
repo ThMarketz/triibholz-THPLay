@@ -89,7 +89,7 @@
      Switched on by the server, not by the app: /api/health says whether this deployment has
      accounts. When it does, the simulated sign-in and the demo personas are not offered at all —
      a passkey is the only way in, and the club decides who gets one. */
-  let realAccounts = false, pendingCode = null;
+  let realAccounts = false, pendingCode = null, swUpdateShown = false;
   const ROLE_WORD = { admin: 'club.roleAdmin', coach: 'role.coach', trainer: 'role.trainer', player: 'role.player' };
   const codeFromHash = () => { const m = /[#&](?:invite|join)=([A-Za-z0-9-]+)/.exec(location.hash || ''); return m ? m[1] : null; };
   function showRealAuth(on) {
@@ -3870,6 +3870,18 @@
     // PWA: register the service worker when served over http(s)
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
       navigator.serviceWorker.register('sw.js').catch(()=>{});
+      /* The page you are reading was served from the previous cache — that is what cache-first
+         means. When a new build takes over, say so once, rather than leaving a coach on last
+         week's app at a pool with no way to tell. */
+      navigator.serviceWorker.addEventListener('message', e => {
+        if (!e.data || e.data.type !== 'sw-updated' || swUpdateShown) return;
+        swUpdateShown = true;
+        const bar = document.createElement('div');
+        bar.className = 'sw-update';
+        bar.innerHTML = `<span>${T('ui.newVersionReady')}</span> <button class="btn-primary sm" id="sw-reload">${T('ui.reloadNow')}</button>`;
+        document.body.appendChild(bar);
+        bar.querySelector('#sw-reload').onclick = () => location.reload();
+      });
     }
     // accounts are the server's decision: ask before offering a simulated sign-in
     if (typeof SESSION !== 'undefined') { realBoot().then(on => { if (!on) bootSimulated(); }).catch(() => bootSimulated()); return; }
