@@ -63,53 +63,74 @@ the ball goes solid.
 
 ## Where it came from, and what we may do with it
 
-Bought from **SMASHINGLOGO GmbH** (smashinglogo.com), package `tfgvkk02`, **29 December 2020**,
+Bought from **SMASHINGLOGO** (smashinglogo.com), package `tfgvkk02`, **29 December 2020**,
 PREMIUM. The receipt and the full vendor package are outside this repo, in the owner's Downloads
 (`2020/package_print_tfgvkk02`, `package_highres_tfgvkk02`, and the purchase PDF beside them).
 Font named on the receipt: *Boya* — not needed here, because this mark is icon-only and carries no
-text.
+text. At the time of purchase the vendor's own terms named "SMASHINGLOGO and its creator Georg
+Paul"; the GmbH appears only from April 2021, which is some evidence the terms were rewritten
+around an incorporation *after* this purchase.
 
-**This is a licence, not ownership, whatever the marketing says.** The Terms simultaneously state
-that the vendor retains copyright in the original design and that the buyer has "full ownership of
-the purchased design as a whole". Those cannot both be literally true. The reading consistent with
-the rest of the document — which also says rights may not be sold, assigned or transferred, and
-that no trademark or copyright "are being conveyed" — is a perpetual, non-exclusive,
-non-transferable licence. There is no signed assignment. **Do not tell an investor, an acquirer or
-a trademark examiner that we own the copyright.**
+**Which text governs.** The nearest capture of the Terms before 29 December 2020 is
+**2019-01-19**; the next is **2021-04-10**, three months *after*. So there is a 23-month gap
+around the purchase date and the exact wording in force was never read. That matters, because the
+two versions differ a great deal — and it is the later one that is friendlier to us.
 
-What that means in practice:
+### Verified in every version — 2019, 2021 and the current March-2024 text
 
-- **Commercial use is granted.** Branding a subscription product sold to clubs is fine. There is
-  no field-of-use limit, no seat cap, no SaaS carve-out and no time limit. PREMIUM is a
-  *deliverables* tier, not a rights tier — the vendor's own pricing page listed "Full Ownership"
-  identically for Lite, Business and Premium, so PREMIUM bought more files, not more rights.
-- **No attribution is required.**
-- **The icon is not exclusive to us.** It is picked from a library the Terms say is sourced from
-  third-party providers including the Noun Project. Other businesses may be using it right now.
-- **Registering the icon alone as a trademark is the weak case** — a non-exclusive stock icon
-  generally lacks the source-identifying distinctiveness registries want, and the underlying
-  rights sit with its original contributor. **Register the wordmark** (*Triibholz* / *THPLAY*)
-  first; that is where the distinctiveness is.
-- **It cannot be assigned.** If the product is ever sold, the mark does not travel with it as an
-  asset without the vendor's consent. Worth knowing now rather than during diligence.
-- **It cannot be sub-licensed.** That is the one that bites a partner-resell or white-label model:
-  letting a reseller use the mark under their own sub-licence, or shipping them the EPS, is close
-  to redistributing design resources we do not own. Get written consent first.
-- **Clearance is entirely ours.** The vendor disclaims any obligation to search, says use of the
-  third-party symbols is at our own risk, and the indemnity runs in its favour. Run an independent
-  clearance search before any trademark filing.
-- **There is a giveback.** The Terms have the buyer grant SmashingLogo a worldwide, royalty-free,
-  perpetual, non-exclusive licence to use the end product and the buyer's name for its marketing.
+These four sentences are stable across all three captures, so they were almost certainly in force:
 
-**If this mark is going to carry a paid product long-term, the clean fix is to commission a
-bespoke redraw** from a designer under a work-for-hire/assignment agreement, keeping the visual
-identity. That turns an unownable non-exclusive stock element into an asset we own, can assign and
-can register. Until then, everything above is true and nothing above stops us shipping.
+- The vendor **retains the copyright** and all associated rights to the original design.
+- The licence **does not allow** the user to sell, assign or transfer rights in the original design.
+- **No trademark, copyright or service marks are conveyed** by the licence.
+- The vendor has **no obligation to perform any clearance search** and says to run our own.
 
-**Honest limit on this research.** The Internet Archive holds no capture of the Terms between
-2015-11-20 and 2021-04-10, so the exact text in force on the purchase date was never read. The
-three decisive clauses — vendor retains copyright, no transfer of rights, no trademark conveyed —
-appear word-for-word in *both* the 2015 and the 2021 versions, which bracket the purchase, so they
-were very likely in force. The most buyer-friendly language ("any commercial or non-commercial
-purpose") is verified only from April 2021 onward, i.e. after the purchase. The live pages sit
-behind a bot challenge and were not fetched. **None of this is legal advice.**
+Also in all versions: no exclusivity clause of any kind, and — worth knowing — the vendor states
+it keeps backups of all generated logos and *regularly checks whether they appear on the internet*.
+
+### Only in the post-purchase text
+
+The 2019 version's grant is narrow: the licence "allows you to use and display the customized
+logo", and that is all. It contains **no** "any commercial or non-commercial purpose" grant, **no**
+"full ownership of the purchased design as a whole" sentence, **no** Third Party Design Resources
+section (so no Noun Project disclosure and no anti-sub-licensing clause) and **no** Hosting clause.
+All of those first appear in April 2021.
+
+So the broad commercial grant we would most like to rely on is the part that cannot be shown to
+have been in force — and equally, the sub-licensing prohibition and the marketing giveback are
+constraints that were not in force either. The terms do reserve the right to change unilaterally
+with continued use as acceptance, which cuts both ways; for a completed one-off purchase by a
+Swiss buyer that is weak authority for varying the deal retroactively. **There is no governing-law,
+venue or arbitration clause in any version**, so which law construes any of this is unresolved.
+
+What the pricing page said three weeks before the purchase does matter as a representation we
+relied on: **"Full Ownership" was advertised** — and listed identically for Lite, Business *and*
+Premium. PREMIUM bought more files, not more rights.
+
+### What to actually do
+
+- **Ship it.** It was sold as a logo for a business, advertised as full ownership, and there is no
+  field-of-use limit, seat cap or time limit in any version. Branding a subscription product for
+  clubs is within what was bought.
+- **Don't claim we own the copyright.** The vendor retains it in every version and there is no
+  signed assignment. Not to an investor, an acquirer, or a trademark examiner.
+- **Register the wordmark** — *Triibholz* / *THPLAY* — not the icon. The icon is a simple symbol
+  from a shared library; the obstacles to registering it are prior conflicting marks, the inherent
+  weakness of a plain pictogram, and a third-party copyright exposure. (Concurrent use by others
+  does not by itself defeat registrability — that was wrong in the first draft of this file.)
+- **It cannot be assigned.** This is the solid constraint, present in all three versions. If the
+  product is ever sold, the mark does not travel with it without consent. Know it now, not during
+  diligence.
+- **Before any reseller or white-label arrangement, get advice.** The prohibition on
+  sub-licensing/redistributing design resources is post-purchase text, but it is the prudent
+  assumption. Note the consent it calls for is from the **underlying rights owners** — icon
+  contributors and foundries — not from SmashingLogo, who cannot waive their rights.
+- **Clearance is ours.** Run an independent search before any filing.
+- **The clean fix, if this mark is to carry a paid product long-term:** commission a bespoke
+  redraw from a designer under a work-for-hire/assignment agreement, keeping the visual identity.
+  That turns a non-exclusive library element into an asset we own, can assign and can register.
+  The Noun Project's own guidance is that unmodified icons from its library may not be
+  trademarked, while one modified enough to form part of the final design may allow the logo to be.
+
+**None of this is legal advice.** It is a record of what the vendor's own published terms say
+across four captures, what could not be read, and which of our conclusions rest on which.
