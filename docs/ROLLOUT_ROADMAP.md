@@ -1,29 +1,132 @@
 # Rollout Roadmap — one club first, then Switzerland
 
-Goal: prove Triibholz in **one club (Schorgen pilot)**, then scale to clubs across
-**Switzerland**. This is what to add, in the order that de‑risks each step. The code
-grade and gaps it responds to are in `CODE_AUDIT.md`.
+Goal: prove Triibholz in **one club (SC Horgen pilot)**, then scale to clubs across
+**Switzerland**. Phase 0–6 below is the operational launch — what to do, in what order, to get
+real coaches and parents signed in. Phase B is the strategic step after that.
+
+> **This document was written before accounts existed and has been corrected.** Its original
+> Phase A called for "Apple + Google OAuth". That is not what was built: sign-in is **passkeys**
+> (WebAuthn), with no e-mail, no password and no third-party identity provider. Anything you read
+> elsewhere about OAuth in this project is out of date.
 
 ---
 
-## Phase A — Club pilot (Schorgen): "one club, many devices"
-*Objective: every coach and player in the club uses the same, live playbook.*
+## Where the code actually is
 
-**Must‑have (blocking)**
-1. **Real sign‑in** — Apple + Google OAuth (the buttons exist, currently simulated), sessions, and **authorization on every backend endpoint** (the analysis/calendar/insights APIs are open today).
-2. **Server‑side persistence** — plays, users, approvals, calendar, insights stored per **club (tenant)** instead of one device's localStorage; multi‑device sync; nightly backups. This is the single biggest unlock.
-3. **Hardening** — nginx security headers (CSP, X‑Frame‑Options, nosniff, HSTS), CORS scoped to the app origin, rate limiting, lock down per‑request provider bases.
-4. **Public address** — the calendar‑subscribe and analysis features need a reachable URL (LAN IP works on the club Wi‑Fi; a tunnel/hosted domain for everyone). Your cloudflared tunnel is the natural route.
-5. **Consent & privacy (FADP)** — consent capture for match video (minors!), privacy notice in DE/FR/IT, data export + delete.
+| Was blocking | Now |
+|---|---|
+| Real sign-in | **Done** — passkeys, sessions, step-up, club memberships (`docs/ACCOUNTS.md` slices 0–4) |
+| Authorization on every endpoint | **Done** — one switch, `ACCOUNTS=1`; everything answers the same 404 to anyone who may not see it |
+| Server-side persistence per club | **Done for teams and rosters** (slice 5). Sheets, templates and availability stay on the device on purpose |
+| Hardening | **Partly** — same-origin API, no CORS, `no-store`, Origin + content-type rules, rate limits. Slice 8 has the rest |
+| Public address | **Still a laptop.** See Phase 1 |
+| Consent & privacy (FADP) | **Not started.** Blocking before real rosters — see Phase 4 |
 
-**High‑value for the pilot**
-6. **Attendance / RSVP on calendar events** — players (and parents) confirm training/match presence; coach sees the squad list per event. This is the #1 daily‑use feature for clubs and the parent channel you asked about.
-7. **Notifications** — push/email for new match, changed time, cancelled training; digest for parents.
-8. **Player profiles & simple stats** — attendance %, trivia, plays studied, load from the season plan; a per‑player "know your role" list.
-9. **Coach‑to‑team messaging** on an event ("bring dark caps", "meet 17:30").
-10. **Onboarding polish** — Swiss‑German first (default `de`), club logo/colours, QR join already exists.
+Still to build: device pairing (slice 6), recovery and guardian links (slice 7), release
+hardening (slice 8). RSVP, notifications and the parent channel remain the highest-value
+features after launch.
 
-**Success criteria to leave Phase A:** 2+ coaches and the squad on the same live playbook for 6+ weeks; RSVP used for every event; zero data loss; no security findings open.
+---
+
+## Phase 0 — the domain. Do this first, and do not rush it
+
+**Recommended: `triibholz.ch`** — with `treibholz.ch` bought alongside it and redirected, if it is
+free. See "Choosing the domain" at the foot of this document for the reasoning and the
+alternatives.
+
+A passkey is bound permanently to its domain (`RP_ID`). **Change the domain later and every coach
+and every parent has to register again.** This is the one decision in the whole launch that cannot
+be undone cheaply, so it comes before hosting, before accounts, before anything.
+
+- **A dedicated domain**, not a subdomain of an unrelated site. A passkey's scope is the
+  registrable domain, so `app.some-other-site.ch` ties the club's sign-in to whatever else lives
+  there. ~CHF 15/year.
+- **No Cloudflare Access in front of the app hostname.** Passkeys *are* the sign-in. Access would
+  mean two logins, and it would break invite and join links arriving from a phone.
+- **Not a LAN IP.** Passkeys need a real domain; sign-in over `192.168.x.x` is unsupported.
+- Settle the rest of the **Owner decisions** table in `docs/ACCOUNTS.md` at the same time — age
+  threshold, session lengths, retention. They all have recommendations already.
+
+Set up a **staging hostname with its own `RP_ID`** too. Rehearsing pairing and recovery against
+production would mint real passkeys you then have to clean up.
+
+## Phase 1 — hosting that is not your laptop
+
+Today the site is a `cloudflared` container on a Mac: it is down whenever Docker is off, which is
+documented and fine for a demo, not for a season.
+
+- A small VM, the image pinned by digest, the test suites run inside it.
+- Backups off the volume (`VACUUM INTO`), restore rehearsed at least once.
+- A runbook: the hostname, DNS, certificates, and the operator CLI break-glass.
+
+## Phase 2 — turn accounts on
+
+`ACCOUNTS=1` is a single switch, and everything behind it is already authorized. It is deliberately
+all-or-nothing: a half-authorized server is worse than either state.
+
+**Invite-only is not something to build — it is what the app already is.** There is no public
+sign-up anywhere in it. The operator CLI creates the club and its first admin; every other account
+comes from a per-person invite or a team join code, and codes travel after the `#` so they stay out
+of server, proxy and tunnel logs.
+
+```
+node admin.js create-club "SC Horgen"      # prints the club id
+node admin.js club-admin-invite <club-id>  # the first admin, single use, 24 h
+node admin.js legacy                       # what predates accounts — then adopt <club-id> or forget --yes
+node admin.js demo                         # a sandbox club to look at; demo-remove when done
+```
+
+## Phase 3 — the first circle: three or four coaches
+
+Per-person staff invites, approved by their four-digit request number read out loud.
+
+Rehearse the things that actually happen, not a happy path: one coach on **two devices**; a coach
+who **loses** a device; print a real team sheet; scout a real opponent; sync a roster and take a
+player back off it. This is also where you find out whether the German wording works — the app is
+in four languages and only one of them has been read by a Swiss coach.
+
+## Phase 4 — the club
+
+Join links per team, approvals by request number, roles assigned by the club admin.
+
+**The FADP paperwork is blocking before real rosters go up**, not after:
+
+- privacy notice in DE/FR/IT/EN, naming Cloudflare as a disclosure abroad;
+- a processing agreement — the club is the controller, the operator is the processor;
+- a record of processing and a risk assessment for minors' data and match video;
+- guardian consent below the age threshold;
+- per-club export and erasure, and the retention purge.
+
+Slice 6 (device pairing) matters here: a coach with a phone *and* an iPad is the ordinary case.
+
+## Phase 5 — "install" it: the web link that behaves like an app
+
+No App Store, no developer account, no review. The app is already a PWA — `display: standalone`,
+maskable icons, Apple meta tags — so this works today:
+
+| Device | How |
+|---|---|
+| iPhone / iPad | Safari → Share → **Add to Home Screen** |
+| Mac | Safari 17+ (Sonoma) → File → **Add to Dock** |
+| Android | Chrome → **Install app** |
+
+Four things to tell people, because each one causes a support call:
+
+1. **On iOS the installed app has its own storage, separate from Safari.** Sign in *inside* the
+   installed app. Signing in in Safari does not carry over, and neither do a coach's teams.
+2. **A QR code scanned with the iPhone camera opens Safari, not the installed app.** Invite links
+   land in Safari.
+3. **WhatsApp's and Instagram's in-app browsers can fail passkey registration.** Send invites where
+   they will open in a real browser, or say "open this in Safari".
+4. **There are no push notifications.** iOS allows web push only for an installed PWA, and the app
+   has none yet — the bell updates when the app is opened. This is the one real gap versus a native
+   app, and the reason notifications sit high on the post-launch list.
+
+## Phase 6 — native apps, only if something forces it
+
+Realistically only push notifications would force it, and web push for an installed PWA closes most
+of that. A native app costs an Apple Developer membership (~USD 99/year), review, and a second
+thing to keep working. **Not planned.**
 
 ---
 
@@ -49,4 +152,54 @@ grade and gaps it responds to are in `CODE_AUDIT.md`.
 - **Romansh** is not needed (EN/DE/FR/IT covers Swiss clubs); Swiss‑German UI strings would be a nice touch.
 
 ## Sequencing summary
-Phase A items 1–3 (auth, persistence/tenancy, hardening) are the gate to *everything* else — build them first, then RSVP + notifications (the features clubs feel daily), then scale.
+
+The gate items — sign-in, authorization, per-club persistence — are **built**. What now stands
+between the code and real users is Phases 0–4: a permanent domain, hosting that is not a laptop,
+the accounts switch, a handful of coaches, and the FADP paperwork.
+
+Order matters in exactly one place: **the domain comes first**, because it is the only step that
+cannot be redone without asking every person to register again.
+
+After launch, the features clubs feel daily are RSVP on calendar events, notifications, and the
+parent channel — in that order.
+
+
+---
+
+## Choosing the domain
+
+The passkey domain is permanent in a way nothing else here is, so it is worth a paragraph.
+
+**What actually matters**
+
+1. **You will never change it.** Not "unlikely to" — changing it re-registers every person.
+2. **It must survive the club.** The roadmap is Horgen first, then Switzerland, so it must not be
+   `sc-horgen-*`. A club-specific domain would have to be abandoned exactly when things go well.
+3. **Someone reads it aloud to a parent once.** After that they arrive by clicking an invite link —
+   the code travels in the `#` fragment — so typing happens rarely. This matters less than it feels
+   like it should.
+4. It must not imply it is Swiss Aquatics or wpmatch.ch. It is neither.
+
+**The recommendation: `triibholz.ch`**
+
+The name is already everywhere — the repository, the containers, the app title, four languages of
+interface. Renaming the product is a bigger decision than choosing a domain, and it should not be
+made as a side effect of buying one.
+
+The honest objection is the spelling: a parent who hears "Triibholz" types *Treibholz*, the standard
+German word. Buy `treibholz.ch` too and redirect it — but **the redirect must never be the
+`RP_ID`**, or you have two passkey domains and people are registered on whichever they happened to
+use. One domain is the sign-in; the other is a signpost.
+
+**Alternatives, if the name is up for discussion anyway**
+
+| Domain | For | Against |
+|---|---|---|
+| `thplay.ch` | short, unambiguous to type | hard to say aloud, and means nothing to a parent |
+| `triibholz.app` | `.app` is HSTS-preloaded, so browsers refuse plain HTTP to it | less familiar than `.ch` to a Swiss club; marginal, as HTTPS is enforced anyway |
+| `triibholz.swiss` | unmistakably Swiss | `.swiss` has eligibility rules and costs more |
+
+**Availability, checked 2026-09-17 and not authoritative.** `triibholz.ch`, `thplay.ch`,
+`triibholz.app`, `thplay.app` and `triibholz.swiss` have **no nameservers**, which usually means
+free; `wasserball.ch` is taken. SWITCH blocks command-line whois, so this is a DNS inference, not a
+registry answer — confirm at <https://www.nic.ch/whois/> before buying.
