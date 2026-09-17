@@ -1406,3 +1406,10 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 .tm-scout-who{flex:1 1 220px;margin:0 0 8px}
 .tm-scout-host{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
 .tm-scout-host #tm-scout-out{flex:1 1 100%}
+
+/* a player under the surface: the disc fades and dashes, and a ring stays where they went down.
+   Depth 0..1 rides in --under, so half-under and fully hidden are visibly different. */
+.disc .disc-ripple{opacity:0}
+.disc.under .disc-ripple{opacity:calc(0.15 + 0.5 * var(--under, 0))}
+.disc.under .disc-body{opacity:calc(1 - 0.75 * var(--under, 0));stroke-dasharray:3.2 2.6}
+.disc.under text{opacity:calc(1 - 0.85 * var(--under, 0))}

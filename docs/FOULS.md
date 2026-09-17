@@ -62,3 +62,30 @@ pick the ball up. The two sanctions are not the same, and the difference is wort
 
 Possession 28 s · second possession 18 s · exclusion 18 s · quarters 8 min · 6 m line ·
 field 25 m (men and women alike).
+
+## Going under the water yourself
+
+The board can show a player **under the surface** — the "cheeky hiding" move: an attacker sinks
+behind their marker's shoulder to break the line of sight and then bursts, or ducks so a cross-pass
+travels over them to the far post. A defender does it less often, to disguise a double-team on the
+centre or to steal from underneath.
+
+**That is legal, and it is the opposite of the foul above.** Sinking *yourself* is a swimming
+decision. Holding, sinking or pulling back *an opponent* is a major foul and an 18-second exclusion
+(Art. 9.8/9.9). The two look similar on a whiteboard and are a whistle apart in the water, so the
+editor's own hint says which one it is drawing.
+
+How it is drawn, in `js/pool.js`: the disc fades and its edge goes dashed as the player goes down,
+and a ripple ring stays at the surface where they went under. Depth is a number from 0 to 1 that
+rides on the player's position (`u`), so it interpolates between steps — a player *sinks* rather
+than popping under — and it survives a share link, a `.thplay.json` export and a colleague's import.
+
+**What it deliberately does not do is animate a swimming stroke.** `js/manikin.js` states that no
+motion capture and no underwater biomechanics exist for this game anywhere in this project; the 3D
+mannequins have no legs and float at the surface. A plausible-looking underwater stroke would be the
+app asserting something nobody has measured. Depth and a ripple are what the data supports.
+
+The 3D scene does not show it yet. The mannequin model is already built for it — its origin is the
+water surface with +Y up — but the scene fills the water and *then* paints every mannequin over it,
+so a submerged body would float on top. Doing it properly means splitting the mannequins at the
+surface and adding a semi-transparent glaze pass between them.

@@ -32,7 +32,11 @@ const ANIM = (() => {
 
   function lerpPt(a, b, t) {
     if (!a) return b; if (!b) return a;
-    return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) };
+    // `u` is depth under the surface: interpolate it too, or a player would pop under rather than sink
+    const u = lerp(a.u || 0, b.u || 0, t);
+    const o = { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) };
+    if (u > 0) o.u = u;
+    return o;
   }
 
   // compute interpolated state for global progress 0..1
@@ -205,7 +209,10 @@ const ANIM = (() => {
       discEls.__ball = b;
       return b;
     }
-    function place(g, p) { g.setAttribute('transform', `translate(${p.x.toFixed(2)},${p.y.toFixed(2)})`); }
+    function place(g, p) {
+      g.setAttribute('transform', `translate(${p.x.toFixed(2)},${p.y.toFixed(2)})`);
+      POOL.setDepth(g, p && p.u);
+    }
 
     function clearPaths() { while (layers.pathLayer.firstChild) layers.pathLayer.removeChild(layers.pathLayer.firstChild); }
 

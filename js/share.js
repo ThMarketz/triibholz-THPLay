@@ -15,7 +15,12 @@ const SHARE = (() => {
   const FORMAT_PLAY = 'thplay-play', FORMAT_BOOK = 'thplay-playbook', VERSION = 1;
   const str = (v, n) => String(v == null ? '' : v).slice(0, n || 400);
   const num = v => { const x = +v; return isFinite(x) ? +x.toFixed(1) : 0; };
-  const pt = p => (p && typeof p === 'object' && p.x != null && p.y != null) ? { x: num(p.x), y: num(p.y) } : null;
+  /* `u` is how far under the surface a player is, 0 (at the surface) to 1 (hidden). It rides on the
+     point so it survives every path a play travels: a share link, a .thplay.json export, an import
+     from a colleague. A play saved before this existed simply has no `u`, which reads as 0. */
+  const depth = v => { const n = num(v); return n > 0 ? Math.min(1, Math.round(n * 100) / 100) : 0; };
+  const pt = p => (p && typeof p === 'object' && p.x != null && p.y != null)
+    ? (p.u ? { x: num(p.x), y: num(p.y), u: depth(p.u) } : { x: num(p.x), y: num(p.y) }) : null;
   const VIS = ['public', 'team', 'private'];
 
   function cleanFrame(f) {

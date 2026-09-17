@@ -210,12 +210,34 @@ const POOL = (() => {
     let fill = C('--cap-white'), stroke = C('--cap-white-edge'), txt = C('--cap-white-ink');
     if (team === 'D') { fill = C('--cap-dark'); stroke = C('--cap-dark-edge'); txt = C('--cap-dark-ink'); }
     if (team === 'GK') { fill = C('--cap-gk'); stroke = C('--cap-gk-edge'); txt = C('--cap-gk-ink'); }
-    g.appendChild(svg('circle', { r, fill, stroke, 'stroke-width': 1.3, filter: 'url(#discShadow)' }));
+    // the ripple stays at the surface when the player goes under; it is invisible until then
+    g.appendChild(svg('ellipse', { class: 'disc-ripple', rx: r * 1.7, ry: r * 0.62, fill: 'none', stroke, 'stroke-width': 0.6 }));
+    g.appendChild(svg('circle', { class: 'disc-body', r, fill, stroke, 'stroke-width': 1.3, filter: 'url(#discShadow)' }));
     const t = svg('text', { 'text-anchor': 'middle', y: small ? 1.7 : 2.1, fill: txt,
       'font-size': small ? 4.8 : 5.9, 'font-weight': 800, 'font-family': 'Helvetica, Arial, sans-serif' });
     t.textContent = labelTxt;
     g.appendChild(t);
     return g;
+  }
+
+  /* ---- a player under the surface ("cheeky hiding")
+
+     A water-polo player can sink themselves to break their marker's line of sight and then burst —
+     or duck so a cross-pass travels over them. It is legal. Sinking an OPPONENT is not: holding,
+     sinking or pulling back another player is a major foul and an 18-second exclusion (docs/FOULS.md,
+     Art. 9.8/9.9), which is why the board says which of the two it is drawing.
+
+     What it must NOT do is invent a swimming stroke. js/manikin.js says it plainly: there is no
+     motion capture and no underwater biomechanics for this game anywhere in this project. So a
+     submerged player is drawn as depth and a ripple — the disc fades and its edge goes dashed, and
+     a ring stays on the surface where they went down — never as a made-up underwater animation. */
+  function setDepth(g, u) {
+    if (!g) return;
+    const d = Math.max(0, Math.min(1, +u || 0));
+    g.classList.toggle('under', d > 0);
+    if (!d) { g.removeAttribute('data-under'); g.style.removeProperty('--under'); return; }
+    g.setAttribute('data-under', d.toFixed(2));
+    g.style.setProperty('--under', String(d));
   }
 
   function ball() {
@@ -260,6 +282,6 @@ const POOL = (() => {
     return 'water';
   }
 
-  return { VB, WATER, SUBZONE, SUB_L, EXCZONE, CORNERS, pxPerM, fromLeft, fromRight, svg, render, disc, ball,
+  return { VB, WATER, SUBZONE, SUB_L, EXCZONE, CORNERS, pxPerM, fromLeft, fromRight, svg, render, disc, ball, setDepth,
            stackPos, eventToVB, clampToWater, clampAnywhere, zoneOf };
 })();

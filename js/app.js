@@ -3342,6 +3342,45 @@
     $('ed-shot-kind').value = (f.shot && f.shot.kind) || 'shot';
     $('ed-shot-kind').disabled = !box.checked;
     $('ed-shot-label').textContent = who ? `◎ Step ${edit.idx + 1}: ${who} shoots` : '◎ Shot (needs a ball carrier)';
+    syncUnderControls();
+  }
+  /* ---- a player under the water, in this step.
+
+     Legal when a player sinks THEMSELVES — to break their marker's line of sight, or to let a pass
+     travel over them. Sinking an OPPONENT is a major foul and an 18-second exclusion (docs/FOULS.md,
+     Art. 9.8/9.9), so the hint says which one the board is drawing. Depth rides on the player's
+     point as `u`, so it interpolates between steps and survives a share link and an export. */
+  function underPlayers() {
+    const f = currentFrame(), out = [];
+    Object.keys(f.att || {}).forEach(k => out.push({ id: 'A' + k, side: 'att', k }));
+    Object.keys(f.def || {}).forEach(k => out.push({ id: 'D' + k, side: 'def', k }));
+    return out;
+  }
+  function syncUnderControls() {
+    const who = $('ed-under-who'), how = $('ed-under-how');
+    if (!who || !how) return;
+    const f = currentFrame(), list = underPlayers();
+    const keep = who.value;
+    who.innerHTML = list.map(p => `<option value="${p.id}">${p.id}</option>`).join('');
+    who.value = list.some(p => p.id === keep) ? keep : (list[0] ? list[0].id : '');
+    const sel = list.find(p => p.id === who.value);
+    const u = sel ? ((f[sel.side][sel.k] || {}).u || 0) : 0;
+    how.value = u >= 0.9 ? '1' : (u > 0 ? '0.55' : '0');
+    how.disabled = !sel;
+  }
+  function setUnderOnFrame() {
+    const who = $('ed-under-who'), how = $('ed-under-how');
+    const sel = underPlayers().find(p => p.id === who.value);
+    if (!sel) return;
+    const f = currentFrame(), pt = f[sel.side][sel.k];
+    if (!pt) return;
+    const u = +how.value || 0;
+    if (u > 0) pt.u = u; else delete pt.u;
+    DATA.save(state.scenarios);
+    const disc = edit.layers && edit.layers.discLayer
+      && edit.layers.discLayer.querySelector(`[data-team="${sel.side === 'att' ? 'A' : 'D'}"][data-label="${sel.k}"]`);
+    POOL.setDepth(disc, u);
+    drawEditorPathsRefresh();
   }
   function setShotOnFrame(on) {
     const f = currentFrame(), who = (f.shot && f.shot.by) || shooterForFrame();
@@ -3352,10 +3391,14 @@
   function addEditableDisc(layers, team, pos, pt) {
     const g = POOL.disc(team, pos); g.classList.add('editable');
     g.setAttribute('transform', `translate(${pt.x},${pt.y})`);
+    POOL.setDepth(g, pt && pt.u);
     layers.discLayer.appendChild(g);
     makeDraggable(g, $('editor-pool'), (np) => {
       const f = currentFrame();
       const map = team==='A'?f.att:team==='D'?f.def:null;
+      // a drag moves a player; it does not bring them back to the surface
+      const was = map ? map[pos] : f.gk;
+      if (was && was.u) np = Object.assign({}, np, { u: was.u });
       if (map) map[pos]=np; else f.gk=np;
       g.setAttribute('transform', `translate(${np.x},${np.y})`);
       if (f.ball.carrier === team+pos) updateBallEl(f);
@@ -3638,6 +3681,8 @@
     window.addEventListener('resize', () => { if (scene3dShown()) { resize3d(); draw3dNow(); } });
     apply3d();
     $('ed-shot').onchange = e => setShotOnFrame(e.target.checked);
+    if ($('ed-under-who')) $('ed-under-who').onchange = syncUnderControls;
+    if ($('ed-under-how')) $('ed-under-how').onchange = setUnderOnFrame;
     $('ed-shot-kind').onchange = () => { if ($('ed-shot').checked) setShotOnFrame(true); };
     document.querySelectorAll('#speed-seg [data-speed]').forEach(b => b.onclick = () => applySpeed(b.dataset.speed));
     applySpeed(savedSpeed());

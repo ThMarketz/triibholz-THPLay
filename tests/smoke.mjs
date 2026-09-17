@@ -2067,6 +2067,36 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('the goalkeeper mark prints in the PDF font (X, not a tick it cannot draw)', S.toPdf(TS.buildModel({ columns: ['nr', 'name', 'licence', 'gk'] }, data)).substituted.length === 0);
   }
 
+  console.log('\n[13b] A player under the water — depth that survives every path a play travels');
+  {
+    const { SHARE, ANIM, POOL } = window.__T;
+    const frame = u => ({ att: { 3: { x: 226, y: 110, u }, 4: { x: 234, y: 138 } }, def: { 3: { x: 242, y: 110 } },
+      gk: { x: 292, y: 110 }, ball: { carrier: 'A3' }, extra: [] });
+
+    // 1) it rides on the point, so a share link and a .thplay.json export keep it
+    const packed = SHARE.pack({ id: 'u1', title: 'Hide and burst', situation: '6v6', phase: 'offense',
+      frames: [frame(0), frame(1)], notes: {} });
+    const back = SHARE.unpack(packed).plays[0];
+    ok('a player’s depth survives being packed for a share link or an export', back.frames[1].att['3'].u === 1);
+    ok('…and a player at the surface carries nothing extra', back.frames[1].att['4'].u === undefined);
+    ok('…while a nonsense depth is clamped rather than trusted', SHARE.unpack(SHARE.pack({ id: 'u2', title: 't', situation: '6v6', phase: 'offense',
+      frames: [{ att: { 3: { x: 1, y: 1, u: 99 } }, def: {}, gk: { x: 292, y: 110 }, ball: { carrier: null }, extra: [] }], notes: {} })).plays[0].frames[0].att['3'].u === 1);
+
+    // 2) a player sinks between steps rather than popping under
+    const half = ANIM.stateAt({ frames: [frame(0), frame(1)] }, 0.5);
+    ok('a player sinks smoothly between steps', half.att['3'].u > 0 && half.att['3'].u < 1);
+    const surfaced = ANIM.stateAt({ frames: [frame(0), frame(0)] }, 0.5);
+    ok('…and a play with nobody under carries no depth at all', surfaced.att['3'].u === undefined);
+
+    // 3) the board shows it as depth and a ripple, never as an invented swimming stroke
+    const g = POOL.disc('A', '3');
+    ok('every disc carries a ripple that rests at the surface', !!g.querySelector('.disc-ripple') && !!g.querySelector('.disc-body'));
+    POOL.setDepth(g, 0.55);
+    ok('a sinking player is marked on the disc, with how far down', g.classList.contains('under') && g.getAttribute('data-under') === '0.55');
+    POOL.setDepth(g, 0);
+    ok('…and coming back up clears it completely', !g.classList.contains('under') && !g.hasAttribute('data-under'));
+  }
+
   console.log('\n[14b] An opposing squad\u2019s season figures — what is kept, and what is refused');
   {
     const W = window.__T.WPMATCH;
