@@ -359,6 +359,12 @@ const server = http.createServer(async (req, res) => {
       const who = access.requireActor(req), club = access.requireStaff(who);
       const body = await readBody(req);
       let cr; try { cr = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
+      /* Never cut a cut. It is allowed by nothing and degrades badly: crf-28 re-encoded from
+         crf-28 (below), an offset on an offset, and an id that grows ~8 characters a generation
+         until safeToken's 64-char cap truncates it — after which the ref names no file and the
+         coach gets a bare 'video-not-found'. Measured: one cut of a cut already reads
+         cut_cut_job_..._0_80_0_40.mp4. Cut from the match instead. */
+      if (/^cut_/.test(safeToken(cr.videoRef))) return send(res, 400, { error: 'cut-of-a-cut' });
       if (access.on) access.ownedVideo(who, safeToken(cr.videoRef));
       const vp = path.join(VIDEO_DIR, safeToken(cr.videoRef));
       if (!cr.videoRef || !fs.existsSync(vp)) return send(res, 404, { error: 'video-not-found' });   // an unknown video is 404 with or without ffmpeg
@@ -387,7 +393,18 @@ const server = http.createServer(async (req, res) => {
       let analysisRef = null;
       try {
         const ref = 'cut_' + id + '.mp4', vcopy = path.join(VIDEO_DIR, ref);
-        if (!fs.existsSync(vcopy)) { try { fs.linkSync(out, vcopy); } catch (e) { fs.copyFileSync(out, vcopy); } }
+        /* A hard link is atomic; a COPY is not. An interrupted copyFileSync (out of disk, container
+           killed) leaves a truncated mp4 that existsSync then treats as done for ever, and it would
+           be registered as an analysable video. Copy to a .part and rename, which is atomic on one
+           filesystem — the same shape the clip itself uses a screen above. */
+        if (!fs.existsSync(vcopy)) {
+          try { fs.linkSync(out, vcopy); }
+          catch (e) {
+            const part = vcopy + '.part';
+            try { fs.copyFileSync(out, part); fs.renameSync(part, vcopy); }
+            catch (e2) { try { fs.unlinkSync(part); } catch (_) {} throw e2; }
+          }
+        }
         access.recordAsset({ id: ref, kind: 'video', clubId: club.clubId, ownerUserId: who.userId, meta: { cutOf: safeToken(cr.videoRef), start, end } });
         analysisRef = ref;
       } catch (e) { analysisRef = null; }

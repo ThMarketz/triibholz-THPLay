@@ -2865,7 +2865,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('…and the clip keeps its own row, so a player sent that clip can still watch it',
       /access\.recordAsset\(\{ id: id \+ '\.mp4', kind: 'clip'/.test(srvSrc));
     ok('the bytes are shared, not copied twice, and a refused link still works',
-      /fs\.linkSync\(out, vcopy\)/.test(srvSrc) && /fs\.copyFileSync\(out, vcopy\)/.test(srvSrc));
+      /fs\.linkSync\(out, vcopy\)/.test(srvSrc) && /fs\.copyFileSync\(out, part\)/.test(srvSrc));
     ok('a cut that cannot be made analysable is still a cut', /analysisRef = null; \}/.test(srvSrc));
 
     const filmSrc3 = readFileSync(join(APP, 'js/film.js'), 'utf8');
@@ -2878,9 +2878,22 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
       i18nSrc.includes("'film.libServerNote'") && /stays on the club server/.test(i18nSrc));
     ok('the relabel list is the tactics the analyser itself can name', (FILM.TACTIC_IDS || []).length >= 8
       && FILM.TACTIC_IDS.every(t => i18nSrc.includes("'tac." + t + "'")));
-    ok('a cut analysed on its own reuses the match’s own calibration, not a fresh guess',
-      /calibration: \{ H: vHomography, mode: vHomography \? 'fixed' : 'auto'/.test(filmSrc3));
+    ok('a cut analysed on its own is given the field the MATCH was read with',
+      /calibration: calibrationFor\(cur\)/.test(filmSrc3));
     ok('…and waits seconds, not the half hour a whole match needs', /tries\+\+ < 90/.test(filmSrc3));
+
+    /* Found by attacking the design after it shipped. Each is small and each is real. */
+    ok('a cut cannot itself be cut — crf-28 of crf-28, and an id that outgrows safeToken',
+      /if \(\/\^cut_\/\.test\(safeToken\(cr\.videoRef\)\)\) return send\(res, 400, \{ error: 'cut-of-a-cut' \}\)/.test(srvSrc));
+    ok('a half-written copy can never be cached as an analysable video',
+      /const part = vcopy \+ '\.part'/.test(srvSrc) && /fs\.renameSync\(part, vcopy\)/.test(srvSrc));
+    ok('a full device is said out loud instead of swallowed, and the cut is not left looking saved',
+      /return true; \} catch \(e\) \{ return false; \}/.test(filmSrc3)
+      && /if \(!save\(sessions\)\) \{ s\.clips\.shift\(\); ctx\.toast\(TX\('film\.libFull'\)\)/.test(filmSrc3));
+    ok('the field a match was read with is kept, so a cut is not re-analysed against a guess',
+      /cur\.calibration = \{ H: vHomography \|\| null/.test(filmSrc3) && /const calibrationFor = s =>/.test(filmSrc3));
+    ok('…and an uncalibrated match falls back to auto rather than sending a null homography as fixed',
+      /\{ H: null, mode: 'auto', minConf: 0\.4 \}/.test(filmSrc3));
   }
 
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);

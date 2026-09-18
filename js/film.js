@@ -72,7 +72,13 @@ const FILM = (() => {
       return sessions;
     } catch (e) { return seed(); }
   }
-  function save(sessions) { try { localStorage.setItem(KEY, JSON.stringify({ sessions })); } catch (e) {} }
+  /* Returns false when the write did not happen. It used to swallow that: on a full store the
+     library would look saved and simply not be there next time, which is worse than an error.
+     Measured, a cut's kept analysis is ~3 KB and the 60-cut cap ~180 KB, about 3.5% of a 5 MB
+     store — so this is the unlucky case, not the normal one, and it must still be said out loud. */
+  function save(sessions) {
+    try { localStorage.setItem(KEY, JSON.stringify({ sessions })); return true; } catch (e) { return false; }
+  }
 
   /* ---------------- uploaded videos (IndexedDB blobs) ---------------- */
   function idb() {
@@ -608,6 +614,11 @@ const FILM = (() => {
       while (st !== 'done' && st !== 'error' && tries++ < 900) { await new Promise(r => setTimeout(r, 2000)); j = await (await API.fetch(base + '/api/jobs/' + id)).json(); st = j.status; }
       if (st !== 'done') throw new Error(j && j.error ? 'scout-' + j.error : 'timed-out');
       const result = await (await API.fetch(base + '/api/jobs/' + id + '/result')).json();
+      // keep the field the match was read with: vHomography is module state that openSession()
+      // clears, so without this "analyse a cut with the parent's calibration" has nothing to read
+      // after a reload and silently drops back to guessing
+      cur.calibration = { H: vHomography || null, mode: (root.querySelector('#film-moving') || {}).checked ? 'auto' : 'fixed' };
+      save(sessions);
       renderScout(result.scout, result);
       setScoutStatus(TX('film.statusDone'), 'cloud'); ctx.toast(TX('film.scoutingReportReady'));
     } catch (e) {
@@ -1148,7 +1159,8 @@ const FILM = (() => {
   function saveCut(s, cut) {
     (s.clips || (s.clips = [])).unshift(cut);
     if (s.clips.length > 60) s.clips.length = 60;   // a season of cuts, not an unbounded store
-    save(sessions);
+    if (!save(sessions)) { s.clips.shift(); ctx.toast(TX('film.libFull')); return false; }
+    return true;
   }
 
   /* What one cut actually shows. The pipeline still splits a short clip into possessions, so take
@@ -1168,10 +1180,18 @@ const FILM = (() => {
     };
   }
 
+  /* The field this match was read with — the live one if the coach has just found it, otherwise
+     the one kept from the last scout. Falls back to 'auto', which is what a cut of an uncalibrated
+     match needs anyway. */
+  const calibrationFor = s => {
+    if (vHomography) return { H: vHomography, mode: 'fixed', minConf: 0.4 };
+    const c = s && s.calibration;
+    return c && c.H ? { H: c.H, mode: c.mode || 'fixed', minConf: 0.4 } : { H: null, mode: 'auto', minConf: 0.4 };
+  };
   async function runJob(videoRef, onStatus) {
     const base = scoutBase();
     const job = await API.fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ videoRef, calibration: { H: vHomography, mode: vHomography ? 'fixed' : 'auto', minConf: 0.4 },
+      body: JSON.stringify({ videoRef, calibration: calibrationFor(cur),
         scout: true, us: (root.querySelector('#scout-us') || {}).value || 'white', opts: { fps: 6, chunkSec: 20 } }) });
     if (!job.ok) throw new Error('job-' + job.status);
     const { id } = await job.json();
