@@ -91,13 +91,58 @@ const FILM = (() => {
       rq.onerror = () => rej(rq.error);
     });
   }
+  /* WHEN a blob arrived, which IndexedDB does not record and a Blob does not carry. Kept in
+     localStorage rather than a second object store, because adding one means a version bump, and
+     an upgrade blocked by a second open tab hangs the Film Room on first use.
+     A blob with no entry is not deleted on sight — it is stamped NOW and given a full season from
+     first sight, so losing this map costs a season's delay, never somebody's match. */
+  const VIDEO_AT = 'thplay.filmvideos.v1';
+  const videoAt = () => { try { return JSON.parse(localStorage.getItem(VIDEO_AT)) || {}; } catch (e) { return {}; } };
+  const saveVideoAt = m => { try { localStorage.setItem(VIDEO_AT, JSON.stringify(m)); } catch (e) {} };
+
   async function putVideo(key, blob) {
     const db = await idb();
+    const m = videoAt(); m[key] = Date.now(); saveVideoAt(m);
     return new Promise((res, rej) => {
       const tx = db.transaction('videos', 'readwrite');
       tx.objectStore('videos').put(blob, key);
       tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
     });
+  }
+  async function dropVideo(key) {
+    const db = await idb();
+    const m = videoAt(); delete m[key]; saveVideoAt(m);
+    return new Promise(res => {
+      const tx = db.transaction('videos', 'readwrite');
+      tx.objectStore('videos').delete(key);
+      tx.oncomplete = () => res(true); tx.onerror = () => res(false);
+    });
+  }
+
+  /* The other half of the retention promise. server/retention.js deletes match video after a
+     season; without this the same footage sits in a coach's browser for ever and the promise is
+     only half true — and on a shared club iPad that is the half that matters.
+     ORPHANS go sooner: a blob whose match no longer exists cannot be reached from any screen, so
+     it is storage nobody can see holding video of children. A week's grace guards against racing a
+     match that is still being created. */
+  const ORPHAN_GRACE_DAYS = 7;
+  async function sweepVideos(days) {
+    if (!days) return { removed: [], kept: 0 };
+    const keys = (await videoList()).map(v => v.key);
+    if (!keys.length) return { removed: [], kept: 0 };
+    const live = new Set((load() || []).map(s => 'film-' + s.id));
+    const m = videoAt(), now = Date.now(), DAY = 86400000;
+    const removed = [];
+    let dirty = false;
+    for (const k of keys) {
+      if (m[k] == null) { m[k] = now; dirty = true; continue; }        // first sight: a full season from here
+      const orphan = !live.has(k);
+      const limit = (orphan ? Math.min(ORPHAN_GRACE_DAYS, days) : days) * DAY;
+      if (now - m[k] < limit) continue;
+      if (await dropVideo(k)) removed.push(k);
+    }
+    if (dirty) saveVideoAt(m);
+    return { removed, kept: keys.length - removed.length };
   }
   /* Which uploaded matches this device holds — names and sizes, for the "take everything with me"
      file, which lists them rather than carrying them (js/device.js says why). */
@@ -1591,8 +1636,19 @@ const FILM = (() => {
     verdict = null; pickZone = ''; pickOrigin = null;
     wireCut(main, sessions, s);
     wireLibrary(main, s);
-    // the row cannot say what it has left until the window is known; redraw once it is
-    if (retentionDays === null && (s.clips || []).length) retention().then(d => { if (d && cur === s) renderSession(); });
+    /* Ask the club server how long it keeps things, then apply the same window HERE. The sweep is
+       deliberately after the panel has drawn: a coach opening the Film Room should not wait on it,
+       and if it takes something away they are told rather than left to notice. */
+    if (retentionDays === null) {
+      retention().then(async d => {
+        if (cur === s) renderSession();
+        if (!d) return;
+        try {
+          const r = await sweepVideos(d);
+          if (r.removed.length) { ctx.toast(TX('film.videosExpired', { n: r.removed.length })); if (cur === s) renderSession(); }
+        } catch (e) {}
+      });
+    }
     wireEdit(main, s);
     main.querySelector('#film-mark').onclick = () => {
       const t = currentTime();
@@ -1639,5 +1695,5 @@ const FILM = (() => {
     };
   }
 
-  return { render, load, parseSource, ZONE_HINTS, videoList, _insights: insights, motionScan, teamOf, _errorReason: errorReason, _serverReasons: SERVER_REASONS, _readOfCut: readOfCut, TACTIC_IDS };
+  return { render, load, parseSource, ZONE_HINTS, videoList, _insights: insights, motionScan, teamOf, _errorReason: errorReason, _serverReasons: SERVER_REASONS, _readOfCut: readOfCut, TACTIC_IDS, _sweepVideos: sweepVideos, _videoAtKey: 'thplay.filmvideos.v1' };
 })();

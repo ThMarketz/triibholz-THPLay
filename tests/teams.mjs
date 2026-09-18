@@ -388,5 +388,44 @@ await section('[14] Accounts off, and the shape of the module', async () => {
   ok('…nor is one that quietly dropped a player', !TEAMSYNC.manifestOk({ localId: 't1', players: [{ licence: '50101' }, { licence: '50102' }] }, { team: { localId: 't1', id: 'ct_x' }, players: [{ licence: '50101', id: 'cp_1' }] }));
 });
 
+await section('[15] Forgetting a player — erasure, not removal', async () => {
+  /* Taking a player off a list keeps the row, which is right for a child who changed club. It is
+     NOT what a parent asking for their daughter's data to be deleted is entitled to, and both the
+     revised FADP and the GDPR give them that. A rostered child is not a user, so deleteUser never
+     reached them and club_players only cascades from the CLUB — the app could not do it at all. */
+  const mk = await up(A.coach, A, team('tf', { name: 'U12 forget', category: 'U12', players: [P('50901', 'Erste'), P('50902', 'Zweite')] }));
+  const teamId = mk.json.team.id;
+  const r = await A.coach.get(`${A.base}/teams/${teamId}`);
+  const her = r.json.players.find(p => p.licence === '50901');
+  const other = r.json.players.find(p => p.licence === '50902');
+
+  ok('a coach cannot erase a child — it is irreversible, so it is the admin’s',
+    (await A.coach.post(`${A.base}/players/${her.id}/forget`, {})).status === 404);
+
+  await A.admin.stepUp();
+  const gone = await A.admin.post(`${A.base}/players/${her.id}/forget`, {});
+  ok('an admin with a fresh step-up can', gone.status === 200 && gone.json.forgotten === true);
+  ok('…and the player row is really gone, not flagged', !db.prepare('SELECT 1 FROM club_players WHERE id = ?').get(her.id));
+  ok('…with every team row she was on', !db.prepare('SELECT 1 FROM club_team_players WHERE club_player_id = ?').get(her.id) && gone.json.teamRows >= 1);
+  ok('…and nobody else on her team was touched', !!db.prepare('SELECT 1 FROM club_players WHERE id = ?').get(other.id));
+
+  /* An erasure record that re-recorded the name would be the thing it was asked to undo. */
+  const line = db.prepare("SELECT detail FROM audit WHERE action = 'player.forget' ORDER BY at DESC LIMIT 1").get();
+  ok('the audit line says it happened without writing her name down again',
+    line && /cp_/.test(line.detail) && !/Erste/.test(line.detail));
+
+  ok('erasing her twice is not a second success', (await A.admin.post(`${A.base}/players/${her.id}/forget`, {})).status === 404);
+  ok('another club cannot erase this club’s child', (await B.admin.post(`${B.base}/players/${other.id}/forget`, {})).status === 404);
+
+  /* The honest limit, said out loud rather than implied away: nobody can erase one child from
+     footage of a match, and the app deliberately holds no index of who appears in which video —
+     building one would mean face-matching children, which is worse than the problem. */
+  ok('the answer says what happens to video rather than implying it went too', gone.json.video === 'season-schedule');
+
+  await A.admin.stepUp();
+  ok('a player id from another club is not found here',
+    (await A.admin.post(`${A.base}/players/cp_AAAAAAAAAAAAAAAAAAAAAA/forget`, {})).status === 404);
+});
+
 S.close();
 console.log(`\n==== ${pass} passed, ${fail} failed ====`);

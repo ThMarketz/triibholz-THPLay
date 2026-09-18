@@ -2971,6 +2971,26 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
       /maybe\.format === DEVICE\.FORMAT\) return void await deviceRestore/.test(readFileSync(join(APP, 'js/app.js'), 'utf8')));
     ok('the module is precached, so the move works on a device that is already offline',
       readFileSync(join(APP, 'sw.js'), 'utf8').includes('./js/device.js'));
+
+    /* The other half of the retention promise. server/retention.js expires match video after a
+       season; without the same window HERE the footage sits in a coach's browser for ever and the
+       promise is only half true — and on a shared club iPad that is the half that matters.
+       jsdom has no IndexedDB, so the rules are asserted rather than the store driven. */
+    const fsrc = readFileSync(join(APP, 'js/film.js'), 'utf8');
+    ok('the device applies the same window the club server reports, not one of its own',
+      /const r = await sweepVideos\(d\)/.test(fsrc) && /retentionDays = \+h\.retentionDays/.test(fsrc));
+    ok('a blob with no recorded arrival is stamped, never deleted on sight',
+      /if \(m\[k\] == null\) \{ m\[k\] = now; dirty = true; continue; \}/.test(fsrc));
+    ok('…so losing that record costs a season’s delay, not somebody’s match',
+      /a full season from\s+first sight/.test(fsrc));
+    ok('a blob whose match no longer exists goes sooner — nothing can reach it, and it is still video of children',
+      /const orphan = !live\.has\(k\)/.test(fsrc) && /ORPHAN_GRACE_DAYS = 7/.test(fsrc));
+    ok('putting a video down records when, and taking it away forgets when',
+      /m\[key\] = Date\.now\(\); saveVideoAt\(m\)/.test(fsrc) && /delete m\[key\]; saveVideoAt\(m\)/.test(fsrc));
+    ok('the coach is told what went rather than finding out by its absence', fsrc.includes("film.videosExpired"));
+    ok('…and the sweep never makes them wait for the screen', /retention\(\)\.then\(async d => \{[\s\S]{0,120}renderSession\(\);/.test(fsrc));
+    ok('the arrival record travels with a device move, because it shares the prefix',
+      DEVICE.isOurs(FILM._videoAtKey) && DEVICE.kind(FILM._videoAtKey) === 'work');
   }
 
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);

@@ -347,6 +347,38 @@ function routes(core) {
     send(res, 200, out);
   }
 
+  /* ---- forget a player: erasure, not removal ----
+     Removing a player from a team keeps the row with removed_at set, which is right for a child who
+     changed club and whose history the coach still needs. It is NOT what a parent asking for their
+     daughter's data to be deleted is entitled to, and both the revised FADP and the GDPR give them
+     that. Until now the app could not do it at all: a rostered child is not a user, so deleteUser
+     does not reach them, and club_players only cascades from the CLUB.
+
+     This deletes the child outright — every team row, then the player. Admin only, and a step-up,
+     because it is irreversible and there is no undo anywhere.
+
+     WHAT IT HONESTLY CANNOT DO is reach inside a match video. Nobody can erase one child from
+     footage of a match, and the app does not know which videos a given child appears in — no such
+     index exists, and building one would mean face-matching children, which would be far worse than
+     the problem. So the answer given back says plainly that video is deleted on the season schedule
+     (server/retention.js) and that a specific match can be deleted early on request. Saying that is
+     the honest position; implying the video went too would not be. */
+  async function forgetPlayer(req, res, clubId, playerId) {
+    const t = now(), s = requireSession(req);
+    const out = tx(db, () => {
+      guard(s, clubId, { roles: ['admin'], stepUp: true }, t);
+      const p = db.prepare('SELECT id FROM club_players WHERE id = ? AND club_id = ?').get(playerId, clubId);
+      if (!p) throw httpError(404, 'not-found');
+      const teams = db.prepare('DELETE FROM club_team_players WHERE club_player_id = ?').run(playerId).changes;
+      const gone = db.prepare('DELETE FROM club_players WHERE id = ? AND club_id = ?').run(playerId, clubId).changes;
+      if (gone !== 1) throw httpError(409, 'not-forgotten');
+      // ids only, like every other audit line: an erasure record must not re-record the name
+      ID.audit(db, { actor: s.userId, action: 'player.forget', clubId, detail: { player: playerId, teams } }, t);
+      return { forgotten: true, teamRows: teams };
+    });
+    send(res, 200, Object.assign(out, { video: 'season-schedule' }));
+  }
+
   /* Who else may work on this team. An admin's decision and a step-up, because it hands someone a
      club's children's names — the same weight as changing a role. */
   async function staff(req, res, clubId, teamId) {
@@ -419,6 +451,7 @@ function routes(core) {
     ['POST', new RegExp(`^/api/clubs/${CLUB}/teams/${TEAM}/staff$`), staff],
     ['POST', new RegExp(`^/api/clubs/${CLUB}/teams/${TEAM}/members$`), members],
     ['POST', new RegExp(`^/api/clubs/${CLUB}/teams/${TEAM}/delete$`), remove],
+    ['POST', new RegExp(`^/api/clubs/${CLUB}/players/${PLAYER}/forget$`), forgetPlayer],
   ];
 }
 

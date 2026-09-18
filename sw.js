@@ -3,7 +3,7 @@
    worker only refills its cache when this string changes, so tying it to the bytes means a changed
    asset can never ship behind an unchanged cache name — which is how new icons nearly went out
    while every installed app kept the old ones. The vNN in front is for reading in devtools. */
-const ASSET_STAMP = '807e17b0e5b7';
+const ASSET_STAMP = '110a08bf118c';
 const CACHE = 'triibholz-v87-' + ASSET_STAMP;
 const ASSETS = [
   './', './index.html',
