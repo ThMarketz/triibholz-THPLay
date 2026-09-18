@@ -507,6 +507,7 @@ function createAuth({ db, cfg, now = Date.now }) {
     ['POST', /^\/api\/auth\/stepup\/verify$/, stepUpVerify],
     ...require('./clubs.js').routes(core),
     ...require('./teams.js').routes(core),
+    ...require('./legal.js').routes(core),
   ];
 
   /* identity errors → HTTP; a thing that does not exist, or that this person may not see, is one 404 */

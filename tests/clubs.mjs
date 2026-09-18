@@ -512,6 +512,119 @@ await section('[12] Fixes from the adversarial review', async () => {
   ok('an admin of another club gets byte-identical 404s: real club, no club, no member, real member', [a1, a2, a3, a4].every(r => r.status === 404 && r.text === a1.text));
 });
 
+await section('[13] What was agreed to, and proving which text that was', async () => {
+  const LEGAL = require('../js/legal.js');
+  const C = await newClub('Agreement FC');
+
+  const idx = await C.admin.get('/api/legal');
+  ok('the deployment publishes its documents with a version each', idx.status === 200 && idx.json.docs.length >= 3
+    && idx.json.docs.every(d => LEGAL.VERSION_RE.test(d.version)));
+  ok('…and says which bind the club and which are personal',
+    idx.json.docs.find(d => d.id === 'terms').scope === 'club' && idx.json.docs.find(d => d.id === 'privacy').scope === 'personal');
+  ok('…and that they are still drafts, rather than implying a lawyer has read them',
+    idx.json.docs.every(d => d.status === 'draft'));
+
+  const terms = await C.admin.get('/api/legal/terms?lang=en');
+  ok('a document can be read, with the version and the hash of the exact text', terms.status === 200
+    && terms.json.text.includes('Terms of Service') && /^[0-9a-f]{64}$/.test(terms.json.sha256));
+
+  /* The app may ask for German before a German text exists. English appears on screen, so English
+     is what the record must say — "she accepted the German version" has to be true or not said. */
+  const de = await C.admin.get('/api/legal/privacy?lang=de');
+  ok('asking for a language with no translation yet returns English AND says so',
+    de.status === 200 && de.json.lang === 'en' && de.json.askedFor === 'de');
+
+  const v = idx.json.docs.find(d => d.id === 'terms').version;
+  const acc = await C.admin.post('/api/legal/accept', { doc: 'terms', version: v, lang: 'en', clubId: C.clubId });
+  ok('an admin can accept for the club', acc.status === 200 && acc.json.accepted.doc === 'terms');
+  const row = db.prepare("SELECT * FROM acceptances WHERE doc = 'terms'").get();
+  ok('…and the row carries the version, the hash and the language actually shown',
+    row.version === v && /^[0-9a-f]{64}$/.test(row.sha256) && row.lang === 'en' && row.scope === 'club');
+  ok('…and it is bound to the club, not only to the person who clicked', row.club_id === C.clubId);
+
+  ok('accepting the same version twice is the same fact, not a second one',
+    (await C.admin.post('/api/legal/accept', { doc: 'terms', version: v, lang: 'en', clubId: C.clubId })).status === 200
+    && count('acceptances', "doc = 'terms'") === 1);
+
+  /* The refusal that keeps the record worth having: a version this server does not serve means
+     the person read something else — an old tab, a cached page, a replayed request. */
+  const stale = await C.admin.post('/api/legal/accept', { doc: 'terms', version: '2020-01-01+deadbeef', lang: 'en', clubId: C.clubId });
+  ok('a version this deployment does not serve is refused, not recorded', stale.status === 409);
+  ok('…and a document nobody publishes is refused too',
+    (await C.admin.post('/api/legal/accept', { doc: 'invented', version: v, lang: 'en', clubId: C.clubId })).status === 400);
+  ok('…and a language nobody could have read it in', 
+    (await C.admin.post('/api/legal/accept', { doc: 'terms', version: v, lang: 'zz', clubId: C.clubId })).status === 400);
+
+  /* "She accepted the German version" has to be true or not said at all. Until a German text
+     exists, asking for German puts ENGLISH on screen — so English is what the row must say. */
+  const pv = idx.json.docs.find(d => d.id === 'privacy').version;
+  const deAcc = await C.admin.post('/api/legal/accept', { doc: 'privacy', version: pv, lang: 'de', clubId: C.clubId });
+  ok('accepting "in German" while English is on screen records ENGLISH',
+    deAcc.status === 200 && deAcc.json.accepted.lang === 'en'
+    && db.prepare("SELECT lang FROM acceptances WHERE doc = 'privacy'").get().lang === 'en');
+
+  const outstanding = acc.json.outstanding;
+  ok('an admin is told what is still owed, by name, not "you must accept something"',
+    outstanding.some(x => x.doc === 'dpa' && !x.accepted) && outstanding.find(x => x.doc === 'terms').accepted === true);
+
+  /* A coach is bound personally, not on the club's behalf. A club document is the club's to bind. */
+  const inv = await invite(C, 'coach', 'Coach');
+  const coach = dev(); await coach.register(inv.code, 'A Coach');
+  const cp = await pendingOf(C, 'A Coach');
+  ID.decideRequest(db, { clubId: C.clubId, memberRef: cp.memberRef, requestNo: cp.requestNo, approve: true, actor: 'test' }, Date.now());
+  const cOut = (await coach.get(`/api/legal/mine?club=${C.clubId}`)).json;
+  ok('a coach owes the privacy notice and no club document', cOut.outstanding.length === 1 && cOut.outstanding[0].doc === 'privacy');
+  ok('a coach cannot bind the club to its terms',
+    (await coach.post('/api/legal/accept', { doc: 'terms', version: v, lang: 'en', clubId: C.clubId })).status === 404);
+
+  /* A player is often a CHILD, and a child's tick is not consent. The app records nothing from
+     them; the club warrants a parent agreed, which is what the club's acceptance is for. */
+  const jc = await joinCode(C);
+  const player = dev(); await player.register(jc.code, 'A Player');
+  const pp = await pendingOf(C, 'A Player');
+  ID.decideRequest(db, { clubId: C.clubId, memberRef: pp.memberRef, requestNo: pp.requestNo, approve: true, actor: 'test' }, Date.now());
+  const pOut = (await player.get(`/api/legal/mine?club=${C.clubId}`)).json;
+  ok('a player is asked to accept nothing at all — a child’s tick is not consent', pOut.outstanding.length === 0);
+
+  /* THE POINT OF VERSIONING, end to end. The first lawyer to read these will change them, and an
+     acceptance of last month's text is not an acceptance of this month's. */
+  db.prepare(`INSERT INTO acceptances (id, user_id, club_id, doc, version, sha256, lang, scope, accepted_at)
+              VALUES ('ac_old', ?, ?, 'dpa', '2026-01-01+00000000', ?, 'en', 'club', ?)`)
+    .run(userId('Admin of Agreement FC'), C.clubId, 'f'.repeat(64), Date.now() - 90 * DAY);
+  const after = (await C.admin.get(`/api/legal/mine?club=${C.clubId}`)).json.outstanding;
+  const dpa = after.find(x => x.doc === 'dpa');
+  ok('a document that changed since it was accepted is STALE, not simply unaccepted',
+    dpa.accepted === true && dpa.stale === true && dpa.acceptedVersion === '2026-01-01+00000000');
+  ok('…and the older acceptance is kept, because it is evidence of what was agreed then',
+    count('acceptances', "doc = 'dpa' AND version = '2026-01-01+00000000'") === 1);
+  const nowV = (await C.admin.get('/api/legal')).json.docs.find(d => d.id === 'dpa').version;
+  const re = await C.admin.post('/api/legal/accept', { doc: 'dpa', version: nowV, lang: 'en', clubId: C.clubId });
+  ok('re-accepting the current text clears it', re.status === 200 && !re.json.outstanding.find(x => x.doc === 'dpa').stale);
+  ok('…and both versions are on the record, so "what did they agree to, and when" has two answers',
+    count('acceptances', "doc = 'dpa'") === 2);
+
+  /* An erasure must not destroy the club's contract record: the row survives, naming nobody.
+     A club must keep an admin, so a second one exists before the first is erased. */
+  const inv2 = await invite(C, 'admin', 'Second admin');
+  const admin2 = dev(); await admin2.register(inv2.code, 'Second Admin');
+  const a2p = await pendingOf(C, 'Second Admin');
+  if (a2p) ID.decideRequest(db, { clubId: C.clubId, memberRef: a2p.memberRef, requestNo: a2p.requestNo, approve: true, actor: 'test' }, Date.now());
+  const adminId = userId('Admin of Agreement FC');
+  db.prepare('DELETE FROM users WHERE id = ?').run(adminId);
+  ok('erasing the person who clicked leaves the club’s agreement standing, with no name on it',
+    count('acceptances', "doc = 'dpa' AND club_id = ?", C.clubId) === 2
+    && db.prepare("SELECT user_id FROM acceptances WHERE doc = 'dpa' LIMIT 1").get().user_id === null);
+
+  ok('the manifest is built from the documents, so a text cannot change without its version moving',
+    (() => {
+      const man = require('../server/legal.js').load();
+      const crypto = require('node:crypto'), fs2 = require('node:fs');
+      return Object.entries(man.docs).every(([id, d]) =>
+        d.version.endsWith(crypto.createHash('sha256')
+          .update(fs2.readFileSync(new URL(`../legal/${id}.en.md`, import.meta.url), 'utf8')).digest('hex').slice(0, 8)));
+    })());
+});
+
 S.close();
 console.log(`\n==== ${pass} passed, ${fail} failed ====`);
 process.exit(fail ? 1 : 0);

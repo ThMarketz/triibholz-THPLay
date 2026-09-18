@@ -3,13 +3,13 @@
    worker only refills its cache when this string changes, so tying it to the bytes means a changed
    asset can never ship behind an unchanged cache name — which is how new icons nearly went out
    while every installed app kept the old ones. The vNN in front is for reading in devtools. */
-const ASSET_STAMP = '110a08bf118c';
+const ASSET_STAMP = '0f062e8eb77b';
 const CACHE = 'triibholz-v87-' + ASSET_STAMP;
 const ASSETS = [
   './', './index.html',
   './css/styles.css',
   './js/theme.js', './js/i18n.js', './js/help.js', './js/draft.js', './js/commands.js', './js/solver.js', './js/qr.js', './js/fx.js', './js/pool.js', './js/data.js', './js/animate.js', './js/vision.js', './js/field.js', './js/shot.js', './js/testlog.js', './js/chart.js', './js/manikin.js', './js/track.js', './js/bytetrack.js', './js/events.js', './js/webdetector.js', './js/videogen.js', './js/calendar.js', './js/planner.js', './js/privacy.js', './js/tactics.js',
-  './js/gameplan.js', './js/device.js', './js/share.js', './js/announce.js', './js/wpmatch.js', './js/sheetdoc.js', './js/eligibility.js', './js/teamsheet.js', './js/scout.js', './js/teamsync.js', './js/teams.js', './js/api.js', './js/session.js', './js/analysis.js', './js/film.js', './js/app.js',
+  './js/gameplan.js', './js/legal.js', './js/device.js', './js/share.js', './js/announce.js', './js/wpmatch.js', './js/sheetdoc.js', './js/eligibility.js', './js/teamsheet.js', './js/scout.js', './js/teamsync.js', './js/teams.js', './js/api.js', './js/session.js', './js/analysis.js', './js/film.js', './js/app.js',
   './data/rules.json',
   './manifest.webmanifest',
   './icons/favicon-64.png', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png',

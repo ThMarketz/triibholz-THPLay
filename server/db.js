@@ -427,6 +427,42 @@ const MIGRATIONS = [
       );
     `,
   },
+  {
+    id: 9, name: 'what-was-agreed-to',
+    sql: `
+      -- What somebody agreed to, and enough to prove which text that was.
+      --
+      -- A tick-box recording "accepted: yes" is worth nothing the moment a document changes, and
+      -- the first lawyer to read these will change them. The question a club, a parent or a court
+      -- actually asks is "what did they agree to" — so the row carries the VERSION and the SHA256
+      -- of the exact text, and js/legal.js derives a version from the text itself so the two can
+      -- never drift apart.
+      --
+      -- user_id is SET NULL rather than CASCADE on purpose. An acceptance is evidence that a club
+      -- entered into an agreement; a coach later leaving, or being erased, does not un-happen it,
+      -- and destroying the club's contract record to honour one person's erasure would be the
+      -- wrong trade. The row that remains says a version was accepted for a club at a time, and
+      -- names nobody. club_id DOES cascade: when the club goes, so does its agreement.
+      --
+      -- scope says who was bound. 'club' is an admin accepting for the club as a legal entity;
+      -- 'personal' is a coach being told how the data they handle is used. A PLAYER accepts
+      -- nothing — a child's tick is not consent, and the club warrants a parent agreed instead.
+      CREATE TABLE acceptances (
+        id          TEXT PRIMARY KEY,
+        user_id     TEXT REFERENCES users(id) ON DELETE SET NULL,
+        club_id     TEXT REFERENCES clubs(id) ON DELETE CASCADE,
+        doc         TEXT NOT NULL CHECK (length(doc) BETWEEN 2 AND 20),
+        version     TEXT NOT NULL CHECK (length(version) BETWEEN 8 AND 40),
+        sha256      TEXT NOT NULL CHECK (length(sha256) = 64),
+        lang        TEXT NOT NULL CHECK (length(lang) = 2),
+        scope       TEXT NOT NULL CHECK (scope IN ('club', 'personal')),
+        accepted_at INTEGER NOT NULL
+      );
+      -- accepting the same version twice is the same fact, not a second one
+      CREATE UNIQUE INDEX acceptances_once ON acceptances(user_id, club_id, doc, version);
+      CREATE INDEX acceptances_club ON acceptances(club_id, doc);
+    `,
+  },
 ];
 
 /* The domain this database's passkeys belong to — the same kind of rule as refusing a database

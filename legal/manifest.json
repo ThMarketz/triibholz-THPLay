@@ -1,0 +1,37 @@
+{
+ "docs": {
+  "dpa": {
+   "version": "2026-09-18+79491a75",
+   "status": "draft",
+   "langs": {
+    "en": {
+     "sha256": "79491a756de9b26e3342b52e4368726e17bb831581a201200d020995b8bd7c4d",
+     "bytes": 1998,
+     "date": "2026-09-18"
+    }
+   }
+  },
+  "privacy": {
+   "version": "2026-09-18+9827495b",
+   "status": "draft",
+   "langs": {
+    "en": {
+     "sha256": "9827495b5044e01678b38a9de9d9cfc9cfdf906bc991983df0df6c4dcd8890d5",
+     "bytes": 3426,
+     "date": "2026-09-18"
+    }
+   }
+  },
+  "terms": {
+   "version": "2026-09-18+c11dbf97",
+   "status": "draft",
+   "langs": {
+    "en": {
+     "sha256": "c11dbf976322efa9fb9b7804dd4ecce898bfacbde7f225658537d38bd6e5d96c",
+     "bytes": 2313,
+     "date": "2026-09-18"
+    }
+   }
+  }
+ }
+}

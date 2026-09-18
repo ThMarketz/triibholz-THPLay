@@ -93,6 +93,7 @@ cd tests && npm install          # once
 | `node tests/browser.mjs` | real Firefox, real mouse drags, desktop + 375 px (app on :8088) | 187 |
 | `python3 scripts/build-icons.py --check` | the icon **pixels** — redrawn from `brand/` and compared | 5 icons |
 | `node scripts/sw-stamp.mjs --check` | the SW cache name still matches what it precaches | — |
+| `node scripts/legal-stamp.mjs --check` | a legal document cannot change without its version moving | 3 docs |
 | `bash scripts/test-nginx-canonical.sh` | the canonical-host redirect, against the real image | 9 |
 | `bash scripts/test-nginx-assets.sh` | a path naming a file resolves or 404s — never the HTML shell | 15 |
 | `bash scripts/test-nginx-realip.sh` | the visitor's address behind the tunnel | — |
