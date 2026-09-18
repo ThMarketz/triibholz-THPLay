@@ -68,10 +68,33 @@ match footage for one club is tens of gigabytes, and the app currently deletes n
 | **Cloudflare Tunnel, from either** | No inbound ports at all, which is most of what `TRUSTED_PROXY` in Phase 3 is about | One more moving part, and the 100 MB body cap arrives with it |
 | **Managed PaaS** | Somebody else is on call | Docker + SQLite + a large persistent volume fits these badly, and video storage there gets expensive fast |
 
-**The recommendation:** one small VPS with block storage for video, behind a Cloudflare Tunnel.
-Swiss if you want to tell clubs their children's video never leaves Switzerland — for youth sport
-that sentence is worth more than the price difference. Prices move; get current quotes rather than
-trusting a number in a document.
+**Chosen: the owner's own home server, behind a Cloudflare Tunnel.** It is a better fit than it
+first looks, for two reasons that are specific to this product.
+
+The cost driver is video storage, and a disk at home is bought once where a VPS bills it monthly,
+for ever. And "the video of your children sits on a machine in Horgen, not in a data centre" is a
+stronger sentence to a Swiss club than any hosting provider can offer.
+
+**It is also reversible, which the domain choice is not.** `lockDomain` (`server/db.js`) compares
+`RP_ID` — the *domain* — and says nothing about the host, the address or the machine. Move the app
+and its volume to a VPS later, keep `thplay.ch`, and every passkey still works. So this is a
+decision that can be revisited; Phase 6 is the one that cannot.
+
+Four conditions make it acceptable rather than merely possible:
+
+1. **Off-site backup stops being good practice and becomes the thing that makes this safe.** A fire
+   or a theft takes the server and the backup together if both are in the building. Phase 4 is not
+   optional here.
+2. **Check the ISP contract.** Most Swiss residential terms prohibit running a commercial service.
+   A tunnel makes that undetectable, not permitted — and it matters once clubs are paying.
+3. **Measure the upload link.** Clubs upload match video to it and stream it back. Symmetric fibre
+   is fine; cable or DSL upload will not be.
+4. **Keep it off the home network proper.** A server reachable from the internet should not sit
+   beside the family's laptops.
+
+And one honest limit: when a club pays CHF 20 a month, a power cut on a Saturday morning is a
+contractual matter rather than an inconvenience. Home hosting is right for the invite-only phase;
+plan to move before the second paying club, which the domain lock makes cheap.
 
 - Stand the host up, put the app on it, point `thplay.ch` at it, TLS.
 - `CANONICAL_HOST=thplay.ch` so every other hostname 301s before the app is served.
@@ -115,9 +138,14 @@ Both are code, and a privacy notice cannot honestly promise anything until they 
 
 - **Nothing ever deletes match video.** Not on the device (sign-out clears rosters but never the
   IndexedDB blobs, and the app cannot delete a match at all) and not on the server — verified,
-  nothing in `server/` unlinks anything in the video or clip directories. The honest current answer
-  to "how long do you keep video of my son?" is *for ever*, which is not an answer a club will
-  accept.
+  nothing in `server/` unlinks anything in the video or clip directories.
+
+  **Decided: one season.** Match video expires about twelve months after it is uploaded, unless a
+  coach has marked a cut to keep. That is defensible to any parent, and it bounds the disk, which
+  on a home server is the whole cost question. It needs building on both sides — a reaper on the
+  server for the video, clip and job directories, the same for the IndexedDB blobs on the device, a
+  "keep this one" flag that survives the reaper, and warning a coach *before* something goes rather
+  than after. A retention promise the code does not keep is worse than no promise.
 - **An erasure request for a child cannot be honoured.** A rostered child is not a user — they are
   a `club_players` row, which cascades from the **club**, not from a user. `deleteUser` removes an
   account; removing a player sets `removed_at` and keeps the row; and neither touches the match
