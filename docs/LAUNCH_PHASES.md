@@ -327,3 +327,36 @@ host, a correct edge and a rehearsed restore means the first real problem arrive
 
 Phase 5 is before 7 because the thing that makes the first circle valuable — real teams — is exactly
 the thing that needs consent first.
+
+---
+
+## What a Swiss lawyer must decide — the short list
+
+From reading the FADP (SR 235.1), the Data Protection Ordinance (SR 235.11) and the Civil Code
+(SR 210) on Fedlex. The English translations there carry no legal force; the German, French and
+Italian texts govern, which is itself a reason the translations of these documents should follow a
+review rather than precede it.
+
+1. **Sole proprietorship or GmbH, before the first club signs.** Not a paperwork question — a
+   sole proprietorship has no separate legal personality, so private assets stand behind a product
+   holding other people's children's video.
+2. **Is per-child test and training data "data relating to health"?** If it is, it is sensitive
+   personal data and the club needs a stronger basis and more paperwork. This is the single
+   question with the widest blast radius, and it is not one to guess at.
+3. **Does a general advance approval of the sub-processor list satisfy FADP Art. 9(3)?** The Act
+   requires the controller's *prior approval* before a processor passes data on. Signing the DPA
+   may be that approval — or may not.
+4. **Is consent to one's own image a "strictly personal right" (ZGB Art. 19c)?** If it is, a
+   parent may not be able to give it *for* a child at all, which changes the consent form again.
+5. **Does one parent's signature suffice?** ZGB Art. 304(2) lets a third party in good faith
+   assume each parent acts with the other's consent — whether that extends here is a judgement.
+6. **What operational age should the club ask the player as well?** No statute gives one. A named
+   age is far easier to run a team with than a judgement made child by child, and choosing one is
+   a decision somebody qualified should sign off.
+7. **Must a geographic address appear in the Impressum, and does a c/o address suffice?**
+   UWG Art. 3(1)(s), criminal on complaint.
+
+Two things established firmly enough to act on now: **there is no 72-hour breach deadline in Swiss
+law** — the standard is "as quickly as possible", and nothing in these documents should say
+otherwise — and **the right to ask what data is held cannot be waived in advance** (FADP
+Art. 25(5)), so no contract or consent form may be drafted to do it.

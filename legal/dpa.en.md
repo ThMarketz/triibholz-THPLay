@@ -42,11 +42,33 @@ them, and if that makes the service impossible the club may end the arrangement 
 On our hosting, in the location named in the privacy notice. Nothing is transferred outside
 Switzerland or the EU without telling the club.
 
+## If something goes wrong
+
+Swiss law splits this in a way worth stating plainly, because the two halves are not the same duty.
+
+- **We tell the club about ANY breach of data security, as quickly as possible.** There is no
+  severity filter on this one: small or large, the club hears about it.
+- **The club decides whether to tell the Federal Data Protection and Information Commissioner.**
+  That duty only bites where the breach is likely to lead to a *high risk* to someone's
+  personality or fundamental rights — and it is the club's call, not ours.
+- **There is no 72-hour deadline in Swiss law.** The standard is "as quickly as possible", and we
+  will not pretend to a number the statute does not set.
+
+We give the club what it needs to make that report and to tell the people affected: what happened,
+when, which categories of data and roughly how many people, the likely consequences, and what we
+did about it. **The club must keep a record of the breach for at least two years**, and we will
+supply what it needs for that record.
+
 ## Helping the club
 
-We help with requests from the people whose data it is, with data-protection impact assessments,
-and with breach notification. We tell the club **without undue delay** on becoming aware of a
-breach.
+We help with requests from the people whose data it is, and with data-protection impact
+assessments. Note that the **duty to answer stays with the club** even though we hold the data —
+so a request comes to the club and we supply what the club needs to answer it, normally within
+**30 days**, free of charge.
+
+**Nobody can sign away the right to ask what data is held about them** — not a club in this
+agreement, and not a parent in a consent form. If any version of these documents ever appears to do
+that, it is wrong and does not bind anyone.
 
 ## What we process, for how long
 

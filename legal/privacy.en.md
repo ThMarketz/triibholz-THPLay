@@ -73,9 +73,22 @@ keeps them **on that coach's own device**. They are never sent to us.
 
 ## Your rights
 
-You can ask for a copy of your data, ask for it to be corrected, or ask for it to be deleted. Ask
-your club. If you are not satisfied, you may complain to the Federal Data Protection and
-Information Commissioner (FDPIC), and in the EU to your national authority.
+You can ask what data is held about you and get a copy of it, ask for it to be corrected, and ask
+for it to be deleted.
+
+**Ask your club** — the duty to answer is theirs, because they decide what goes in and why. We give
+them whatever they need to answer you. An answer is **free**, and normally comes **within 30 days**.
+
+**Nobody can sign that right away in advance** — not your club in its contract with us, and not a
+parent in a consent form. If anything you are asked to sign appears to do that, it does not work.
+
+If you are not satisfied, you may complain to the **Federal Data Protection and Information
+Commissioner (FDPIC)**, and if your club is in the EU, to your own national authority.
+
+## Who to write to
+
+*(To be completed before the service takes money — see* **Who runs this***. Swiss law requires the
+operator's identity and contact details to appear here, not only in an imprint.)*
 
 ## Children
 

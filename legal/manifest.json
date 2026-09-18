@@ -12,12 +12,12 @@
    }
   },
   "dpa": {
-   "version": "2026-09-18+39060419",
+   "version": "2026-09-18+fe29b13d",
    "status": "draft",
    "langs": {
     "en": {
-     "sha256": "390604191b7ad56d20772c5a80cae05ce2ad792baca8870ac0f87accd65e270d",
-     "bytes": 3116,
+     "sha256": "fe29b13d005cbb6cdfcb785c28fdac1d93f10c45aac5a536384bc7b59e77646a",
+     "bytes": 4511,
      "date": "2026-09-18"
     }
    }
@@ -34,12 +34,12 @@
    }
   },
   "privacy": {
-   "version": "2026-09-18+4d5c6ae5",
+   "version": "2026-09-18+82537f94",
    "status": "draft",
    "langs": {
     "en": {
-     "sha256": "4d5c6ae5e746e9c23cc4f44cc43d5bc14189fa27edeec07a7ea8533fcf7c900d",
-     "bytes": 4161,
+     "sha256": "82537f947ca93b8482a15b0f9f3e6c57aacbff3cdff974debebe86d45c4dd653",
+     "bytes": 4805,
      "date": "2026-09-18"
     }
    }
