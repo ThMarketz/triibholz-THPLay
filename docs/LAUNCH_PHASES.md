@@ -67,14 +67,31 @@ to it, and `scripts/test-nginx-canonical.sh` passes against that deployment.
 
 **Mine, once Phase 2 exists.** All three are silent failures: the app looks healthy and is not.
 
+Nothing here is hurting today, and the roadmap's present tense misleads on that: every route with a
+per-address limit is behind `ACCOUNTS`, which is off — `/api/auth/login/options` answers
+`404 accounts-off` right now. These are preconditions for Phase 6, not live faults.
+
 - **`TRUSTED_PROXY`** set to the tunnel's real address, so rate limits see visitors instead of one
   shared bucket. The exact numbers, read from `server/auth.js`: `options` and `verify` are **60 a
   minute per address**, and `accountsFromCodes` is **30 an hour per address**. Every passkey
   ceremony begins with an options call, so the one that bites first is 60 a minute — a team all
   joining at the end of a training session is enough — and onboarding then stalls at 30 an hour.
-  The value must be a **pinned single address**, never a CIDR: a range would let anything else on
-  that network forge `CF-Connecting-IP`. That means declaring the network with a fixed subnet and
-  giving the tunnel an `ipv4_address`, rather than trusting DHCP to hand out the same one twice.
+  The value must be a **pinned single address**, never a CIDR. That means declaring the network with
+  a fixed subnet and giving the tunnel an `ipv4_address`, rather than trusting DHCP to hand out the
+  same one twice — `.env.example` currently suggests `172.19.0.4`, which is right only by accident
+  because compose declares no networks at all.
+
+  **And the guard has a hole to close first.** `deploy/nginx-real-ip.sh` refuses `/0`–`/7` and
+  non-addresses, but the obvious wrong answer — `172.19.0.0/16`, "just trust the Docker network" —
+  passes it, and that range contains the bridge gateway `172.19.0.1` that *every* request through
+  `127.0.0.1:8088` arrives from. Set it and anything on the Mac can forge `CF-Connecting-IP`, skip
+  the rate limits and write a chosen address into the log, with nothing looking wrong. The comment
+  in that file already says "never a range"; the code has to enforce it.
+
+  **One ordering fault to fix while in there.** The 30-an-hour check sits at `server/auth.js:323`,
+  *after* `verifyRegistration` has succeeded. The passkey is already on the player's phone when the
+  server declines to make the account, so a refused player is left holding a credential for nothing
+  and the coach sees "too many requests" at a QR onboarding. Check the limit before the ceremony.
 - **The body cap.** Cloudflare refuses bodies above 100 MB on the plans this would run on, while
   `/api/health` advertises 4 GB. A phone's match video is routinely larger. The coach must be told
   the real limit *before* uploading, by the app, not by an edge error page it cannot see.
