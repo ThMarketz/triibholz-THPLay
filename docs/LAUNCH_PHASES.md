@@ -152,6 +152,33 @@ Both are code, and a privacy notice cannot honestly promise anything until they 
   video the child appears in. Both the FADP and the GDPR give that right, and the app cannot
   currently deliver it.
 
+### 2d. What a full read of the code turned up, and had to be checked
+
+Five things a privacy notice has to account for, each verified in the source rather than taken on
+trust:
+
+- **A child's e-mail address is part of a storage key.** `js/app.js:607` — `thplay.testlog.<email>`
+  and `thplay.hometraining.<email>`. The key itself is an identifier, so the key *names* in a device
+  export are personal data even before the values are read. Worth saying in the notice, and worth
+  reconsidering as a design: a per-player id would carry the same meaning and none of the address.
+- **A calendar feed carries names and e-mail addresses.** `js/calendar.js:54` writes
+  `ATTENDEE;CN=<name>:mailto:<email>` into every event. Feeds are token-gated, but that token lives
+  in a URL people paste into Google Calendar — so the notice must treat a feed link as carrying
+  personal data, not merely times and places.
+- **Every cut is stored twice, under two names.** `/api/clip` hard-links its output into the video
+  store so one situation can be scouted on its own, which means each clip has an `assets` row *and*
+  a `cut_…` row. **The one-season reaper must remove both names**, because a hard link keeps the
+  bytes alive until the last one goes. A retention promise that deletes the clip and leaves the twin
+  is a promise the disk does not keep.
+- **One audit line carries a club's name.** `server/demo.js:93` writes `detail: { club: club.name }`
+  where every other call site stores ids only. It is the operator's demo-removal command, so the
+  blast radius is small, but it is an exception to a rule the schema otherwise keeps.
+- **The device holds more than the server does.** `js/teams.js` keeps birth years, eligibility and
+  availability for licensed players that the server deliberately refuses (`js/teamsync.js` REFUSED).
+  That is a good design — but it means the honest answer to "where is my child's data?" is *mostly
+  on a coach's phone*, which changes what the notice says and makes the Phase 1 export part of the
+  privacy story rather than just a convenience.
+
 **Neither of us is a lawyer.** I can draft these honestly, in the four languages the app already
 speaks, and build the acceptance machinery — a Swiss lawyer should review before a club signs,
 and that review is much cheaper against a complete, accurate draft than a blank page.
