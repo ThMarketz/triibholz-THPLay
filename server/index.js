@@ -374,7 +374,25 @@ const server = http.createServer(async (req, res) => {
         if (!(await engine.probeDuration(out, process.env.FFMPEG) > 0)) { try { fs.unlinkSync(out); } catch (_) {} return send(res, 422, { error: 'clip-empty' }); }
       }
       access.recordAsset({ id: id + '.mp4', kind: 'clip', clubId: club.clubId, ownerUserId: who.userId, meta: { videoRef: safeToken(cr.videoRef), start, end } });
-      return send(res, 200, { id, clipUrl: '/api/clips/' + id + '.mp4', start, end, bytes: fs.statSync(out).size });
+
+      /* A cut is also a video in its own right, so the coach can scout ONE SITUATION instead of a
+         whole match. The bytes are already here: hard-link the same file into the video store
+         (one filesystem — both live under DATA_DIR) and copy only if the link is refused, so a
+         library of cuts costs disk once, not twice.
+         The id MUST differ from the clip's. recordAsset is INSERT OR REPLACE on id, so reusing it
+         would rewrite the clip's own row as kind 'video' — and requireAssetRead(..., ['clip']) is
+         what lets a player watch a clip that was sent to them. That would have taken their video
+         away to gain ours.
+         Failing here is not fatal: an un-analysable cut is still a cut. */
+      let analysisRef = null;
+      try {
+        const ref = 'cut_' + id + '.mp4', vcopy = path.join(VIDEO_DIR, ref);
+        if (!fs.existsSync(vcopy)) { try { fs.linkSync(out, vcopy); } catch (e) { fs.copyFileSync(out, vcopy); } }
+        access.recordAsset({ id: ref, kind: 'video', clubId: club.clubId, ownerUserId: who.userId, meta: { cutOf: safeToken(cr.videoRef), start, end } });
+        analysisRef = ref;
+      } catch (e) { analysisRef = null; }
+
+      return send(res, 200, { id, clipUrl: '/api/clips/' + id + '.mp4', videoRef: analysisRef, start, end, bytes: fs.statSync(out).size });
     }
     const clipM = p.match(/^\/api\/clips\/([\w\-]+\.mp4)$/);
     if (req.method === 'GET' && clipM) {

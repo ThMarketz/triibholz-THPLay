@@ -2742,7 +2742,8 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
        one the coach had just watched and approved. */
     ok('sending a cut sends the passage the coach marked, not a window of its own',
       /const start = range \? range\.from :/.test(filmSrc) && /const end = range \? range\.to :/.test(filmSrc));
-    ok('…and the cut path is the one that passes that range', /\}, \{ from, to \}\)/.test(filmSrc));
+    ok('…and the cut path passes the marked range, however the panel was rebuilt',
+      /\{ from: lastCut\.from, to: lastCut\.to \}/.test(filmSrc));
 
     // a finished cut used to be wiped by the next re-render — i.e. by tagging the next moment
     ok('a finished cut survives tagging the next moment', /lastCut = \{ html:/.test(filmSrc) && /if \(lastCut\) \{ box\.innerHTML = lastCut\.html;/.test(filmSrc));
@@ -2821,6 +2822,65 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
       derive(asUs, 'att') === 'offense' && derive(asThem, 'att') === 'defense');
     ok('dark caps: it flips, because "us" is the other colour',
       derive(asUs, 'def') === 'defense' && derive(asThem, 'def') === 'offense');
+  }
+
+  console.log('\n[20] A library of cuts, and reading ONE situation instead of a whole match');
+  {
+    /* The owner's ask: "analyse also the cuts so just one situation… save it as… get the next
+       cuts… a library of saved videos and analysis."
+
+       It is not only convenience. Measured against the live pipeline on the demo match: scouting
+       the whole 20 s returns FOUR possessions, three of them Unclassified at confidence 0 — one of
+       them 0.3 s long. Scouting an 8 s cut of the same footage returns ONE line, Counter-attack at
+       0.9. The fragments are an artefact of splitting continuous play, so cutting first does not
+       just save time, it removes the noise. */
+    const R = FILM._readOfCut;
+    const i18nSrc = readFileSync(join(APP, 'js/i18n.js'), 'utf8');
+
+    const good = { plays: [
+      { tactic: 'counter-attack', name: 'Counter-attack', confidence: 0.9, offense: 'att', situation: '6v6', tStart: 0.2, tEnd: 7.5, steps: ['3 drives'], frames: [{}, {}], notes: {}, endsInShot: true },
+      { tactic: 'unclassified', name: 'Unclassified', confidence: 0, offense: 'def', situation: '6v6', tStart: 7.7, tEnd: 8.0, steps: [], frames: [], notes: {} },
+    ] };
+    const r = R(good);
+    ok('one cut reads as the one thing the analyser actually recognised', r.name === 'Counter-attack' && r.tactic === 'counter-attack');
+    ok('…and the scraps beside it are counted, not averaged in or shown as an answer', r.fragments === 1 && r.confidence === 0.9);
+    ok('…and it carries which side attacked, so the playbook files it correctly', r.offense === 'att');
+
+    ok('a cut with nothing recognisable says so rather than picking the least bad fragment',
+      R({ plays: [{ name: 'Unclassified', confidence: 0, tStart: 0, tEnd: 3 }] }).none === true);
+    ok('an empty read is null, not an invented one', R({ plays: [] }) === null && R(null) === null);
+    ok('the best read wins on confidence, and length only breaks a tie',
+      R({ plays: [
+        { name: 'Short but sure', confidence: 0.8, tStart: 0, tEnd: 1, frames: [] },
+        { name: 'Long but unsure', confidence: 0.3, tStart: 0, tEnd: 30, frames: [] },
+      ] }).name === 'Short but sure');
+
+    /* THE ONE THAT WOULD HAVE TAKEN A CHILD'S VIDEO AWAY. recordAsset is INSERT OR REPLACE on id,
+       and requireAssetRead(..., ['clip']) is what lets a player watch a clip that was sent to them.
+       Registering the cut as a video under the CLIP'S id would have rewritten that row as kind
+       'video' and 404'd the player who had been sent it. */
+    const srvSrc = readFileSync(join(APP, 'server/index.js'), 'utf8');
+    ok('a cut registered as a video takes its own asset id, never the clip’s',
+      /const ref = 'cut_' \+ id \+ '\.mp4'/.test(srvSrc) && /kind: 'video'/.test(srvSrc));
+    ok('…and the clip keeps its own row, so a player sent that clip can still watch it',
+      /access\.recordAsset\(\{ id: id \+ '\.mp4', kind: 'clip'/.test(srvSrc));
+    ok('the bytes are shared, not copied twice, and a refused link still works',
+      /fs\.linkSync\(out, vcopy\)/.test(srvSrc) && /fs\.copyFileSync\(out, vcopy\)/.test(srvSrc));
+    ok('a cut that cannot be made analysable is still a cut', /analysisRef = null; \}/.test(srvSrc));
+
+    const filmSrc3 = readFileSync(join(APP, 'js/film.js'), 'utf8');
+    ok('a cut is kept the moment it is made, not behind a second button', /saveCut\(s, \{ id: uid\(\), from, to/.test(filmSrc3));
+    ok('…and the shelf is redrawn so the coach sees it land', /saveCut\(s, \{[\s\S]{0,900}?renderSession\(\);\n        return;/.test(filmSrc3));
+    ok('the library is bounded, so a season of cuts cannot fill the device', /if \(s\.clips\.length > 60\)/.test(filmSrc3));
+    ok('a coach’s own label beats the machine’s and is shown as theirs',
+      /c\.fixedTactic \? tacName/.test(filmSrc3) && i18nSrc.includes("'film.libCoachSaid'"));
+    ok('removing a cut does not pretend to delete it from the club server',
+      i18nSrc.includes("'film.libServerNote'") && /stays on the club server/.test(i18nSrc));
+    ok('the relabel list is the tactics the analyser itself can name', (FILM.TACTIC_IDS || []).length >= 8
+      && FILM.TACTIC_IDS.every(t => i18nSrc.includes("'tac." + t + "'")));
+    ok('a cut analysed on its own reuses the match’s own calibration, not a fresh guess',
+      /calibration: \{ H: vHomography, mode: vHomography \? 'fixed' : 'auto'/.test(filmSrc3));
+    ok('…and waits seconds, not the half hour a whole match needs', /tries\+\+ < 90/.test(filmSrc3));
   }
 
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);

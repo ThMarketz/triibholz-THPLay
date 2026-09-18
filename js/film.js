@@ -108,6 +108,9 @@ const FILM = (() => {
      language change, so reading the language at render time is enough. */
   const TX = (k, vars) => (typeof I18N !== 'undefined') ? I18N.t(k, vars) : k;
   const esc = s => (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  /* a cut's name is typed by a coach and shown to other people — no control or bidi-override
+     characters, same rule as js/teamsync.js clean() and server/identity.js cleanName() */
+  const clean = v => String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80);
   const fmt = t => { t = Math.max(0, Math.round(t||0)); return Math.floor(t/60) + ':' + String(t%60).padStart(2,'0'); };
   const parseT = s => { const m = String(s||'').trim().match(/^(\d+):(\d{1,2})$/); if (m) return (+m[1])*60 + (+m[2]); const n = parseFloat(s); return isNaN(n) ? 0 : n; };
   function parseSource(input) {
@@ -820,7 +823,8 @@ const FILM = (() => {
     const r = await API.fetch(scoutBase() + '/api/clip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, start, end }) });
     if (!r.ok) throw new Error('clip-' + r.status);
     const j = await r.json();
-    return { url: j.clipUrl, start: j.start, end: j.end, truncated: (j.end - j.start) + 0.5 < (end - start) };
+    // videoRef is the same bytes registered as a video, so one situation can be scouted on its own
+    return { url: j.clipUrl, videoRef: j.videoRef || null, start: j.start, end: j.end, truncated: (j.end - j.start) + 0.5 < (end - start) };
   }
   /* Which cap colour we are, from the Auto-scout selector — and therefore whether a possession
      is one of OUR attacks or one we defended. `p.offense === usSide` is already how the attack
@@ -1106,15 +1110,154 @@ const FILM = (() => {
           ${c.truncated ? `<p class="fa-note bad">${TX('film.cutTruncated', { max: MAX_CUT })}</p>` : ''}
         </div>`;
         lastCut = { html: box.innerHTML, from, to };   // renderSession() rebuilds the panel; the cut survives it
-        const sendBtn = box.querySelector('#cut-send');
-        // reuse the moment-sending dialog: a cut is a moment with a range the coach chose
-        if (sendBtn) sendBtn.onclick = () => openSendMoment(root, sessions, s, { id: 'cut', t: from, type: 'note', situation: '6v6', pos: '', zone: '', note: TX('film.cutRange', { from: fmt(from), to: fmt(to), secs: Math.round(to - from) }) }, { from, to });
+        // keep it straight away: it cost a round trip and the coach has just watched it
+        saveCut(s, { id: uid(), from, to, title: `${fmt(from)}–${fmt(to)}`, url: c.url, videoRef: c.videoRef, at: Date.now(), analysis: null, fixedTactic: '' });
+        /* The library is drawn with the rest of the panel, so it has to be redrawn for the new cut
+           to appear in it — otherwise the cut is saved and the shelf still reads "(0)", which is
+           the worst of both. wireCut() restores lastCut into the box and rewires Send, so the
+           coach loses nothing by this. */
+        renderSession();
+        return;
       } catch (e) {
         box.innerHTML = `<span class="muted">${TX('film.cutFailed', { error: esc(whyText(e && e.message)) })}</span>`;
       }
       go.disabled = false;
     };
     paint();
+  }
+
+
+  /* ================= the cut library =================================================
+     A coach works a match one situation at a time: cut it, see what it was, keep it, next.
+     Two things make that worth doing rather than scouting the whole match and reading a list.
+
+     FIRST, a cut analyses BETTER. Measured on the demo match: scouting the whole 20 s returns four
+     possessions, three of them "Unclassified" with confidence 0 — one of those is 0.3 s long.
+     Scouting an 8 s cut of the same footage returns one line: Counter-attack, 0.9. The fragments
+     are an artefact of splitting continuous play, and cutting first removes them.
+
+     SECOND, it is cheap. The bytes are already on the club server, so /api/clip hard-links the cut
+     into the video store and hands back a videoRef; nothing is uploaded twice.
+
+     A cut is kept the moment it is made. It cost a round trip and the coach watched it — losing it
+     to a re-render, or asking them to press Save afterwards, both end the same way.  */
+
+  const TACTIC_IDS = ['counter-attack', 'drive-and-kick', 'hole-entry', 'man-up-3-3', 'man-up-4-2',
+                      'perimeter-swing', 'pick-and-roll', 'set-offense', 'wing-iso'];
+
+  function saveCut(s, cut) {
+    (s.clips || (s.clips = [])).unshift(cut);
+    if (s.clips.length > 60) s.clips.length = 60;   // a season of cuts, not an unbounded store
+    save(sessions);
+  }
+
+  /* What one cut actually shows. The pipeline still splits a short clip into possessions, so take
+     the one it recognised and say plainly how many scraps were dropped — never average them, and
+     never present a scrap as the answer. */
+  function readOfCut(scout) {
+    const plays = (scout && scout.plays) || [];
+    if (!plays.length) return null;
+    const ranked = plays.slice().sort((a, b) => (b.confidence || 0) - (a.confidence || 0) || (b.tEnd - b.tStart) - (a.tEnd - a.tStart));
+    const best = ranked[0];
+    if (!best || !(best.confidence > 0)) return { none: true, fragments: plays.length };
+    return {
+      tactic: best.tactic, name: best.name, confidence: best.confidence, offense: best.offense,
+      situation: best.situation, steps: best.steps || [], frames: best.frames || [], notes: best.notes || {},
+      endsInShot: !!best.endsInShot, goal: !!best.goal,
+      fragments: plays.filter(p => p !== best).length,
+    };
+  }
+
+  async function runJob(videoRef, onStatus) {
+    const base = scoutBase();
+    const job = await API.fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ videoRef, calibration: { H: vHomography, mode: vHomography ? 'fixed' : 'auto', minConf: 0.4 },
+        scout: true, us: (root.querySelector('#scout-us') || {}).value || 'white', opts: { fps: 6, chunkSec: 20 } }) });
+    if (!job.ok) throw new Error('job-' + job.status);
+    const { id } = await job.json();
+    let st = 'queued', tries = 0, j;
+    // a cut is seconds long, so this never needs the whole-match patience of runAutoScout
+    while (st !== 'done' && st !== 'error' && tries++ < 90) {
+      await new Promise(r => setTimeout(r, 1500));
+      j = await (await API.fetch(base + '/api/jobs/' + id)).json(); st = j.status;
+      if (onStatus) onStatus(st);
+    }
+    if (st !== 'done') throw new Error(j && j.error ? 'scout-' + j.error : 'timed-out');
+    return await (await API.fetch(base + '/api/jobs/' + id + '/result')).json();
+  }
+
+  const cutLabel = c => c.fixedTactic ? tacName(c.fixedTactic, c.fixedTactic)
+    : (c.analysis && !c.analysis.none ? c.analysis.name : '');
+
+  function libraryHtml(s) {
+    const clips = s.clips || [];
+    return `<div class="film-auto film-lib" id="film-lib">
+      <div class="fa-head"><strong>${TX('film.libTitle', { n: clips.length })}</strong></div>
+      ${clips.length ? `<div class="lib-list">${clips.map((c, i) => {
+        const a = c.analysis, label = cutLabel(c);
+        return `<div class="lib-row" data-ci="${i}">
+          <video class="lib-vid" controls playsinline preload="none" src="${esc(scoutBase() + c.url)}"></video>
+          <div class="lib-meta">
+            <input class="lib-name" data-name="${i}" value="${esc(c.title || '')}" maxlength="80" aria-label="${TX('film.libRename')}" />
+            <span class="muted">${fmt(c.from)} → ${fmt(c.to)} · ${Math.round(c.to - c.from)}s</span>
+            <div class="lib-read">${
+              c.fixedTactic ? `<strong>${esc(label)}</strong> <span class="muted">${TX('film.libCoachSaid')}</span>`
+              : a && !a.none ? `<strong>${esc(a.name)}</strong> <span class="muted">${TX('film.libConfidence', { pct: Math.round(a.confidence * 100) })}${a.fragments ? ' · ' + TX(a.fragments === 1 ? 'film.libFragment1' : 'film.libFragments', { n: a.fragments }) : ''}</span>`
+              : a && a.none ? `<span class="muted">${TX('film.libNoRead')}</span>`
+              : `<span class="muted">${TX('film.libNotRead')}</span>`}</div>
+            ${a ? `<label class="lib-fix"><span class="muted">${TX('film.libRelabel')}</span>
+              <select data-fix="${i}"><option value="">${TX('film.libAsRead')}</option>
+              ${TACTIC_IDS.map(t => `<option value="${t}"${c.fixedTactic === t ? ' selected' : ''}>${esc(tacName(t, t))}</option>`).join('')}
+              </select></label>` : ''}
+          </div>
+          <div class="lib-actions">
+            ${c.videoRef ? `<button class="btn-ghost sm" data-an="${i}">${TX('film.libAnalyse')}</button>` : `<span class="muted">${TX('film.libNoRef')}</span>`}
+            ${a && !a.none && (a.frames || []).length ? `<button class="btn-ghost sm" data-lb="${i}">${TX('film.boardBtn')}</button>` : ''}
+            <a class="btn-ghost sm" href="${esc(scoutBase() + c.url)}" download="${esc((c.title || 'cut').replace(/[^\w-]+/g, '-'))}.mp4">${TX('film.cutDownload')}</a>
+            <button class="btn-ghost sm" data-rm="${i}" title="${TX('film.libDeleteTitle')}">✕</button>
+          </div>
+        </div>`; }).join('')}</div>
+        <p class="fa-note">${TX('film.libServerNote')}</p>`
+      : `<p class="fa-note">${TX('film.libEmpty')}</p>`}
+    </div>`;
+  }
+
+  function wireLibrary(main, s) {
+    const lib = main.querySelector('#film-lib'); if (!lib) return;
+    const clips = s.clips || [];
+    lib.querySelectorAll('[data-name]').forEach(inp => inp.onchange = () => {
+      const c = clips[+inp.dataset.name]; if (!c) return;
+      c.title = clean(inp.value); save(sessions);
+    });
+    lib.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => {
+      clips.splice(+b.dataset.rm, 1); save(sessions); renderSession();
+    });
+    lib.querySelectorAll('[data-fix]').forEach(sel => sel.onchange = () => {
+      const c = clips[+sel.dataset.fix]; if (!c) return;
+      c.fixedTactic = sel.value || '';           // the coach's word beats the machine's, and is labelled as theirs
+      save(sessions); renderSession();
+    });
+    lib.querySelectorAll('[data-lb]').forEach(b => b.onclick = () => {
+      const c = clips[+b.dataset.lb], a = c && c.analysis; if (!a || !a.frames) return;
+      if (typeof ctx.openPlay === 'function') ctx.openPlay({
+        title: `${dt(s.title)} — ${cutLabel(c) || fmt(c.from)}`,
+        description: (a.steps || []).join(' → '), situation: a.situation || '6v6',
+        phase: phaseOf(a), frames: a.frames, notes: a.notes });
+    });
+    lib.querySelectorAll('[data-an]').forEach(b => b.onclick = async () => {
+      const i = +b.dataset.an, c = clips[i]; if (!c || !c.videoRef) return;
+      const row = b.closest('.lib-row'), read = row.querySelector('.lib-read');
+      b.disabled = true; read.innerHTML = `<span class="muted">${TX('film.libAnalysing')}</span>`;
+      try {
+        const result = await runJob(c.videoRef);
+        c.analysis = readOfCut(result && result.scout);
+        c.analysedAt = (result && result.meta && result.meta.seconds) || null;
+        save(sessions); renderSession();
+      } catch (e) {
+        read.innerHTML = `<span class="muted">${esc(whyText(e && e.message))}</span>`;
+        b.disabled = false;
+      }
+    });
   }
 
   function renderSession() {
@@ -1128,6 +1271,7 @@ const FILM = (() => {
       ${s.source.kind==='link' ? `<p class="muted">${TX('film.externalVideo', { url: esc(s.source.url) })}</p>` : ''}
 
       ${canEdit ? cutPanelHtml(s) : ''}
+      ${canEdit ? libraryHtml(s) : ''}
 
       ${canEdit ? `<div class="film-tagbar">
         <button class="btn-primary sm" id="film-mark">${TX('film.markMoment')}</button>
@@ -1371,6 +1515,7 @@ const FILM = (() => {
   function wireTagging(main, s) {
     verdict = null; pickZone = ''; pickOrigin = null;
     wireCut(main, sessions, s);
+    wireLibrary(main, s);
     wireEdit(main, s);
     main.querySelector('#film-mark').onclick = () => {
       const t = currentTime();
@@ -1417,5 +1562,5 @@ const FILM = (() => {
     };
   }
 
-  return { render, load, parseSource, ZONE_HINTS, _insights: insights, motionScan, teamOf, _errorReason: errorReason, _serverReasons: SERVER_REASONS };
+  return { render, load, parseSource, ZONE_HINTS, _insights: insights, motionScan, teamOf, _errorReason: errorReason, _serverReasons: SERVER_REASONS, _readOfCut: readOfCut, TACTIC_IDS };
 })();
