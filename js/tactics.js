@@ -262,7 +262,10 @@ const TACTICS = (() => {
     return Object.values(groups).sort((a, b) => b.length - a.length).slice(0, max).map(g => {
       const p = g.reduce((best, x) => x.rec.confidence > best.rec.confidence ? x : best, g[0]);
       const desc = p.steps.join(' → ');
-      return { title: `${p.rec.name} · seen ${g.length}× (auto-scout)`, description: desc || p.rec.name, situation: p.situation, phase: 'offense', frames: p.frames, notes: p.notes, tactic: p.rec.tactic, confidence: p.rec.confidence, seen: g.length, source: 'auto-scout', needsReview: p.rec.confidence < 0.8 };
+      // `offense` says which CAP COLOUR attacked ('att' white / 'def' dark). Which phase that is
+      // for us depends on which colour we are, and only the Film Room knows that — so carry the
+      // fact and let it decide, instead of stamping every possession as one of our attacks.
+      return { title: `${p.rec.name} · seen ${g.length}× (auto-scout)`, description: desc || p.rec.name, situation: p.situation, offense: p.offense, frames: p.frames, notes: p.notes, tactic: p.rec.tactic, confidence: p.rec.confidence, seen: g.length, source: 'auto-scout', needsReview: p.rec.confidence < 0.8 };
     });
   }
 

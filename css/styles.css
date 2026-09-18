@@ -936,6 +936,11 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 .cut-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px}
 .cut-actions a{text-decoration:none}
 .fa-note.bad{color:var(--red-71)}
+/* ✎ editing a saved moment: the row being changed is marked, so it is obvious which one the
+   tag bar is now holding — and there is always a way back out that is not "save something". */
+.film-editing{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-faint);margin-left:8px}
+.film-editing[hidden]{display:none}
+.film-ev.editing{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
 @media(max-width:560px){
   /* on a phone the four controls must not squeeze the readout onto its own cramped line */
   .film-cut .fa-head{gap:6px}

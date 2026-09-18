@@ -662,7 +662,7 @@ const FILM = (() => {
     wireAttacks(out, sc, result); wireTeamAnalysis(out, sc, result);
     const share = out.querySelector('#scout-share'); if (share) share.onclick = () => shareDebrief(share, sc, result);
     const add = out.querySelector('#scout-add');
-    if (add) add.onclick = () => { if (typeof ctx.addPlays === 'function') { const n = ctx.addPlays(sc.playbook, cur.title); ctx.toast(TX('film.playsAdded', { n })); add.disabled = true; } };
+    if (add) add.onclick = () => { if (typeof ctx.addPlays === 'function') { const n = ctx.addPlays(sc.playbook.map(p => Object.assign({}, p, { phase: phaseOf(p) })), cur.title); ctx.toast(TX('film.playsAdded', { n })); add.disabled = true; } };
   }
 
   /* ---------- Team analysis by situation — the default view ----------
@@ -822,6 +822,13 @@ const FILM = (() => {
     const j = await r.json();
     return { url: j.clipUrl, start: j.start, end: j.end, truncated: (j.end - j.start) + 0.5 < (end - start) };
   }
+  /* Which cap colour we are, from the Auto-scout selector — and therefore whether a possession
+     is one of OUR attacks or one we defended. `p.offense === usSide` is already how the attack
+     list and the debrief decide this; plays going to the playbook now use the same test instead
+     of calling everything offense. */
+  const ourSide = () => { const us = (root && root.querySelector('#scout-us') || {}).value || 'white'; return typeof GAMEPLAN !== 'undefined' ? GAMEPLAN.usSide(us) : 'att'; };
+  const phaseOf = play => (play && play.offense && play.offense !== ourSide()) ? 'defense' : 'offense';
+
   function wireAttacks(out, sc, result) {
     out.querySelectorAll('[data-clip]').forEach(b => b.onclick = async () => {
       const p = sc.plays[+b.dataset.clip], holder = b.closest('.attack-row').querySelector('.ar-clip');
@@ -831,7 +838,7 @@ const FILM = (() => {
     });
     out.querySelectorAll('[data-board]').forEach(b => b.onclick = () => {
       const p = sc.plays[+b.dataset.board];
-      if (typeof ctx.openPlay === 'function') ctx.openPlay({ title: `${dt(cur.title)} — ${p.name} @ ${fmt(p.tStart)}`, description: (p.steps || []).join(' → '), situation: p.situation, frames: p.frames, notes: p.notes });
+      if (typeof ctx.openPlay === 'function') ctx.openPlay({ title: `${dt(cur.title)} — ${p.name} @ ${fmt(p.tStart)}`, description: (p.steps || []).join(' → '), situation: p.situation, phase: phaseOf(p), frames: p.frames, notes: p.notes });
     });
   }
   /* ---------- Debriefs: share with the team, comments ---------- */
@@ -1033,7 +1040,7 @@ const FILM = (() => {
     if (cur) renderSession();
   }
 
-  function openSession(id) { cur = sessions.find(s=>s.id===id) || cur; pickOrigin=null; pickZone=''; vHomography=null; vCorners=[]; cutIn=cutOut=null; lastCut=null; render(root, ctx); }
+  function openSession(id) { cur = sessions.find(s=>s.id===id) || cur; pickOrigin=null; pickZone=''; vHomography=null; vCorners=[]; cutIn=cutOut=null; lastCut=null; editingId=null; render(root, ctx); }
 
   /* ---------- cut a piece out of the match ----------
      The thing a coach asks for first and the app did not have: "show me those twenty seconds".
@@ -1143,6 +1150,8 @@ const FILM = (() => {
           <input type="text" id="film-counter" placeholder="${TX('film.counterPlaceholder')}" />
           <input type="text" id="film-note" placeholder="${TX('film.notePlaceholder')}" />
           <button class="btn-primary sm" id="film-add">${TX('film.saveMoment')}</button>
+          <span class="film-editing" id="film-editing" hidden>${TX('film.editingAt')} <strong class="fe-editing-t"></strong>
+            <button class="btn-ghost sm" id="film-edit-cancel">${TX('film.editCancel')}</button></span>
         </div>
       </div>` : ''}
 
@@ -1202,6 +1211,7 @@ const FILM = (() => {
                 ${e.note?`<span class="fe-note">${esc(dt(e.note))}</span>`:''}</span>
               <span class="fe-actions">
                 ${ctx.canEdit && canSend() && s.source.kind === 'file' ? `<button class="btn-ghost sm" data-send="${e.id}" title="${TX('film.sendMomentTitle')}">${TX('film.sendMoment')}</button>` : ''}
+                ${ctx.canEdit?`<button class="btn-ghost sm" data-edit="${e.id}" title="${TX('film.editMomentTitle')}">${TX('film.editMoment')}</button>`:''}
                 ${ctx.canEdit?`<button class="btn-ghost sm" data-rebuild="${e.id}" title="${TX('film.rebuildTitle')}">${TX('film.boardBtn')}</button>`:''}
                 ${ctx.canEdit?`<button class="btn-ghost sm danger" data-del="${e.id}">✕</button>`:''}
               </span>
@@ -1288,7 +1298,7 @@ const FILM = (() => {
     });
   }
 
-  let verdict = null, boardFrame = null;
+  let verdict = null, boardFrame = null, editingId = null;
   function dragOn(el, svgEl, onMove, anywhere) {
     let live = false;
     const clampFn = anywhere ? POOL.clampAnywhere : POOL.clampToWater;
@@ -1298,11 +1308,14 @@ const FILM = (() => {
     el.style.cursor = 'grab';
   }
   // stage the situation: a small board with draggable players + ball
-  function buildBoard(main, sit) {
+  function buildBoard(main, sit, frame) {
     const svg = main.querySelector('#film-board'); if (!svg) return;
-    boardFrame = DATA.defaultFrame(mapToBoard(sit));
+    // `frame` reopens the positions a coach already staged, so editing a moment does not mean
+    // dragging thirteen discs back to where they were
+    boardFrame = frame ? JSON.parse(JSON.stringify(frame)) : DATA.defaultFrame(mapToBoard(sit));
+    if (!boardFrame.ball) { const bp0 = ANIM.ballPoint(boardFrame); boardFrame.ball = { carrier: null, x: bp0.x, y: bp0.y }; }
     const bp = ANIM.ballPoint(boardFrame);
-    boardFrame.ball = { carrier: null, x: bp.x, y: bp.y };
+    if (!frame) boardFrame.ball = { carrier: null, x: bp.x, y: bp.y };
     const layers = POOL.render(svg);
     const mk = (team, label, pt, setter) => {
       const g = POOL.disc(team, label);
@@ -1320,9 +1333,45 @@ const FILM = (() => {
     dragOn(ball, svg, np => { boardFrame.ball = { carrier:null, x:np.x, y:np.y }; ball.setAttribute('transform', `translate(${np.x},${np.y})`); });
   }
 
+  /* EDITING A SAVED MOMENT. Until now a timeline row offered only Board ⚡, ✕ and 📤 — so a typo
+     in a note, a wrong cap number or a verdict pressed by mistake meant deleting the moment and
+     tagging it again from scratch, board included. This loads it back into the same bar that
+     made it, which is the only place that knows how to express all of it. */
+  function exitEdit(main) {
+    editingId = null;
+    const add = main.querySelector('#film-add'); if (add) add.textContent = TX('film.saveMoment');
+    const chip = main.querySelector('#film-editing'); if (chip) chip.hidden = true;
+    main.querySelectorAll('.film-ev').forEach(r => r.classList.remove('editing'));
+  }
+  function wireEdit(main, s) {
+    main.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => {
+      const e = (s.events || []).find(x => x.id === b.dataset.edit); if (!e) return;
+      editingId = e.id;
+      main.querySelector('#film-t').value = fmt(e.t);
+      main.querySelector('#film-type').value = e.type;
+      main.querySelector('#film-sit').value = e.situation || '6v6';
+      main.querySelector('#film-pos').value = e.pos || '';
+      main.querySelector('#film-counter').value = dt(e.counter || '');
+      main.querySelector('#film-note').value = dt(e.note || '');
+      verdict = e.verdict || null;
+      main.querySelectorAll('.v-btn').forEach(x => x.classList.toggle('sel', x.dataset.v === verdict));
+      pickZone = e.zone || '';
+      main.querySelectorAll('#film-zone-pick .gz').forEach(x => x.classList.toggle('sel', x.dataset.z === pickZone));
+      buildBoard(main, main.querySelector('#film-sit').value, e.frame || null);
+      const add = main.querySelector('#film-add'); if (add) add.textContent = TX('film.updateMoment');
+      const chip = main.querySelector('#film-editing');
+      if (chip) { chip.hidden = false; chip.querySelector('.fe-editing-t').textContent = fmt(e.t); }
+      main.querySelectorAll('.film-ev').forEach(r => r.classList.toggle('editing', r.dataset.id === e.id));
+      const bar = main.querySelector('.film-tagbar'); if (bar && bar.scrollIntoView) bar.scrollIntoView({ block: 'center' });
+    });
+    const cancel = main.querySelector('#film-edit-cancel');
+    if (cancel) cancel.onclick = () => { exitEdit(main); renderSession(); };
+  }
+
   function wireTagging(main, s) {
     verdict = null; pickZone = ''; pickOrigin = null;
     wireCut(main, sessions, s);
+    wireEdit(main, s);
     main.querySelector('#film-mark').onclick = () => {
       const t = currentTime();
       if (t == null) { ctx.toast(TX('film.typeTime')); return; }
@@ -1347,8 +1396,8 @@ const FILM = (() => {
       const t = parseT(main.querySelector('#film-t').value);
       const type = main.querySelector('#film-type').value;
       if (!main.querySelector('#film-t').value.trim()) { ctx.toast(TX('film.setTimeFirst')); return; }
-      s.events.push({
-        id: uid(), t, type,
+      const moment = {
+        id: editingId || uid(), t, type,
         situation: main.querySelector('#film-sit').value,
         pos: main.querySelector('#film-pos').value,
         zone: typeOf(type).shot ? pickZone : '',
@@ -1356,11 +1405,15 @@ const FILM = (() => {
         frame: boardFrame ? JSON.parse(JSON.stringify(boardFrame)) : null,
         verdict, counter: main.querySelector('#film-counter').value.trim(),
         note: main.querySelector('#film-note').value.trim(),
-      });
+      };
+      const at = editingId ? s.events.findIndex(x => x.id === editingId) : -1;
+      const wasEditing = at >= 0;
+      if (wasEditing) s.events[at] = moment; else s.events.push(moment);
       save(sessions);
-      if (typeof DATA !== 'undefined') DATA.logActivity('play', `${ctx.user.name} tagged ${TX(typeOf(type).label)} at ${fmt(t)} in “${dt(s.title)}”`, ctx.user.name);
+      if (typeof DATA !== 'undefined') DATA.logActivity('play', TX(wasEditing ? 'film.logCorrected' : 'film.logTagged', { who: ctx.user.name, what: TX(typeOf(type).label), when: fmt(t), match: dt(s.title) }), ctx.user.name);
+      exitEdit(main);
       renderSession();
-      ctx.toast(TX('film.momentSaved'));
+      ctx.toast(TX(wasEditing ? 'film.momentUpdated' : 'film.momentSaved'));
     };
   }
 

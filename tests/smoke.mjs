@@ -2708,21 +2708,34 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     const enKeys = new Set([...i18nSrc.slice(enStart, deStart).matchAll(/'([A-Za-z0-9_.]+)':/g)].map(m => m[1]));
     ok('the English dictionary was found, so this guard is actually checking something', enKeys.size > 1500);
 
+    /* Two different leaks, and the first version of this guard only caught one. A key that EXISTS
+       and was never translated (`film.typeGoalAgainst`) is caught by the dictionary test. A key
+       that was never ADDED renders as itself too, and is invisible to that test — which is exactly
+       what happened to the nine keys the ✎ Edit work introduced. So anything shaped like a key in
+       a namespace this app really uses counts, whether the dictionary has it or not. */
+    const namespaces = new Set([...enKeys].map(k => k.split('.')[0]));
+    const FILE_ISH = /\.(mp4|webm|png|jpg|svg|json|html|css|js|mjs|pdf|docx|xlsx|ics|ch|com|org)$/i;
+    const keyShaped = tok => !FILE_ISH.test(tok) && /^[a-z][A-Za-z0-9]*\.[A-Za-z][A-Za-z0-9.]*$/.test(tok) && namespaces.has(tok.split('.')[0]);
     const leaked = [];
     const walk = (node) => {
       if (node.nodeType === 3) {
-        for (const tok of String(node.nodeValue).split(/\s+/)) if (tok && enKeys.has(tok)) leaked.push(tok);
+        for (const tok of String(node.nodeValue).split(/\s+/)) if (tok && (enKeys.has(tok) || keyShaped(tok))) leaked.push(tok);
       } else if (node.nodeType === 1 && !['SCRIPT', 'STYLE'].includes(node.tagName)) {
         for (const c of node.childNodes) walk(c);
       }
     };
     walk(document.body);
+    ok('the guard knows which namespaces are real, so a key nobody defined still counts', namespaces.size > 10 && keyShaped('film.neverDefined') && !keyShaped('vs-Red-Sharks.mp4'));
     ok('no translation key is sitting on the screen pretending to be words' + (leaked.length ? ' — found: ' + [...new Set(leaked)].slice(0, 4).join(', ') : ''), leaked.length === 0);
 
     ok('the title a play gets from a film moment is translated before the emoji is stripped',
       /TX\(T\.label\)\.replace/.test(filmSrc) && !/\$\{T\.label\.replace/.test(filmSrc));
     ok('…and so is the club activity line about a tagged moment',
-      /tagged \$\{TX\(typeOf\(type\)\.label\)\}/.test(filmSrc));
+      /TX\(wasEditing \? 'film\.logCorrected' : 'film\.logTagged', \{ who:/.test(filmSrc)
+      && /what: TX\(typeOf\(type\)\.label\)/.test(filmSrc));
+    ok('…as one whole sentence, not words stitched in English order',
+      /'film\.logTagged':'\{who\} tagged \{what\} at \{when\}/.test(i18nSrc)
+      && (i18nSrc.match(/'film\.logCorrected':/g) || []).length === 4);
 
     /* Sending a cut used to throw the coach's range away: openSendMoment computed its own
        t-4 … t+6 window around the in-point, so the team received a different passage from the
@@ -2753,6 +2766,61 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('a lost upload tells the coach to cut again, not to run a scouting job',
       !/scout the video again/.test(i18nSrc));
 
+  }
+
+  console.log('\n[19] Correcting what you tagged, and which side actually attacked');
+  {
+    /* A timeline row used to offer Board ⚡, ✕ and 📤 and nothing else, so a typo in a note, a
+       wrong cap number or a verdict pressed by mistake meant deleting the moment and tagging it
+       again — board included. */
+    q('.nav-btn[data-view="film"]').click(); await wait(80);
+    const demoRow = qa('.film-item').find(b => /Sample match/.test(b.textContent));
+    if (demoRow) { demoRow.click(); await wait(80); }
+
+    const before = qa('.film-ev').length;
+    ok('a saved moment offers a way to correct it', before > 0 && !!q('.film-ev [data-edit]'));
+
+    const firstId = q('.film-ev').dataset.id;
+    q('.film-ev [data-edit]').click(); await wait(40);
+    ok('pressing it loads that moment back into the bar it was made in',
+      q('#film-t').value.length > 0 && !!q('#film-type').value && q('.film-ev.editing')?.dataset.id === firstId);
+    ok('…and the save button now says it will update, not add', /update/i.test(q('#film-add').textContent));
+    ok('…with a visible way out that is not saving something', !q('#film-editing').hidden && !!q('#film-edit-cancel'));
+
+    const newNote = 'corrected: the slide came from 4, not 3';
+    q('#film-note').value = newNote;
+    q('#film-add').click(); await wait(120);
+    ok('saving replaces that moment instead of making a second one', qa('.film-ev').length === before);
+    ok('…and the correction is what is stored', JSON.stringify(FILM.load()).includes(newNote));
+    ok('…and the app is no longer in edit mode', q('#film-editing').hidden && !q('.film-ev.editing'));
+
+    const filmSrc2 = readFileSync(join(APP, 'js/film.js'), 'utf8');
+    ok('editing a moment restages the board it was saved with, not a blank one',
+      /function buildBoard\(main, sit, frame\)/.test(filmSrc2) && /buildBoard\(main, main\.querySelector\('#film-sit'\)\.value, e\.frame \|\| null\)/.test(filmSrc2));
+    ok('opening another match drops a half-finished edit', /editingId=null; render\(root, ctx\)/.test(filmSrc2));
+
+    /* Auto-scout stamped 'offense' on every possession, so every attack the OPPONENT ran arrived
+       in the playbook filed as one of ours — the defensive half of a match could not be captured
+       at all. Which phase it is depends on which cap colour we are, and only the Film Room knows. */
+    const tacSrc = readFileSync(join(APP, 'js/tactics.js'), 'utf8');
+    const appSrc2 = readFileSync(join(APP, 'js/app.js'), 'utf8');
+    ok('a recognised play carries which side attacked, instead of a hardcoded phase',
+      /offense: p\.offense,/.test(tacSrc) && !/situation: p\.situation, phase: 'offense'/.test(tacSrc));
+    ok('the Film Room turns that into our phase, using the same test as the attack list',
+      /const phaseOf = play =>/.test(filmSrc2) && /play\.offense !== ourSide\(\)\) \? 'defense' : 'offense'/.test(filmSrc2));
+    ok('…and both routes into the playbook pass it',
+      /phase: phaseOf\(p\)/.test(filmSrc2) && /Object\.assign\(\{\}, p, \{ phase: phaseOf\(p\) \}\)/.test(filmSrc2));
+    ok('the editor honours a phase it is handed rather than assuming offense',
+      /DATA\.newScenario\(play\.situation \|\| '6v6', play\.phase \|\| 'offense'\)/.test(appSrc2));
+
+    /* TACTICS is pure and testable on its own: give it a possession by each side and check the
+       phase the Film Room would derive, rather than trusting the wiring. */
+    const asUs = { offense: 'att' }, asThem = { offense: 'def' };
+    const derive = (play, usSide) => (play.offense && play.offense !== usSide) ? 'defense' : 'offense';
+    ok('white caps: our possession is offense, theirs is defense',
+      derive(asUs, 'att') === 'offense' && derive(asThem, 'att') === 'defense');
+    ok('dark caps: it flips, because "us" is the other colour',
+      derive(asUs, 'def') === 'defense' && derive(asThem, 'def') === 'offense');
   }
 
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);

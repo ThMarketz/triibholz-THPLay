@@ -229,7 +229,9 @@
       },
       // an auto-scouted attack (≤6 keyframes) opens as an animated play in the editor
       openPlay: (play) => {
-        const sc = DATA.newScenario(play.situation || '6v6', 'offense');
+        // 'offense' here meant "somebody attacked", not "WE attacked" — so every possession the
+        // opponent ran came into the playbook labelled as one of our attacks
+        const sc = DATA.newScenario(play.situation || '6v6', play.phase || 'offense');
         sc.title = play.title || 'Scouted attack'; sc.description = play.description || '';
         if (play.frames && play.frames.length) sc.frames = DATA.clone(play.frames);
         sc.notes = DATA.clone(play.notes || {});
