@@ -1,34 +1,34 @@
 {
  "docs": {
   "dpa": {
-   "version": "2026-09-18+79491a75",
+   "version": "2026-09-18+b1ebdaf4",
    "status": "draft",
    "langs": {
     "en": {
-     "sha256": "79491a756de9b26e3342b52e4368726e17bb831581a201200d020995b8bd7c4d",
-     "bytes": 1998,
+     "sha256": "b1ebdaf4c8e0ea7e9b0b0c8c12db33c6cbcc972fee35861888dbb2e93e083954",
+     "bytes": 2188,
      "date": "2026-09-18"
     }
    }
   },
   "privacy": {
-   "version": "2026-09-18+9827495b",
+   "version": "2026-09-18+b3b1c0e0",
    "status": "draft",
    "langs": {
     "en": {
-     "sha256": "9827495b5044e01678b38a9de9d9cfc9cfdf906bc991983df0df6c4dcd8890d5",
-     "bytes": 3426,
+     "sha256": "b3b1c0e06b0fa9f5acc041efa3fa525b7c8f76a4ae57b75a292846a3c3a2ea9e",
+     "bytes": 3844,
      "date": "2026-09-18"
     }
    }
   },
   "terms": {
-   "version": "2026-09-18+c11dbf97",
+   "version": "2026-09-18+df925d24",
    "status": "draft",
    "langs": {
     "en": {
-     "sha256": "c11dbf976322efa9fb9b7804dd4ecce898bfacbde7f225658537d38bd6e5d96c",
-     "bytes": 2313,
+     "sha256": "df925d24b09ed3735de35304932bb1b70c2f50ed103f8ec627a65d0a5292589e",
+     "bytes": 2839,
      "date": "2026-09-18"
     }
    }

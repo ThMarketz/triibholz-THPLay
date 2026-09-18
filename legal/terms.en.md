@@ -35,9 +35,10 @@ uses it to hold its own team data, including data about its players, some of who
 - **What the club creates stays the club's** — its plays, its notes, its rosters and its match
   video. We take only the licence needed to store it, show it back and keep backups, and that
   licence ends when the club leaves.
-- We learn from **aggregate, anonymous patterns** across clubs to improve what the software
-  suggests. Nothing that identifies a person, a team or a club is used for this, and a club may
-  switch it off.
+- The app notices **patterns in your own plays** — how many passes, which situation, roughly where
+  the shot came from — to suggest things back to you. Those patterns are stripped of titles,
+  notes, names, teams and clubs, they are kept **on your own device**, and **they are never sent to
+  us or to anyone else**. We learn nothing from your club.
 
 ## Money
 
@@ -46,9 +47,14 @@ month's notice.
 
 ## When a club leaves
 
-The club may export everything it holds at any time. **We keep its data for 30 days after the
-arrangement ends so it can be recovered, then delete it.** Match video is deleted on its own
-schedule regardless — see the privacy notice.
+A coach can take everything on their own device with them at any time, in one file, from
+**Import ▾ → Take everything with me**. For what is on the club's server, ask us and we will send
+it — there is no self-service button for that yet, and this says so rather than implying one.
+
+When the arrangement ends we **delete the club's data within 30 days**, keeping it that long only
+so it can be recovered if leaving was a mistake. That is a promise about what we do, not something
+that happens on its own: ask, and we do it. Match video is deleted on its own schedule regardless —
+see the privacy notice.
 
 ## Limits
 

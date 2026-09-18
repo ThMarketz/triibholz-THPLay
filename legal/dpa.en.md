@@ -47,7 +47,9 @@ breach.
 - Match video and clips: deleted automatically about twelve months after upload.
 - A player: deleted outright on the club's instruction — every record, though not footage of a
   match they appeared in, which nobody can edit them out of.
-- Everything else: deleted 30 days after the arrangement ends.
+- Everything else: deleted within 30 days of the arrangement ending. This is done on request and
+  on our own initiative, not by an automatic process — said plainly because a club's lawyer will
+  ask, and "it happens automatically" would not be true.
 
 ## Audit
 

@@ -55,14 +55,18 @@ player sees their own record. Nothing is shared between clubs. Nothing is sold, 
 
 We use other companies to run the service. They only ever hold what they need to:
 
-| Who | What for | What they see |
-|---|---|---|
-| Our hosting | Running the server | Everything on the server |
-| Cloudflare | Carrying the connection | Traffic, not the contents of your account |
-| Stripe | Taking payment | The club's payment details. **Never a player's data** |
-| bexio | Invoices | The club's billing details |
+| Who | What for | What they see | Now, or later |
+|---|---|---|---|
+| The server your club's data is on | Running the service | Everything on the server | Now |
+| Cloudflare | Carrying the connection to the server | Traffic, not the contents of your account | Now |
+| Stripe | Taking payment | The club's payment details. **Never a player's data** | When paid subscriptions start |
+| bexio | Invoices | The club's billing details | When paid subscriptions start |
 
-If we add anyone, the club is told before it happens.
+Nobody else. If we add anyone, the club is told **before** it happens.
+
+**The app learns nothing about you.** It notices patterns in a coach's own plays — pass counts,
+situations, rough shot positions — with every title, note, name, team and club stripped out, and
+keeps them **on that coach's own device**. They are never sent to us.
 
 ## Your rights
 
