@@ -119,6 +119,13 @@ calling it blocking, which it is: these are minors' names, licence numbers and v
 - What is collected, where it lives, who can see it, how long it is kept, how it is deleted.
 - The privacy notice, in the four languages the app already speaks.
 - Consent for video of minors, which is its own question and not covered by a general notice.
+- **Match videos are never deleted from a device.** Found while building Phase 1: the app has no
+  way to delete a match at all, and sign-out clears rosters (`TEAMS.wipeDevice`) without touching
+  the IndexedDB store the video blobs live in. On a shared club iPad, one coach's match footage of
+  children survives the next coach signing in, invisibly — there is no screen that lists it. This
+  needs a decision before real video: does sign-out delete videos, or does it say plainly that it
+  does not? Either is defensible; silence is not. (The device file already lists them, which is
+  how they became visible at all.)
 - If the support bot in Phase 9 is built, the notice must name Anthropic as a processor. Better to
   write it once, now, than to amend it after clubs have signed.
 

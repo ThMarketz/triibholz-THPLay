@@ -19,9 +19,9 @@ window.Response = window.Response || globalThis.Response;
 if (!window.Blob.prototype.text) window.Blob.prototype.text = function () { return new Promise((res, rej) => { const r = new window.FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsText(this); }); };
 if (!window.Blob.prototype.arrayBuffer) window.Blob.prototype.arrayBuffer = function () { return new Promise((res, rej) => { const r = new window.FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsArrayBuffer(this); }); };
 
-const files = ['js/theme.js','js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/chart.js','js/sheetdoc.js','js/eligibility.js','js/teamsheet.js','js/scout.js','js/teamsync.js','js/teams.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/share.js','js/announce.js','js/wpmatch.js','js/api.js','js/session.js','js/analysis.js','js/film.js','js/app.js'];
+const files = ['js/theme.js','js/i18n.js','js/help.js','js/draft.js','js/commands.js','js/solver.js','js/qr.js','js/fx.js','js/pool.js','js/data.js','js/animate.js','js/vision.js','js/field.js','js/shot.js','js/testlog.js','js/chart.js','js/sheetdoc.js','js/eligibility.js','js/teamsheet.js','js/scout.js','js/teamsync.js','js/teams.js','js/manikin.js','js/track.js','js/bytetrack.js','js/events.js','js/webdetector.js','js/videogen.js','js/calendar.js','js/planner.js','js/privacy.js','js/tactics.js','js/gameplan.js','js/device.js','js/share.js','js/announce.js','js/wpmatch.js','js/api.js','js/session.js','js/analysis.js','js/film.js','js/app.js'];
 const combined = files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n')
-  + '\n;\nwindow.__T = { THEME, CHART, API, SESSION, POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET , TEAMSYNC , TEAMS , WPMATCH , SCOUT };';
+  + '\n;\nwindow.__T = { THEME, CHART, API, SESSION, POOL, DATA, ANIM, I18N, QR, FX, FILM, HELP, DRAFT, COMMANDS, SOLVER, VISION, TRACK, ANALYSIS, BYTETRACK, EVENTS, WEBDETECTOR, VIDEOGEN, CALENDAR, PLANNER, PRIVACY, TACTICS, GAMEPLAN, DEVICE, SHARE, FIELD, SHOT, MANIKIN, TESTLOG, ANNOUNCE, WPMATCH , SHEETDOC , ELIGIBILITY , TEAMSHEET , TEAMSYNC , TEAMS , WPMATCH , SCOUT };';
 
 let pass=0, fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓',n);} else {fail++;console.log('  ✗ FAIL:',n);} };
@@ -941,7 +941,7 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     const inp = q('#import-file'); Object.defineProperty(inp, 'files', { value:[txt], configurable:true }); inp.dispatchEvent(new window.Event('change')); await wait(150);
     ok('.txt written steps import as a play (title from # line)', DATA.load().length===before+1 && DATA.load().some(x=>x.title==='Drive and dump' && x.frames.length>=2));
     q('#import-btn').click(); await wait(10);
-    ok('Import ▾ menu: files · paste · backup', !q('#import-menu').hidden && qa('#import-menu [data-imp]').map(b=>b.dataset.imp).join()==='file,paste,backup');
+    ok('Import ▾ menu: files · paste · plays backup · whole device', !q('#import-menu').hidden && qa('#import-menu [data-imp]').map(b=>b.dataset.imp).join()==='file,paste,backup,device');
     q('#import-menu [data-imp="paste"]').click(); await wait(10);
     const { SHARE } = window.__T;
     const link = SHARE.shareUrl('http://x/', await SHARE.encode(SHARE.pack({ title:'Pasted link play', situation:'6v6', phase:'offense', frames:[f66, Object.assign(DATA.clone(f66), { ball:{carrier:'A6'} })], notes:{} })));
@@ -2894,6 +2894,83 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
       /cur\.calibration = \{ H: vHomography \|\| null/.test(filmSrc3) && /const calibrationFor = s =>/.test(filmSrc3));
     ok('…and an uncalibrated match falls back to auto rather than sending a null homography as fixed',
       /\{ H: null, mode: 'auto', minConf: 0\.4 \}/.test(filmSrc3));
+  }
+
+  console.log('\n[21] Taking a device with you — the move that would otherwise lose a season');
+  {
+    /* Browser storage is keyed by ORIGIN. The day this app moves from localhost:8088 to thplay.ch,
+       every coach's plays, rosters, tagged moments, cut library and player test histories stay
+       behind at an address nobody will open again. Nothing errors; the app simply looks new.
+       "Backup all my plays" is honestly named and covers plays only, so a coach who dutifully
+       pressed it before the move would still lose most of it. */
+    const { DEVICE } = window.__T;
+    const mem = () => { const m = { _: {} };
+      m.getItem = k => (k in m._ ? m._[k] : null);
+      m.setItem = (k, v) => { m._[k] = String(v); };
+      m.key = i => Object.keys(m._)[i];
+      Object.defineProperty(m, 'length', { get: () => Object.keys(m._).length });
+      return m; };
+
+    const src = mem();
+    src.setItem('thplay.teams.v1', '{"teams":[{"name":"U14"}]}');
+    src.setItem('thplay.film.v1', '{"sessions":[{"clips":[{"id":"c1"}]}]}');
+    src.setItem('thplay.testlog.nora', '{"tests":[1,2]}');
+    src.setItem('thplay.lang', 'de');
+    src.setItem('thplay.calendar.token', 'SECRET-DO-NOT-MOVE');
+    src.setItem('someoneelse.app', 'not ours');
+
+    const file = DEVICE.pack(src, [{ key: 'film-1', name: 'vs Red Sharks', bytes: 900 * 1024 * 1024 }], { at: 'T', origin: 'http://localhost:8088' });
+    ok('everything the coach made travels', ['thplay.teams.v1', 'thplay.film.v1', 'thplay.testlog.nora'].every(k => k in file.stores));
+    ok('…and so do their preferences, which are small and still theirs', file.stores['thplay.lang'] === 'de');
+    ok('another app’s storage is not swept up', !('someoneelse.app' in file.stores));
+    ok('a calendar token is NOT carried — it is a credential, and it is reissued when accounts come on',
+      !('thplay.calendar.token' in file.stores) && DEVICE.NEVER.includes('thplay.calendar.token'));
+    ok('work and preferences are counted separately, so "what did I move?" has an answer',
+      file.counts.work === 3 && file.counts.preferences === 1);
+
+    /* One match video outweighs the whole rest of the file. They are NAMED, not embedded — a file
+       that silently left them out would be worse than one that cannot be moved. */
+    ok('videos are listed by name and size rather than carried', file.videos.length === 1 && file.videos[0].bytes > 0 && !JSON.stringify(file.stores).includes('film-1'));
+    ok('…and the coach is told about them when the file is made', /deviceSavedWithVideos/.test(readFileSync(join(APP, 'js/app.js'), 'utf8')));
+
+    // round trip onto a device that has nothing — the ordinary case, the move itself
+    const fresh = mem();
+    const r1 = DEVICE.apply(file, fresh, {});
+    ok('on a fresh device everything is written back', r1.ok && r1.written.length === Object.keys(file.stores).length && !r1.kept.length);
+    ok('…byte for byte', fresh.getItem('thplay.film.v1') === src.getItem('thplay.film.v1'));
+
+    // and onto a device that already has its own work — the case that could lose a second season
+    const busy = mem();
+    busy.setItem('thplay.film.v1', '{"sessions":[{"mine":true}]}');
+    const r2 = DEVICE.apply(file, busy, {});
+    ok('a device with work of its own keeps it by default', r2.ok && r2.kept.includes('thplay.film.v1') && busy.getItem('thplay.film.v1') === '{"sessions":[{"mine":true}]}');
+    ok('…and says what it left alone rather than silently skipping', r2.kept.length === 1 && r2.written.length > 0);
+    const r3 = DEVICE.apply(file, busy, { replace: true });
+    ok('…and replaces only when asked outright', r3.ok && busy.getItem('thplay.film.v1') === src.getItem('thplay.film.v1'));
+
+    // a tampered file must not be able to write storage that is not ours
+    ok('a file naming a foreign key is refused whole', DEVICE.check({ format: DEVICE.FORMAT, stores: { 'evil.key': 'x' } }).error === 'foreign-key');
+    ok('…and so is one smuggling the calendar token back in', DEVICE.check({ format: DEVICE.FORMAT, stores: { 'thplay.calendar.token': 'x' } }).error === 'foreign-key');
+    ok('a file of the wrong format is refused before anything is written', DEVICE.check({ format: 'something.else', stores: {} }).error === 'wrong-format');
+    ok('…and a plays backup is not mistaken for a device file', DEVICE.check(JSON.parse('{"kind":"thplay.set","plays":[]}')).ok === false);
+
+    /* THE RATCHET. This is the part that still works in a year. A new store added anywhere in the
+       app is invisible to a prefix sweep if it does not share the prefix — and the failure is
+       silent, at the worst possible moment, on somebody's move. */
+    const storeKeys = new Set();
+    for (const f of readdirSync(join(APP, 'js')).filter(n => n.endsWith('.js'))) {
+      const t = readFileSync(join(APP, 'js', f), 'utf8');
+      for (const m of t.matchAll(/localStorage\.(?:setItem|getItem|removeItem)\(\s*'([^']+)'/g)) storeKeys.add(m[1]);
+      for (const m of t.matchAll(/const KEY = '([^']+)'/g)) storeKeys.add(m[1]);
+    }
+    const stray = [...storeKeys].filter(k => !DEVICE.isOurs(k));
+    ok('every store the app writes shares the prefix the sweep looks for' + (stray.length ? ' — stray: ' + stray.join(', ') : ''),
+      storeKeys.size >= 8 && stray.length === 0);
+
+    ok('a whole-device file is recognised before the play importer can strip it to its plays',
+      /maybe\.format === DEVICE\.FORMAT\) return void await deviceRestore/.test(readFileSync(join(APP, 'js/app.js'), 'utf8')));
+    ok('the module is precached, so the move works on a device that is already offline',
+      readFileSync(join(APP, 'sw.js'), 'utf8').includes('./js/device.js'));
   }
 
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);

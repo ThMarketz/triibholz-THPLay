@@ -8,6 +8,7 @@
    tags; automatic video tracking is a future server-side feature.
    ============================================================ */
 const FILM = (() => {
+  const VIDEO_STORE_NAME = 'videos';
   const C = name => THEME.c(name);   // colour tokens as values (js/theme.js, css/styles.css)
   const KEY = 'thplay.film.v1';
 
@@ -96,6 +97,24 @@ const FILM = (() => {
       const tx = db.transaction('videos', 'readwrite');
       tx.objectStore('videos').put(blob, key);
       tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
+    });
+  }
+  /* Which uploaded matches this device holds — names and sizes, for the "take everything with me"
+     file, which lists them rather than carrying them (js/device.js says why). */
+  async function videoList() {
+    let db; try { db = await idb(); } catch (e) { return []; }
+    const names = {};
+    (load() || []).forEach(s => { if (s && s.source && s.source.kind === 'file') names['film-' + s.id] = s.title || s.source.name || ''; });
+    return new Promise(res => {
+      const out = [], st = db.transaction(VIDEO_STORE_NAME).objectStore(VIDEO_STORE_NAME);
+      const rq = st.openCursor();
+      rq.onsuccess = () => {
+        const c = rq.result;
+        if (!c) return res(out);
+        out.push({ key: String(c.key), name: names[String(c.key)] || String(c.key), bytes: (c.value && c.value.size) || 0 });
+        c.continue();
+      };
+      rq.onerror = () => res(out);
     });
   }
   async function getVideo(key) {
@@ -1582,5 +1601,5 @@ const FILM = (() => {
     };
   }
 
-  return { render, load, parseSource, ZONE_HINTS, _insights: insights, motionScan, teamOf, _errorReason: errorReason, _serverReasons: SERVER_REASONS, _readOfCut: readOfCut, TACTIC_IDS };
+  return { render, load, parseSource, ZONE_HINTS, videoList, _insights: insights, motionScan, teamOf, _errorReason: errorReason, _serverReasons: SERVER_REASONS, _readOfCut: readOfCut, TACTIC_IDS };
 })();

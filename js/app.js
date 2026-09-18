@@ -3118,6 +3118,14 @@
   async function importFiles(files) {
     if (typeof SHARE === 'undefined' || !files || !files.length) return;
     const read = f => f.text ? f.text() : new Promise(r => { const fr = new FileReader(); fr.onload = () => r(String(fr.result || '')); fr.readAsText(f); });
+    /* A whole-device file is not a bag of plays and must not be fed through the play importer —
+       it would find the plays, write them, and quietly drop the rosters, the film and the test
+       results, which is the exact loss this file exists to prevent. Caught first, by its format. */
+    if (typeof DEVICE !== 'undefined' && files.length === 1) {
+      let maybe = null;
+      try { maybe = JSON.parse(await read(files[0])); } catch (e) { maybe = null; }
+      if (maybe && maybe.format === DEVICE.FORMAT) return void await deviceRestore(maybe);
+    }
     const texts = await Promise.all(Array.from(files).map(read));
     return importTexts(texts);
   }
@@ -3140,6 +3148,41 @@
     downloadBlob(JSON.stringify(SHARE.packMany(mine, { name: 'Triibholz backup ' + new Date().toISOString().slice(0, 10) }), null, 1), SHARE.filename('triibholz-backup-' + new Date().toISOString().slice(0, 10), 'thplay.json'), 'application/json');
     toast(`${mine.length} play${mine.length > 1 ? 's' : ''} saved as a backup — import the file on any device`);
   }
+  /* ---- take everything with me ----
+     backupAll() above saves PLAYS. This saves the device: every thplay.* key — rosters, tagged
+     moments, the cut library, player test histories, home training, preferences. Browser storage
+     is keyed by origin, so without this the move to thplay.ch strands all of it silently. */
+  async function deviceBackup() {
+    let videos = [];
+    try { if (typeof FILM !== 'undefined' && FILM.videoList) videos = await FILM.videoList(); } catch (e) {}
+    const file = DEVICE.pack(window.localStorage, videos, {
+      at: new Date().toISOString(), origin: location.origin, app: 'Triibholz',
+    });
+    const d = DEVICE.describe(file);
+    downloadBlob(JSON.stringify(file, null, 1),
+      'triibholz-device-' + new Date().toISOString().slice(0, 10) + '.thplay.json', 'application/json');
+    // say what is NOT in it, in the same breath as making it
+    toast(videos.length
+      ? T('ui.deviceSavedWithVideos', { n: d.work.length, v: videos.length })
+      : T('ui.deviceSaved', { n: d.work.length }));
+  }
+
+  async function deviceRestore(file) {
+    const d = DEVICE.describe(file);
+    if (!d.ok) { toast(T('ui.deviceNotAFile')); return false; }
+    const clash = Object.keys(file.stores).filter(k => window.localStorage.getItem(k) !== null);
+    /* A device that already holds work is the one case where restoring blindly is the same loss,
+       pointed the other way. Ask, and default to keeping what is here. */
+    const replace = clash.length
+      ? window.confirm(T('ui.deviceClash', { n: clash.length }))
+      : false;
+    const r = DEVICE.apply(file, window.localStorage, { replace });
+    if (!r.ok) { toast(r.error === 'device-full' ? T('ui.deviceFull') : T('ui.deviceNotAFile')); return false; }
+    toast(T('ui.deviceRestored', { n: r.written.length, kept: r.kept.length }));
+    setTimeout(() => location.reload(), 900);   // every module reads its store once, at start
+    return true;
+  }
+
   // ---- multi-select → set download / video reel
   function toggleSelectMode(on) {
     selecting = on == null ? !selecting : !!on; if (!selecting) selected.clear();
@@ -3216,7 +3259,7 @@
     $('sb-reel').onclick = makeReel;
     $('import-btn').onclick = e => { e.stopPropagation(); toggleImportMenu(); };
     document.addEventListener('click', () => toggleImportMenu(false));
-    $('import-menu').querySelectorAll('[data-imp]').forEach(b => b.onclick = e => { e.stopPropagation(); toggleImportMenu(false); if (b.dataset.imp === 'file') $('import-file').click(); else if (b.dataset.imp === 'paste') openPaste(); else backupAll(); });
+    $('import-menu').querySelectorAll('[data-imp]').forEach(b => b.onclick = e => { e.stopPropagation(); toggleImportMenu(false); if (b.dataset.imp === 'file') $('import-file').click(); else if (b.dataset.imp === 'paste') openPaste(); else if (b.dataset.imp === 'device') deviceBackup(); else backupAll(); });
     $('import-file').onchange = e => { importFiles(e.target.files); e.target.value = ''; };
     $('paste-close').onclick = $('paste-cancel').onclick = () => { $('paste-modal').hidden = true; };
     $('paste-import').onclick = async () => { const t = $('paste-text').value; $('paste-modal').hidden = true; await importTexts([t]); };
