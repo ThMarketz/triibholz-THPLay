@@ -209,7 +209,13 @@ const FILM = (() => {
       if (blob) {
         if (fileUrl) URL.revokeObjectURL(fileUrl);
         fileUrl = URL.createObjectURL(blob);
-        holder.querySelector('#film-video').src = fileUrl;
+        const v = holder.querySelector('#film-video');
+        /* Saving a moment re-renders the whole panel, which rebuilds this <video> — so without
+           this the match jumped back to 0:00 every single time a moment was tagged, and tagging
+           a match means doing that twenty or thirty times. renderSession() remembers where the
+           coach was; this puts them back. */
+        if (resumeAt != null) { const at = resumeAt; resumeAt = null; v.addEventListener('loadedmetadata', () => { try { v.currentTime = Math.min(at, v.duration || at); } catch (e) {} }, { once: true }); }
+        v.src = fileUrl;
         return;
       }
     } catch (e) {}
@@ -251,7 +257,7 @@ const FILM = (() => {
     shotEvents(s, true).forEach(e => { if (e.zone) ga[e.zone]=(ga[e.zone]||0)+(e.type==='goal-against'?1:0); });
     shotEvents(s, false).forEach(e => { if (e.zone) gf[e.zone]=(gf[e.zone]||0)+(e.type==='goal-for'?1:0); });
     return `<div class="goal-grid ${interactive?'pick':''}" id="${interactive?'film-zone-pick':'film-zone-chart'}">
-      ${ZONES.map(z=>`<button class="gz ${interactive && pickZone===z?'sel':''}" data-z="${z}" ${interactive?'':'tabindex="-1"'}>
+      ${ZONES.map(z=>`<button class="gz ${interactive && pickZone===z?'sel':''}" data-z="${z}" ${interactive?'':'tabindex="-1"'} title="${esc(TX('film.zoneHint'+z))}" aria-label="${esc(TX('film.zoneHint'+z))}">
         ${!interactive && (ga[z]||gf[z]) ? `${ga[z]?`<span class="gz-a">${ga[z]}</span>`:''}${gf[z]?`<span class="gz-f">${gf[z]}</span>`:''}` : (interactive?'':'')}
       </button>`).join('')}
     </div>`;
@@ -689,7 +695,7 @@ const FILM = (() => {
     out.querySelectorAll('[data-pclip]').forEach(b => b.onclick = async () => {
       const p = sc.plays[+b.dataset.pclip], holder = b.closest('.ta-pat').querySelector('.ar-clip');
       b.disabled = true; holder.hidden = false; holder.innerHTML = `<span class="muted">${TX('film.cuttingTheClip')}</span>`;
-      try { const url = await cutClip(result.meta.videoRef, p.tStart, p.tEnd); holder.innerHTML = `<video controls playsinline preload="metadata" src="${esc(scoutBase() + url)}"></video>`; }
+      try { const c = await cutClip(result.meta.videoRef, p.tStart, p.tEnd); holder.innerHTML = `<video controls playsinline preload="metadata" src="${esc(scoutBase() + c.url)}"></video>`; }
       catch (e) { holder.innerHTML = `<span class="muted">${TX('film.clipFailed', { error: esc(whyText(e.message)) })}</span>`; b.disabled = false; }
     });
   }
@@ -760,7 +766,7 @@ const FILM = (() => {
     return [TX(t.label), sitLabel(e.situation), e.pos ? TX('film.posLabel', { n: e.pos }) : '', e.zone || '',
       e.verdict ? (e.verdict === 'right' ? TX('film.right') : TX('film.wrong')) : '', e.counter ? dt(e.counter) : '', e.note ? dt(e.note) : ''].filter(Boolean);
   }
-  async function openSendMoment(root2, sessions, s, e) {
+  async function openSendMoment(root2, sessions, s, e, range) {
     const marks = marksOf(e), title = `${fmt(e.t)} · ${TX(typeOf(e.type).label)}`;
     let people = [];
     try { const club = SESSION.activeClub(); if (club) people = (await SESSION.api(`/api/clubs/${club.id}/addressees`)).addressees; } catch (err) {}
@@ -783,8 +789,12 @@ const FILM = (() => {
       go.disabled = true; state.textContent = TX('film.sendPreparing');
       try {
         const ref = await ensureServerVideo(sessions, s);
-        const start = Math.max(0, e.t - 4), end = e.t + 6;
-        const clipUrl = await cutClip(ref, start, end);
+        /* A tagged moment is a single instant, so it gets a window around it. A CUT already has
+           the two ends the coach marked — taking t-4..t+6 there would quietly send a different
+           passage from the one they watched and approved. */
+        const start = range ? range.from : Math.max(0, e.t - 4);
+        const end = range ? range.to : e.t + 6;
+        const clipUrl = (await cutClip(ref, start, end, 0)).url;
         const to = box.querySelector('#send-to').value;
         await SESSION.api('/api/announcements', { method: 'POST', body: {
           scope: to ? 'player' : 'team', to: to || undefined,
@@ -800,16 +810,23 @@ const FILM = (() => {
     };
   }
 
-  async function cutClip(videoRef, t0, t1) {
-    const r = await API.fetch(scoutBase() + '/api/clip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, start: Math.max(0, t0 - 2), end: t1 + 2 }) });
+  /* pad: seconds of run-up/run-out. A machine-chosen possession wants a couple of seconds either
+     side; a range the COACH marked is already the range they meant, so that call passes 0.
+     The server caps a clip at 60s and does so SILENTLY (server/index.js: Math.min(start + 60, …)),
+     so the answer is checked against what was asked rather than trusted. */
+  const MAX_CUT = 60;
+  async function cutClip(videoRef, t0, t1, pad = 2) {
+    const start = Math.max(0, t0 - pad), end = t1 + pad;
+    const r = await API.fetch(scoutBase() + '/api/clip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, start, end }) });
     if (!r.ok) throw new Error('clip-' + r.status);
-    return (await r.json()).clipUrl;
+    const j = await r.json();
+    return { url: j.clipUrl, start: j.start, end: j.end, truncated: (j.end - j.start) + 0.5 < (end - start) };
   }
   function wireAttacks(out, sc, result) {
     out.querySelectorAll('[data-clip]').forEach(b => b.onclick = async () => {
       const p = sc.plays[+b.dataset.clip], holder = b.closest('.attack-row').querySelector('.ar-clip');
       b.disabled = true; holder.hidden = false; holder.innerHTML = `<span class="muted">${TX('film.cuttingTheClip')}</span>`;
-      try { const url = await cutClip(result.meta.videoRef, p.tStart, p.tEnd); holder.innerHTML = `<video controls playsinline preload="metadata" src="${esc(scoutBase() + url)}"></video>`; }
+      try { const c = await cutClip(result.meta.videoRef, p.tStart, p.tEnd); holder.innerHTML = `<video controls playsinline preload="metadata" src="${esc(scoutBase() + c.url)}"></video>`; }
       catch (e) { holder.innerHTML = `<span class="muted">${TX('film.clipFailed', { error: esc(whyText(e.message)) })}</span>`; b.disabled = false; }
     });
     out.querySelectorAll('[data-board]').forEach(b => b.onclick = () => {
@@ -830,7 +847,7 @@ const FILM = (() => {
     try {
       for (let i = 0; i < plays.length; i++) {
         const p = plays[i]; if (st) st.textContent = ` — ${TX('film.preparingClip', { i: i + 1, n: plays.length })}`;
-        let clipUrl = null; if (result && result.meta && result.meta.videoRef) { try { clipUrl = await cutClip(result.meta.videoRef, p.tStart, p.tEnd); } catch (e) {} }
+        let clipUrl = null; if (result && result.meta && result.meta.videoRef) { try { clipUrl = (await cutClip(result.meta.videoRef, p.tStart, p.tEnd)).url; } catch (e) {} }
         const asked = rows.filter(r => r.side === (p.offense === usSide ? 'offense' : 'defense')).map(r => TX(r.label)).join(', ');
         const followed = rows.length && typeof GAMEPLAN !== 'undefined' ? (() => { const js = cur.plan.map(id => GAMEPLAN.byId(id)).filter(Boolean).map(ins => GAMEPLAN.judge(ins, p, us)).filter(j => j.applies && j.read); return js.length ? js.some(j => j.followed) : null; })() : null;
         items.push({ t0: p.tStart, t1: p.tEnd, title: `${fmt(p.tStart)} · ${p.offense === usSide ? 'us' : 'them'} · ${p.name}`, note: (p.steps || []).join(' → '), result: resultOf(p), asked, followed, clipUrl, frames: p.frames, notes: p.notes });
@@ -1016,14 +1033,94 @@ const FILM = (() => {
     if (cur) renderSession();
   }
 
-  function openSession(id) { cur = sessions.find(s=>s.id===id) || cur; pickOrigin=null; pickZone=''; vHomography=null; vCorners=[]; render(root, ctx); }
+  function openSession(id) { cur = sessions.find(s=>s.id===id) || cur; pickOrigin=null; pickZone=''; vHomography=null; vCorners=[]; cutIn=cutOut=null; lastCut=null; render(root, ctx); }
+
+  /* ---------- cut a piece out of the match ----------
+     The thing a coach asks for first and the app did not have: "show me those twenty seconds".
+     Until now a clip could only appear as a BY-PRODUCT — a row auto-scout chose, a moment being
+     sent to a player, a debrief — so cutting meant running a Tier-3 scan of the whole match and
+     then accepting the machine's idea of where the passage started. A coach could not mark their
+     own in and out anywhere in the app.
+
+     The panel is rendered for a LINK as well as a file, carrying the reason it cannot work there.
+     Hiding it was why nobody could find it: a control that is absent teaches nothing, and the
+     coach concludes the app cannot do it at all. */
+  function cutPanelHtml(s) {
+    const isFile = s.source.kind === 'file';
+    return `<div class="film-auto film-cut" id="film-cut">
+      <div class="fa-head"><strong>${TX('film.cutTitle')}</strong>
+        ${isFile ? `<button class="btn-ghost sm" id="cut-in">${TX('film.cutIn')}</button>
+        <button class="btn-ghost sm" id="cut-out">${TX('film.cutOut')}</button>
+        <span class="cut-range" id="cut-range">${TX('film.cutNoRange')}</span>
+        <button class="btn-primary sm" id="cut-go" disabled>${TX('film.cutGo')}</button>
+        <button class="btn-ghost sm" id="cut-clear">${TX('film.cutClear')}</button>` : ''}
+      </div>
+      <div id="cut-out-box"></div>
+      <p class="fa-note">${isFile ? TX('film.cutExplain', { max: MAX_CUT }) : TX('film.cutOnlyFile')}</p>
+    </div>`;
+  }
+
+  let cutIn = null, cutOut = null, resumeAt = null, lastCut = null;
+  function wireCut(main, sessions, s) {
+    const panel = main.querySelector('#film-cut'); if (!panel || s.source.kind !== 'file') return;
+    const rangeEl = panel.querySelector('#cut-range'), go = panel.querySelector('#cut-go'), box = panel.querySelector('#cut-out-box');
+    const vid = () => main.querySelector('#film-video');
+    const paint = () => {
+      const len = (cutIn != null && cutOut != null) ? cutOut - cutIn : 0;
+      if (cutIn == null) rangeEl.textContent = TX('film.cutNoRange');
+      else if (cutOut == null) rangeEl.textContent = TX('film.cutFrom', { from: fmt(cutIn) });
+      else rangeEl.textContent = TX('film.cutRange', { from: fmt(cutIn), to: fmt(cutOut), secs: Math.round(len) });
+      go.disabled = !(cutIn != null && cutOut != null && len >= 1 && len <= MAX_CUT);
+      rangeEl.classList.toggle('bad', cutIn != null && cutOut != null && (len < 1 || len > MAX_CUT));
+      if (cutIn != null && cutOut != null && len > MAX_CUT) rangeEl.textContent = TX('film.cutTooLong', { max: MAX_CUT });
+      if (cutIn != null && cutOut != null && len < 1) rangeEl.textContent = TX('film.cutBackwards');
+    };
+    const now = () => { const v = vid(); return v ? v.currentTime || 0 : 0; };
+    panel.querySelector('#cut-in').onclick = () => { cutIn = now(); if (cutOut != null && cutOut <= cutIn) cutOut = null; paint(); };
+    panel.querySelector('#cut-out').onclick = () => { cutOut = now(); paint(); };
+    panel.querySelector('#cut-clear').onclick = () => { cutIn = cutOut = null; lastCut = null; box.innerHTML = ''; paint(); };
+    // put the last cut back after a re-render, so tagging a moment does not throw it away
+    if (lastCut) { box.innerHTML = lastCut.html; const sb = box.querySelector('#cut-send'); if (sb) sb.onclick = () => openSendMoment(root, sessions, s, { id: 'cut', t: lastCut.from, type: 'note', situation: '6v6', pos: '', zone: '', note: '' }, { from: lastCut.from, to: lastCut.to }); }
+    go.onclick = async () => {
+      const from = cutIn, to = cutOut;
+      go.disabled = true; box.innerHTML = `<span class="muted">${TX('film.cutWorking')}</span>`;
+      try {
+        // the match has to be on the club server before ffmpeg can touch it; this uploads once and remembers
+        const ref = await ensureServerVideo(sessions, s);
+        const c = await cutClip(ref, from, to, 0);
+        const url = esc(scoutBase() + c.url), name = `${(s.title || 'clip').replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[^\w-]+/g, '-')}-${fmt(from).replace(':', 'm')}.mp4`;
+        box.innerHTML = `<div class="cut-result">
+          <video controls playsinline preload="metadata" src="${url}"></video>
+          <div class="cut-actions">
+            <span class="muted">${TX('film.cutDone', { secs: Math.round(c.end - c.start) })}</span>
+            <a class="btn-ghost sm" href="${url}" download="${esc(name)}">${TX('film.cutDownload')}</a>
+            ${canSend() ? `<button class="btn-ghost sm" id="cut-send">${TX('film.cutSend')}</button>` : `<span class="muted">${TX('film.cutSendNeedsAccounts')}</span>`}
+          </div>
+          ${c.truncated ? `<p class="fa-note bad">${TX('film.cutTruncated', { max: MAX_CUT })}</p>` : ''}
+        </div>`;
+        lastCut = { html: box.innerHTML, from, to };   // renderSession() rebuilds the panel; the cut survives it
+        const sendBtn = box.querySelector('#cut-send');
+        // reuse the moment-sending dialog: a cut is a moment with a range the coach chose
+        if (sendBtn) sendBtn.onclick = () => openSendMoment(root, sessions, s, { id: 'cut', t: from, type: 'note', situation: '6v6', pos: '', zone: '', note: TX('film.cutRange', { from: fmt(from), to: fmt(to), secs: Math.round(to - from) }) }, { from, to });
+      } catch (e) {
+        box.innerHTML = `<span class="muted">${TX('film.cutFailed', { error: esc(whyText(e && e.message)) })}</span>`;
+      }
+      go.disabled = false;
+    };
+    paint();
+  }
 
   function renderSession() {
     const s = cur, canEdit = ctx.canEdit;
     const main = root.querySelector('#film-main');
+    // hold the coach's place in the match across the re-render that follows every save
+    const playing = root.querySelector('#film-video');
+    if (playing && playing.currentTime > 0) resumeAt = playing.currentTime;
     main.innerHTML = `
       <div id="film-player"></div>
       ${s.source.kind==='link' ? `<p class="muted">${TX('film.externalVideo', { url: esc(s.source.url) })}</p>` : ''}
+
+      ${canEdit ? cutPanelHtml(s) : ''}
 
       ${canEdit ? `<div class="film-tagbar">
         <button class="btn-primary sm" id="film-mark">${TX('film.markMoment')}</button>
@@ -1185,7 +1282,7 @@ const FILM = (() => {
       const e = s.events.find(x=>x.id===b.dataset.rebuild); if (!e) return;
       const T = typeOf(e.type);
       const phase = T.against ? 'defense' : 'offense';
-      const title = `${dt(s.title)} ${fmt(e.t)} — ${T.label.replace(/^[^\s]+\s/,'')}`;
+      const title = `${dt(s.title)} ${fmt(e.t)} — ${TX(T.label).replace(/^[^\s]+\s/,'')}`;   // TX first: T.label is the KEY, and stripping the emoji off a key leaves the key
       const desc = [dt(e.note), e.counter && TX('film.fixNote', { text: dt(e.counter) })].filter(Boolean).join(' · ') || TX('film.rebuiltFromVideo');
       ctx.rebuild(mapToBoard(e.situation), phase, title, desc, e.frame || null);
     });
@@ -1225,6 +1322,7 @@ const FILM = (() => {
 
   function wireTagging(main, s) {
     verdict = null; pickZone = ''; pickOrigin = null;
+    wireCut(main, sessions, s);
     main.querySelector('#film-mark').onclick = () => {
       const t = currentTime();
       if (t == null) { ctx.toast(TX('film.typeTime')); return; }
@@ -1260,7 +1358,7 @@ const FILM = (() => {
         note: main.querySelector('#film-note').value.trim(),
       });
       save(sessions);
-      if (typeof DATA !== 'undefined') DATA.logActivity('play', `${ctx.user.name} tagged ${typeOf(type).label} at ${fmt(t)} in “${dt(s.title)}”`, ctx.user.name);
+      if (typeof DATA !== 'undefined') DATA.logActivity('play', `${ctx.user.name} tagged ${TX(typeOf(type).label)} at ${fmt(t)} in “${dt(s.title)}”`, ctx.user.name);
       renderSession();
       ctx.toast(TX('film.momentSaved'));
     };

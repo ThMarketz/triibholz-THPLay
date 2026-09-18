@@ -3500,7 +3500,12 @@
     DATA.logActivity('play', `${state.user.name} ${edit.isNew?'created':'updated'} “${sc.title}” (${sc.situation} ${sc.phase})`, state.user.name);
     state.situation=sc.situation; state.phase=sc.phase;
     closeEditor(); refreshTabs(); renderLibrary(); openScenario(sc.id);
-    toast(T('ui.saved'));
+    /* A play captured from a film moment is saved while the coach is still in the Film Room, and
+       refreshTabs/renderLibrary/openScenario all act on the playbook view — which is hidden. So
+       the work landed correctly and nothing on screen moved, and "Saved" alone reads as "saved
+       where?". Name the shelf it went onto; do not drag them out of the match they are tagging. */
+    const onPlaybook = state.view === 'playbook';
+    toast(onPlaybook ? T('ui.saved') : T('ui.savedToPlaybook', { situation: DATA.sit(sc.situation).label, phase: T('phase.' + sc.phase) }));
   }
   // trainer adjusts an existing play and keeps BOTH: save the adjusted
   // version as a brand-new movement, leaving the original untouched
@@ -3788,7 +3793,11 @@
     if ($('ed-visibility')) $('ed-visibility').onchange = (e)=>{ edit.scenario.visibility=e.target.value; };
 
     $('logout-btn').onclick = (e)=>{ e.stopPropagation(); signOutEverything(); if (typeof SHARE!=='undefined' && $('auth-share-note')) $('auth-share-note').hidden = !SHARE.fromHash(location.hash); show('auth-screen'); };
-    $('editor-modal').onclick = (e)=>{ if(e.target===$('editor-modal')) closeEditor(); };
+    /* The editor deliberately does NOT close on a backdrop click. A play staged from a film moment
+       — positions dragged, steps captured, notes typed — is thrown away by closeEditor(), and a
+       click a few pixels outside the dialog did exactly that with no warning and no undo. There
+       are two explicit ways out (the ✕ and Cancel), so nothing is trapped. */
+    $('editor-modal').onclick = (e)=>{ if (e.target===$('editor-modal')) toast(T('ui.editorCloseHint')); };
   }
 
   /* ---------------- i18n glue ---------------- */

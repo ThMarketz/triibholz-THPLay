@@ -48,7 +48,7 @@ Composing is limited to coach / trainer / super-admin (`canEdit()`); everyone ca
 ## A moment from the Film Room
 
 A coach watching a video in the Film Room can send one tagged moment out of it — to the whole
-club, or to one player — without leaving the page. On each tagged moment there is a **✂ Send**
+club, or to one player — without leaving the page. On each tagged moment there is a **📤 Send**
 button (staff only, and only for a video the app has the file for):
 
 1. the video is uploaded once and remembered for the rest of the session, so sending a second

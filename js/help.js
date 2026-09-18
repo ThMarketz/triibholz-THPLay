@@ -191,6 +191,7 @@ const HELP = (() => {
       'help.film.s5',
       'help.film.s6',
       'help.film.s7',
+      'help.film.sCut',
       'help.film.s8',
       'help.film.s9',
       'help.film.s10',

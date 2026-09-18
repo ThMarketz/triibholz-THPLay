@@ -1754,7 +1754,6 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
        migrated.events[0].counter === 'film.demo.c1' && migrated.events[1].note === 'film.demo.n4');
     ok('but a note the coach edited is left exactly as they wrote it', migrated.events[0].note === MINE);
     ok('and the migration is persisted, not redone every read', JSON.parse(window.localStorage.getItem(KEY)).sessions[0].title === 'film.demo.title');
-    if (saved === null) window.localStorage.removeItem(KEY); else window.localStorage.setItem(KEY, saved);
   }
   // debriefs are team-scoped by the user's teamCode — the record has no .team/.club, and reading
   // those once sent every club's debriefs to one shared 'club' bucket on the backend
@@ -2639,6 +2638,121 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     ok('every path is filled even-odd — nonzero would flood the ball’s seams',
       ['thplay-mark.svg', 'thplay-mark-dark.svg', 'thplay-mark-mono.svg']
         .every(n => (svg(n).match(/fill-rule="evenodd"/g) || []).length === (svg(n).match(/<path/g) || []).length));
+  }
+
+  console.log('\n[18] Cutting a piece out of the match, and the keys that must never reach a coach');
+  {
+    /* The coach's own words: "I still do not know how to cut the videos". They were right — there
+       was no cut control anywhere. A clip could only ever appear as a by-product: a row auto-scout
+       chose, a moment being sent to a player, a debrief. All three sit behind a Tier-3 scan of the
+       whole match, and none of them lets a coach say which twenty seconds they meant. */
+    const filmSrc = readFileSync(join(APP, 'js/film.js'), 'utf8');
+
+    /* FILM caches `sessions` and `cur` in module state, so writing localStorage here would change
+       nothing — the matches are picked through the real list, the way a coach does. Earlier
+       sections leave an uploaded match selected, which is exactly why this has to be explicit. */
+    q('.nav-btn[data-view="film"]').click(); await wait(60);
+    const rowFor = kind => qa('.film-item').find(b => (FILM.load().find(x => x.id === b.dataset.id) || {}).source?.kind === kind);
+
+    // a match added as a LINK: cutting is impossible, and the panel has to say so rather than vanish
+    const linkRow = rowFor('youtube');
+    ok('there is a YouTube match to test the link case against', !!linkRow);
+    linkRow.click(); await wait(80);
+    ok('the cut panel is on the screen for a YouTube match too', !!q('#film-cut'));
+    ok('…carrying the reason a link cannot be cut, instead of hiding and teaching nothing',
+      !q('#cut-in') && /Upload video|cannot be cut/i.test((q('#film-cut') || {}).textContent || ''));
+
+    // a match added as a FILE: the coach marks their own in and out
+    const fileRow = rowFor('file');
+    ok('there is an uploaded match to test the cut against', !!fileRow);
+    fileRow.click(); await wait(80);
+
+    ok('an uploaded match offers a cut control', !!q('#film-cut') && !!q('#cut-in') && !!q('#cut-out') && !!q('#cut-go'));
+    ok('…and it is disabled until a start AND an end are marked', q('#cut-go').disabled);
+    ok('…with a readout that tells the coach what to do first', /mark the start/i.test(q('#cut-range').textContent));
+    ok('the coach can keep the piece, not only send it', /download=/.test(filmSrc) && filmSrc.includes("film.cutDownload"));
+    ok('a hidden Send button is explained rather than simply absent', filmSrc.includes('film.cutSendNeedsAccounts'));
+
+    /* The server caps a clip at 60s SILENTLY (server/index.js Math.min(start + 60, …)). Asking for
+       three minutes and getting one back with no word is the kind of quiet wrong answer this app
+       does not ship, so the client both keeps inside the cap and checks what came back. */
+    const srvSrc = readFileSync(join(APP, 'server/index.js'), 'utf8');
+    ok('the 60s server cap is still the number the client guards against',
+      /Math\.min\(start \+ 60,/.test(srvSrc) && /const MAX_CUT = 60;/.test(filmSrc));
+    ok('a clip that came back shorter than asked for is reported, not passed off as the cut',
+      filmSrc.includes('truncated:') && filmSrc.includes('film.cutTruncated'));
+    ok('a coach-chosen range is cut exactly — the ±2s run-up is only for machine-chosen ones',
+      /cutClip\(videoRef, t0, t1, pad = 2\)/.test(filmSrc) && /cutClip\(ref, from, to, 0\)/.test(filmSrc));
+
+    /* Tagging re-renders the panel, which rebuilds the <video>. Without somewhere to put the
+       coach back, the match jumped to 0:00 on every single save — and tagging a match is thirty
+       saves. */
+    ok('the match keeps its place when a moment is saved', /resumeAt = playing\.currentTime/.test(filmSrc) && /v\.currentTime = Math\.min\(at/.test(filmSrc));
+
+    /* A play staged from a film moment is real work — positions dragged, steps captured, notes
+       typed — and closeEditor() throws all of it away. It used to run on a click anywhere on the
+       backdrop, with no warning and no undo. */
+    const appSrc = readFileSync(join(APP, 'js/app.js'), 'utf8');
+    ok('a stray click beside the editor no longer discards the play',
+      !/\$\('editor-modal'\)\.onclick = \(e\)=>\{ if\(e\.target===\$\('editor-modal'\)\) closeEditor\(\); \}/.test(appSrc)
+      && appSrc.includes("ui.editorCloseHint"));
+    ok('…and there are still two plain ways out of it', html.includes('id="editor-close"') && html.includes('id="ed-cancel"'));
+
+    /* THE GENERAL GUARD. Two separate places built a string out of an i18n KEY and never
+       translated it: the title of every play captured from film ("… — film.typeGoalAgainst"),
+       which is then SAVED, and the club activity line. Both read a `.label` that holds a key.
+       A missing translation is a visible mistake; a key rendered as if it were words is a mistake
+       that looks like a feature, so nothing catches it. This does. */
+    const i18nSrc = readFileSync(join(APP, 'js/i18n.js'), 'utf8');
+    const enStart = i18nSrc.indexOf('    en: {'), deStart = i18nSrc.indexOf('    de: {');
+    const enKeys = new Set([...i18nSrc.slice(enStart, deStart).matchAll(/'([A-Za-z0-9_.]+)':/g)].map(m => m[1]));
+    ok('the English dictionary was found, so this guard is actually checking something', enKeys.size > 1500);
+
+    const leaked = [];
+    const walk = (node) => {
+      if (node.nodeType === 3) {
+        for (const tok of String(node.nodeValue).split(/\s+/)) if (tok && enKeys.has(tok)) leaked.push(tok);
+      } else if (node.nodeType === 1 && !['SCRIPT', 'STYLE'].includes(node.tagName)) {
+        for (const c of node.childNodes) walk(c);
+      }
+    };
+    walk(document.body);
+    ok('no translation key is sitting on the screen pretending to be words' + (leaked.length ? ' — found: ' + [...new Set(leaked)].slice(0, 4).join(', ') : ''), leaked.length === 0);
+
+    ok('the title a play gets from a film moment is translated before the emoji is stripped',
+      /TX\(T\.label\)\.replace/.test(filmSrc) && !/\$\{T\.label\.replace/.test(filmSrc));
+    ok('…and so is the club activity line about a tagged moment',
+      /tagged \$\{TX\(typeOf\(type\)\.label\)\}/.test(filmSrc));
+
+    /* Sending a cut used to throw the coach's range away: openSendMoment computed its own
+       t-4 … t+6 window around the in-point, so the team received a different passage from the
+       one the coach had just watched and approved. */
+    ok('sending a cut sends the passage the coach marked, not a window of its own',
+      /const start = range \? range\.from :/.test(filmSrc) && /const end = range \? range\.to :/.test(filmSrc));
+    ok('…and the cut path is the one that passes that range', /\}, \{ from, to \}\)/.test(filmSrc));
+
+    // a finished cut used to be wiped by the next re-render — i.e. by tagging the next moment
+    ok('a finished cut survives tagging the next moment', /lastCut = \{ html:/.test(filmSrc) && /if \(lastCut\) \{ box\.innerHTML = lastCut\.html;/.test(filmSrc));
+    ok('…but a different match never shows the previous match’s cut', /cutIn=cutOut=null; lastCut=null;/.test(filmSrc));
+
+    /* The guide is where a coach looks when they do not know how — and it had ten steps, none
+       about cutting. That, not a missing feature, is what "I do not know how to cut" meant. */
+    const helpSrc = readFileSync(join(APP, 'js/help.js'), 'utf8');
+    ok('the Film Room guide now teaches cutting', helpSrc.includes("'help.film.sCut'") && i18nSrc.includes("'help.film.sCut'"));
+    ok('…in all four languages', (i18nSrc.match(/'help\.film\.sCut':/g) || []).length === 4);
+    ok('…and it names the three controls a coach has to press', /Start here/.test(i18nSrc) && /End here/.test(i18nSrc));
+
+    /* The goal-mouth picker was nine identical empty buttons: no text, no title, no aria-label.
+       Marking where the shot went is half of "mark up the situation". */
+    const zones = qa('#film-zone-pick .gz');
+    ok('the goal mouth has its nine cells', zones.length === 9);
+    ok('…and every one of them says what it is, to a coach and to a screen reader',
+      zones.every(z => (z.getAttribute('title') || '').length > 10 && z.getAttribute('aria-label') === z.getAttribute('title')));
+
+    // the old advice told the coach to run a scout job, which cutting never needs
+    ok('a lost upload tells the coach to cut again, not to run a scouting job',
+      !/scout the video again/.test(i18nSrc));
+
   }
 
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);

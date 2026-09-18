@@ -924,6 +924,23 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 .attack-list{display:flex;flex-direction:column;gap:4px;margin-top:6px}
 .attack-row{display:grid;grid-template-columns:auto auto 1fr auto auto;gap:8px;align-items:center;padding:6px 8px;border:1px solid var(--border);border-radius:8px}
 .attack-row .ar-clip{grid-column:1/-1}
+
+/* ✂ Cut a piece out — the coach marks their own in and out under the player.
+   Sits directly below the video because it is about the video, and it is the first thing a coach
+   reaches for. The readout is wide enough to hold "0:12 → 0:41 · 29s" without reflowing the row. */
+.film-cut .fa-head{gap:8px}
+.cut-range{font-variant-numeric:tabular-nums;font-size:12px;color:var(--ink-faint);flex:1 1 150px;min-width:130px}
+.cut-range.bad{color:var(--red-71)}
+.cut-result{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.cut-result video{width:100%;max-width:520px;border-radius:10px;background:var(--navy-11c);display:block}
+.cut-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px}
+.cut-actions a{text-decoration:none}
+.fa-note.bad{color:var(--red-71)}
+@media(max-width:560px){
+  /* on a phone the four controls must not squeeze the readout onto its own cramped line */
+  .film-cut .fa-head{gap:6px}
+  .cut-range{flex:1 1 100%;order:9;min-width:0}
+}
 .attack-row video,.deb-media video{width:100%;max-width:480px;border-radius:8px;background:var(--pure-black)}
 .ar-t{font-family:ui-monospace,monospace;font-size:.8rem;color:var(--muted)}
 .ar-who{font-size:.72rem;font-weight:700;text-transform:uppercase;padding:2px 6px;border-radius:6px;background:rgba(var(--white-rgb),.08)}
