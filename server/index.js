@@ -29,6 +29,10 @@ const INSIGHTS_FILE = () => path.join(DATA_DIR, 'insights.json');
 function loadInsights(){ try { return JSON.parse(fs.readFileSync(INSIGHTS_FILE(), 'utf8')); } catch (e) { return PRIVACY.emptyAgg(); } }
 const MODEL_ENDPOINT = process.env.MODEL_ENDPOINT || '';
 const VIDEO_PROVIDER = process.env.VIDEO_PROVIDER || '';
+const RET = require('./retention.js');
+/* One season. Match video is of children, and "for ever" is not an answer a club accepts —
+   docs/LAUNCH_PHASES.md. Overridable so it can be tested in seconds instead of months. */
+const RETENTION_DAYS = RET.daysFrom(process.env);
 // photoreal provider config — the KEY is only ever read from the env, never the request.
 function videoCfg(body) {
   body = body || {};
@@ -241,7 +245,7 @@ const server = http.createServer(async (req, res) => {
     // one gate for every route below: a current client, an allowed Origin, the right content type
     if (access.on && p !== '/api/health' && !/^\/api\/calendar\/[\w.\-]+\.ics$/.test(p)) access.gate(req, p);
 
-    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, accounts: !!accountsDb, engine: 'server', detector: makeDetector({ modelEndpoint: MODEL_ENDPOINT }).name, ffmpeg: hasFfmpeg, videoProvider: VIDEO_PROVIDER || null, queued: queue.length, running, maxUploadMB: Math.round(MAX_UPLOAD / 1048576) });
+    if (req.method === 'GET' && p === '/api/health') return send(res, 200, { ok: true, accounts: !!accountsDb, engine: 'server', detector: makeDetector({ modelEndpoint: MODEL_ENDPOINT }).name, ffmpeg: hasFfmpeg, videoProvider: VIDEO_PROVIDER || null, queued: queue.length, running, maxUploadMB: Math.round(MAX_UPLOAD / 1048576), retentionDays: RETENTION_DAYS });
 
     // photoreal text-to-video: submit a prompt → a normalised video URL (or an async job)
     if (req.method === 'POST' && p === '/api/videogen') {
@@ -352,6 +356,23 @@ const server = http.createServer(async (req, res) => {
       access.recordAsset({ id: job.id, kind: 'job', clubId: club.clubId, ownerUserId: who.userId });
       saveJob(job); enqueue(job.id);
       return send(res, 202, { id: job.id, status: job.status });
+    }
+
+    /* ---- keep: this one is a teaching clip, do not reap it ----
+       Recorded beside the data rather than in the database, because recordAsset is a no-op with
+       accounts off and a keep list that only worked in one mode would quietly lose clips in the
+       other. The id is the clip's own name; its hard-linked twin inherits the decision. */
+    if (req.method === 'POST' && p === '/api/keep') {
+      const who = access.requireActor(req); access.requireStaff(who);
+      const body = await readBody(req);
+      let kr; try { kr = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
+      const id = safeToken(kr.id);
+      if (!id) return send(res, 400, { error: 'no-id' });
+      // only something that is really here: a keep list of names that do not exist is a slow leak
+      const here = fs.existsSync(path.join(CLIP_DIR, id)) || fs.existsSync(path.join(VIDEO_DIR, id)) || fs.existsSync(path.join(JOB_DIR, id));
+      if (!here) return send(res, 404, { error: 'not-found' });
+      const keep = RET.setKeep(DATA_DIR, id, !!kr.keep, Date.now());
+      return send(res, 200, { id, keep: !!keep[id], retentionDays: RETENTION_DAYS });
     }
 
     // ---- clips: cut a possession out of an uploaded match → a small mp4 served back
@@ -529,6 +550,21 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
-  server.listen(PORT, () => console.log(`[triibholz-analysis] listening on :${PORT}  ffmpeg=${hasFfmpeg}  data=${DATA_DIR}`));
+  /* Sweep at start and once a day. At start because a server that has been off for a month has a
+     month of expiries waiting, and a timer alone would not notice until tomorrow. */
+  const dirs = { videos: VIDEO_DIR, clips: CLIP_DIR, jobs: JOB_DIR };
+  function reap() {
+    try {
+      const r = RET.sweep({ dirs, dataDir: DATA_DIR, now: Date.now(), days: RETENTION_DAYS });
+      if (r.removed.length || r.failed.length) {
+        console.log(`[triibholz-analysis] retention: removed ${r.removed.length} file(s) past ${r.days} days, kept ${r.kept.length}` +
+                    (r.failed.length ? `, FAILED ${r.failed.length}: ${r.failed.slice(0, 4).join(', ')}` : ''));
+      }
+    } catch (e) { console.error('[triibholz-analysis] retention sweep failed:', e && e.message); }
+  }
+  reap();
+  setInterval(reap, RET.DAY).unref();
+
+  server.listen(PORT, () => console.log(`[triibholz-analysis] listening on :${PORT}  ffmpeg=${hasFfmpeg}  data=${DATA_DIR}  keeping video ${RETENTION_DAYS} days`));
 }
 module.exports = { server, runEngine, accountsDb, auth };

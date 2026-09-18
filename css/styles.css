@@ -952,6 +952,8 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 .lib-read{font-size:12px}
 .lib-fix{display:inline-flex;align-items:center;gap:6px;font-size:11px;margin-top:2px}
 .lib-fix select{max-width:190px}
+.lib-keep{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-faint)}
+.lib-meta .bad{color:var(--red-71)}
 .lib-actions{display:flex;flex-direction:column;gap:6px;align-items:stretch}
 .lib-actions a{text-decoration:none;text-align:center}
 @media(max-width:560px){

@@ -385,6 +385,86 @@ function frame(w, h) {
     ok('error answers are no-store too', errR.headers.get('cache-control') === 'no-store');
 
     server.close();
+
+    console.log('\n[5] Retention — match video does not live for ever');
+    {
+      /* The app holds video of CHILDREN and until now nothing deleted any of it, anywhere. The
+         promise is one season; this is the code that has to make it true, so it is tested against
+         real files on a real disk rather than mocked. */
+      const RET = (await import('../server/retention.js')).default || (await import('../server/retention.js'));
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const root = mkdtempSync(join(tmpdir(), 'thplay-ret-'));
+      const dirs = { videos: join(root, 'videos'), clips: join(root, 'clips'), jobs: join(root, 'jobs') };
+      Object.values(dirs).forEach(d => fs.mkdirSync(d, { recursive: true }));
+      const now = Date.now(), DAY = 86400000;
+      const age = (dir, name, days) => { const p = join(dir, name); fs.writeFileSync(p, 'x'); const t = (now - days * DAY) / 1000; fs.utimesSync(p, t, t); return p; };
+
+      age(dirs.videos, 'vid_last_week.mp4', 7);
+      age(dirs.videos, 'vid_two_seasons.mp4', 400);
+      age(dirs.jobs, 'job_old.json', 400);
+      // a cut is ONE inode under TWO names — /api/clip hard-links it into the video store
+      const oldClip = age(dirs.clips, 'job_a_0_80.mp4', 400);
+      fs.linkSync(oldClip, join(dirs.videos, 'cut_job_a_0_80.mp4'));
+      const keptClip = age(dirs.clips, 'job_b_0_40.mp4', 400);
+      fs.linkSync(keptClip, join(dirs.videos, 'cut_job_b_0_40.mp4'));
+
+      RET.setKeep(root, 'job_b_0_40.mp4', true, now);
+      const r = RET.sweep({ dirs, dataDir: root, now, days: 365 });
+      const there = p => fs.existsSync(p);
+
+      ok('a match from two seasons ago is gone', !there(join(dirs.videos, 'vid_two_seasons.mp4')));
+      ok('…and last week’s match is untouched', there(join(dirs.videos, 'vid_last_week.mp4')));
+      ok('the analysis job goes with it', !there(join(dirs.jobs, 'job_old.json')));
+
+      ok('an expired cut goes under both its names, so the bytes actually go',
+        !there(join(dirs.clips, 'job_a_0_80.mp4')) && !there(join(dirs.videos, 'cut_job_a_0_80.mp4')));
+
+      /* THE CASE THAT MAKES THE PAIRING LOAD-BEARING, and the one the obvious test misses. A hard
+         link shares an inode, so both names carry the same mtime and each would be swept on its
+         own anyway. But /api/clip falls back to copyFileSync when the link is refused — and a copy
+         is a SEPARATE file with a NEWER mtime. Without pairing, the clip expires on time and the
+         footage lives on under cut_… for another year, with the sweep reporting success.
+         Fault injection found this: removing the pairing broke nothing until this test existed. */
+      const cOld = age(dirs.clips, 'job_c_0_60.mp4', 400);
+      fs.copyFileSync(cOld, join(dirs.videos, 'cut_job_c_0_60.mp4'));        // a copy: today's mtime
+      const copyRun = RET.sweep({ dirs, dataDir: root, now, days: 365 });
+      ok('a cut COPIED rather than linked still goes with its clip, though the copy looks new',
+        !there(join(dirs.clips, 'job_c_0_60.mp4')) && !there(join(dirs.videos, 'cut_job_c_0_60.mp4'))
+        && copyRun.removed.includes('cut_job_c_0_60.mp4'));
+      ok('a clip the coach kept survives — and so does its twin, or keeping it would be a lie',
+        there(join(dirs.clips, 'job_b_0_40.mp4')) && there(join(dirs.videos, 'cut_job_b_0_40.mp4')));
+      ok('…and the sweep says what it kept rather than only what it took', r.kept.length === 2 && r.removed.length === 4);
+
+      ok('keeping is recorded beside the data, so it works with accounts off as well as on',
+        fs.existsSync(join(root, 'keep.json')) && RET.readKeep(root)['job_b_0_40.mp4'] > 0);
+      ok('un-keeping lets it go at the next sweep', (() => {
+        RET.setKeep(root, 'job_b_0_40.mp4', false, now);
+        RET.sweep({ dirs, dataDir: root, now, days: 365 });
+        return !there(join(dirs.clips, 'job_b_0_40.mp4')) && !there(join(dirs.videos, 'cut_job_b_0_40.mp4'));
+      })());
+
+      ok('a dry run reports without deleting', (() => {
+        age(dirs.videos, 'vid_probe.mp4', 400);
+        const d = RET.sweep({ dirs, dataDir: root, now, days: 365, dryRun: true });
+        return d.removed.includes('vid_probe.mp4') && there(join(dirs.videos, 'vid_probe.mp4'));
+      })());
+
+      ok('the window is a number the coach can be told, not a constant buried in code',
+        RET.daysFrom({}) === 365 && RET.daysFrom({ RETENTION_DAYS: '30' }) === 30 && RET.daysFrom({ RETENTION_DAYS: 'nonsense' }) === 365);
+      ok('…and a thing’s remaining life can be stated before it goes, not after',
+        RET.daysLeft(now - 350 * DAY, now, 365) === 15 && RET.daysLeft(now - 7 * DAY, now, 365) === 358);
+
+      ok('a half-written keep list can never decide what survives', (() => {
+        const src2 = fs.readFileSync(join(HERE, '..', 'server', 'retention.js'), 'utf8');
+        return /tmp = p \+ '\.part'/.test(src2) && /fs\.renameSync\(tmp, p\)/.test(src2);
+      })());
+      ok('the server sweeps at start, not only on a timer — a month off means a month of expiries',
+        (() => { const s2 = fs.readFileSync(join(HERE, '..', 'server', 'index.js'), 'utf8'); return /\n  reap\(\);\n  setInterval\(reap, RET\.DAY\)/.test(s2); })());
+      ok('and /api/health tells the app the window, so a coach is warned before something goes',
+        fs.readFileSync(join(HERE, '..', 'server', 'index.js'), 'utf8').includes('retentionDays: RETENTION_DAYS'));
+    }
+
     console.log(`\n==== ${pass} passed, ${fail} failed${skipped ? `, ${skipped} skipped` : ''} ====`);
     process.exit(fail ? 1 : 0);
   } catch (e) { console.error('THREW:', e && e.stack || e); process.exit(2); }

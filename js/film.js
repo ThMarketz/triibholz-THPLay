@@ -1172,6 +1172,18 @@ const FILM = (() => {
      A cut is kept the moment it is made. It cost a round trip and the coach watched it — losing it
      to a re-render, or asking them to press Save afterwards, both end the same way.  */
 
+  /* How long the club server keeps a video, from /api/health. Asked once and remembered, so every
+     row can say what it has left rather than the coach finding out by its absence. */
+  let retentionDays = null;
+  async function retention() {
+    if (retentionDays !== null) return retentionDays;
+    try { const h = await (await API.fetch(scoutBase() + '/api/health')).json(); retentionDays = +h.retentionDays || 0; }
+    catch (e) { retentionDays = 0; }
+    return retentionDays;
+  }
+  const clipIdOf = c => String((c && c.url) || '').split('/').pop() || '';
+  const daysLeftOf = c => (!retentionDays || !c.at) ? null : Math.ceil((c.at + retentionDays * 86400000 - Date.now()) / 86400000);
+
   const TACTIC_IDS = ['counter-attack', 'drive-and-kick', 'hole-entry', 'man-up-3-3', 'man-up-4-2',
                       'perimeter-swing', 'pick-and-roll', 'set-offense', 'wing-iso'];
 
@@ -1238,7 +1250,13 @@ const FILM = (() => {
           <video class="lib-vid" controls playsinline preload="none" src="${esc(scoutBase() + c.url)}"></video>
           <div class="lib-meta">
             <input class="lib-name" data-name="${i}" value="${esc(c.title || '')}" maxlength="80" aria-label="${TX('film.libRename')}" />
-            <span class="muted">${fmt(c.from)} → ${fmt(c.to)} · ${Math.round(c.to - c.from)}s</span>
+            <span class="muted">${fmt(c.from)} → ${fmt(c.to)} · ${Math.round(c.to - c.from)}s${(() => {
+              const d = daysLeftOf(c);
+              if (c.keep) return ' · ' + TX('film.libKept');
+              if (d === null) return '';
+              return ' · ' + (d <= 0 ? TX('film.libGone') : d <= 30 ? `<span class="bad">${TX('film.libExpiresSoon', { n: d })}</span>` : TX('film.libExpires', { n: d }));
+            })()}</span>
+            <label class="lib-keep"><input type="checkbox" data-keep="${i}"${c.keep ? ' checked' : ''} /> ${TX('film.libKeepThis')}</label>
             <div class="lib-read">${
               c.fixedTactic ? `<strong>${esc(label)}</strong> <span class="muted">${TX('film.libCoachSaid')}</span>`
               : a && !a.none ? `<strong>${esc(a.name)}</strong> <span class="muted">${TX('film.libConfidence', { pct: Math.round(a.confidence * 100) })}${a.fragments ? ' · ' + TX(a.fragments === 1 ? 'film.libFragment1' : 'film.libFragments', { n: a.fragments }) : ''}</span>`
@@ -1270,6 +1288,24 @@ const FILM = (() => {
     });
     lib.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => {
       clips.splice(+b.dataset.rm, 1); save(sessions); renderSession();
+    });
+    lib.querySelectorAll('[data-keep]').forEach(box => box.onchange = async () => {
+      const c = clips[+box.dataset.keep]; if (!c) return;
+      const want = box.checked;
+      box.disabled = true;
+      /* No code-shaped error here on purpose: this one failure is handled where it happens and the
+         coach is told in words, so there is nothing for errorReason() to translate. The 404 is
+         worth saying separately — it means the file has already gone, and ticking a box will not
+         bring it back. */
+      let r = null;
+      try { r = await API.fetch(scoutBase() + '/api/keep', { method: 'POST', headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ id: clipIdOf(c), keep: want }) }); } catch (e) { r = null; }
+      if (r && r.ok) {
+        try { c.keep = (await r.json()).keep; } catch (e) { c.keep = want; }   // the server's answer, not the tick
+        save(sessions); renderSession(); return;
+      }
+      box.checked = !want; box.disabled = false;
+      ctx.toast(TX(r && r.status === 404 ? 'film.libKeepGone' : 'film.libKeepFailed'));
     });
     lib.querySelectorAll('[data-fix]').forEach(sel => sel.onchange = () => {
       const c = clips[+sel.dataset.fix]; if (!c) return;
@@ -1555,6 +1591,8 @@ const FILM = (() => {
     verdict = null; pickZone = ''; pickOrigin = null;
     wireCut(main, sessions, s);
     wireLibrary(main, s);
+    // the row cannot say what it has left until the window is known; redraw once it is
+    if (retentionDays === null && (s.clips || []).length) retention().then(d => { if (d && cur === s) renderSession(); });
     wireEdit(main, s);
     main.querySelector('#film-mark').onclick = () => {
       const t = currentTime();
