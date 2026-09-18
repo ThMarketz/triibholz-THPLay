@@ -38,8 +38,11 @@ source for a player's date of birth even where one publishes it.
 Match video shows identifiable children. It is:
 
 - uploaded by a coach, kept on the club's server and on that coach's device;
-- **deleted automatically about twelve months after upload**, on the server and on the device,
-  unless a coach has marked a specific clip to keep for teaching;
+- **deleted automatically about twelve months after upload.** On the club's server this happens on
+  its own, whether or not anyone is using the app. On a coach's own phone or laptop it happens
+  **the next time that coach opens the Film Room** — so a coach who stops using the app keeps what
+  is on their device until they open it again. We say so rather than claiming a deletion we cannot
+  reach. A coach can mark a specific clip to keep for teaching, and that one stays;
 - deletable earlier at any time, on request to the club.
 
 We cannot remove one child from footage of a match — nobody can — and we deliberately keep **no

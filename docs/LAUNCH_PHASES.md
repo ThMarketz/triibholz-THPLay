@@ -179,6 +179,26 @@ trust:
   on a coach's phone*, which changes what the notice says and makes the Phase 1 export part of the
   privacy story rather than just a convenience.
 
+### 2e. Two exposures that are personal, and one decision to take before any club signs
+
+Found while drafting, from the statutes rather than from general knowledge:
+
+- **Sole proprietorship means your private assets back this.** A sole proprietorship has no
+  separate legal personality, so the owner answers for business debts personally. This product
+  holds video of other people's children and signs data-processing agreements with clubs. A GmbH
+  costs money and paperwork and separates that. **The trigger is not the CHF 100,000 turnover
+  threshold for commercial-register entry (OR Art. 931) — it is the first club that signs.**
+- **Some liability is personal whatever the legal form, because it is criminal.** FADP Art. 60(1)
+  provides a fine of up to **CHF 250,000 on a private person** who wilfully gives false or
+  incomplete information under the Art. 19 duty to inform — that is, in the privacy notice. UWG
+  Art. 23 makes an intentionally missing or wrong Impressum an offence on complaint. A company does
+  not shield either, which is the strongest possible argument for the notice being accurate rather
+  than reassuring.
+
+Neither is a reason not to launch. Both are reasons to decide the legal form deliberately, and to
+keep the privacy notice describing exactly what the software does — which is why the four
+over-claims in the first drafts were worth finding before a lawyer ever saw them.
+
 **Neither of us is a lawyer.** I can draft these honestly, in the four languages the app already
 speaks, and build the acceptance machinery — a Swiss lawyer should review before a club signs,
 and that review is much cheaper against a complete, accurate draft than a blank page.

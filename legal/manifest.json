@@ -1,23 +1,56 @@
 {
  "docs": {
-  "dpa": {
-   "version": "2026-09-18+b1ebdaf4",
+  "consent": {
+   "version": "2026-09-18+cd7a82db",
    "status": "draft",
    "langs": {
     "en": {
-     "sha256": "b1ebdaf4c8e0ea7e9b0b0c8c12db33c6cbcc972fee35861888dbb2e93e083954",
-     "bytes": 2188,
+     "sha256": "cd7a82dba3503cb5402aab09087ca3f11d0a31044263e9dd2a0029c8eac03fe6",
+     "bytes": 3211,
+     "date": "2026-09-18"
+    }
+   }
+  },
+  "dpa": {
+   "version": "2026-09-18+39060419",
+   "status": "draft",
+   "langs": {
+    "en": {
+     "sha256": "390604191b7ad56d20772c5a80cae05ce2ad792baca8870ac0f87accd65e270d",
+     "bytes": 3116,
+     "date": "2026-09-18"
+    }
+   }
+  },
+  "impressum": {
+   "version": "2026-09-18+ec5492aa",
+   "status": "draft",
+   "langs": {
+    "en": {
+     "sha256": "ec5492aa720c217b569e4e3d42f12dd651dc240409b42452dde951b05fffc386",
+     "bytes": 1384,
      "date": "2026-09-18"
     }
    }
   },
   "privacy": {
-   "version": "2026-09-18+b3b1c0e0",
+   "version": "2026-09-18+4d5c6ae5",
    "status": "draft",
    "langs": {
     "en": {
-     "sha256": "b3b1c0e06b0fa9f5acc041efa3fa525b7c8f76a4ae57b75a292846a3c3a2ea9e",
-     "bytes": 3844,
+     "sha256": "4d5c6ae5e746e9c23cc4f44cc43d5bc14189fa27edeec07a7ea8533fcf7c900d",
+     "bytes": 4161,
+     "date": "2026-09-18"
+    }
+   }
+  },
+  "subprocessors": {
+   "version": "2026-09-18+d52d92a5",
+   "status": "draft",
+   "langs": {
+    "en": {
+     "sha256": "d52d92a501da90c30b7b4c2af65d9074c310c653d13c3f74e62d120f9dea5152",
+     "bytes": 1903,
      "date": "2026-09-18"
     }
    }

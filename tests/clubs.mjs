@@ -586,6 +586,22 @@ await section('[13] What was agreed to, and proving which text that was', async 
   const pOut = (await player.get(`/api/legal/mine?club=${C.clubId}`)).json;
   ok('a player is asked to accept nothing at all — a child’s tick is not consent', pOut.outstanding.length === 0);
 
+  /* A sub-processor list is a DISCLOSURE, not an agreement. Asking a club to "accept" who the
+     hosting provider is would be theatre, and it has to be able to change without dragging every
+     club through a re-acceptance they could not refuse anyway. Its own document, its own version. */
+  const pub = (await C.admin.get('/api/legal')).json.docs.filter(d => d.scope === 'published');
+  ok('disclosures and templates are published, not agreements',
+    pub.length >= 3 && ['subprocessors', 'impressum', 'consent'].every(id => pub.some(d => d.id === id))
+    && pub.every(d => d.blocking === false));
+  ok('…so nobody is ever asked to accept them',
+    !(await C.admin.get(`/api/legal/mine?club=${C.clubId}`)).json.outstanding.some(x => x.scope === 'published'));
+  ok('…and accepting one is refused outright, rather than quietly recorded',
+    (await C.admin.post('/api/legal/accept', { doc: 'subprocessors', version: pub[0].version, lang: 'en', clubId: C.clubId })).status === 400);
+  ok('…while still being readable, because the point of a disclosure is that people read it',
+    (await C.admin.get('/api/legal/subprocessors?lang=en')).json.text.includes('Who else is involved'));
+  ok('changing who is involved moves only that list’s version',
+    pub.find(d => d.id === 'subprocessors').version !== (await C.admin.get('/api/legal')).json.docs.find(d => d.id === 'terms').version);
+
   /* THE POINT OF VERSIONING, end to end. The first lawyer to read these will change them, and an
      acceptance of last month's text is not an acceptance of this month's. */
   db.prepare(`INSERT INTO acceptances (id, user_id, club_id, doc, version, sha256, lang, scope, accepted_at)

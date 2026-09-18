@@ -29,9 +29,20 @@ const LEGAL = (() => {
      should be told, not locked out of their own team sheet on a Saturday. A brand-new club
      accepting for the first time is a different case and is handled at sign-up. */
   const DOCS = [
-    { id: 'terms',   scope: 'club',     blocking: true,  title: 'Terms of Service' },
-    { id: 'privacy', scope: 'personal', blocking: false, title: 'Privacy notice' },
-    { id: 'dpa',     scope: 'club',     blocking: true,  title: 'Data Processing Agreement' },
+    { id: 'terms',        scope: 'club',      blocking: true,  title: 'Terms of Service' },
+    { id: 'privacy',      scope: 'personal',  blocking: false, title: 'Privacy notice' },
+    { id: 'dpa',          scope: 'club',      blocking: true,  title: 'Data Processing Agreement' },
+    /* PUBLISHED, never accepted. A sub-processor list is a disclosure, not an agreement — asking a
+       club to "accept" who our hosting provider is would be theatre, and it has to be able to
+       change without putting every club into a re-acceptance it cannot refuse anyway. It gets its
+       own document precisely so its version moves when it changes and nothing else's does. */
+    { id: 'subprocessors', scope: 'published', blocking: false, title: 'Who else is involved' },
+    { id: 'impressum',     scope: 'published', blocking: false, title: 'Who runs this' },
+    /* Collected by the CLUB on paper or in its own system, never ticked in the app: consent to
+       being filmed belongs to the person filmed, and for a younger child to their parent. The app
+       publishes the template and records nothing, because recording a tick here would suggest a
+       consent that was never actually given to us. */
+    { id: 'consent',       scope: 'published', blocking: false, title: 'Filming and match video' },
   ];
   const BY_ID = Object.fromEntries(DOCS.map(d => [d.id, d]));
   const LANGS = ['en', 'de', 'fr', 'it'];
@@ -46,7 +57,9 @@ const LEGAL = (() => {
      with its state rather than a bare boolean, because "you must accept something" is not a thing
      anybody can act on. */
   function outstanding(role, current, accepted) {
-    const mine = DOCS.filter(d => d.scope === 'club' ? role === 'admin' : ['admin', 'coach', 'trainer'].includes(role));
+    const mine = DOCS.filter(d => d.scope === 'published' ? false
+      : d.scope === 'club' ? role === 'admin'
+      : ['admin', 'coach', 'trainer'].includes(role));
     /* Every version of each document this person has accepted, not just one. Taking "the last one
        seen" made the answer depend on the order rows came back in — and they come back newest
        first, so the OLDEST acceptance won and a document that had just been re-accepted still
@@ -76,6 +89,8 @@ const LEGAL = (() => {
   function checkAcceptance(a, current) {
     if (!a || typeof a !== 'object') return { ok: false, error: 'bad-acceptance' };
     if (!ID_RE.test(String(a.doc || '')) || !BY_ID[a.doc]) return { ok: false, error: 'unknown-document' };
+    // a disclosure cannot be "accepted": recording agreement to a fact would be theatre
+    if (BY_ID[a.doc].scope === 'published') return { ok: false, error: 'not-an-agreement' };
     if (!LANGS.includes(String(a.lang || ''))) return { ok: false, error: 'unknown-language' };
     if (!VERSION_RE.test(String(a.version || ''))) return { ok: false, error: 'bad-version' };
     // accepting a version this deployment does not serve means they read something else entirely

@@ -29,7 +29,13 @@ Sensitive changes need the passkey again.
 
 ## Sub-processors
 
-Listed in the privacy notice. The club is told before a new one is added and may object.
+Listed in **Who else is involved**, which is published separately and has its own version so it can
+change without touching this agreement.
+
+Swiss law requires the club's **prior approval** before we hand its data to anyone else — not
+merely notice and a chance to object. By signing this the club approves those on that list today.
+Before anyone is added, we tell the club and **wait**: if the club does not agree, we do not use
+them, and if that makes the service impossible the club may end the arrangement without penalty.
 
 ## Where data is
 
@@ -41,6 +47,16 @@ Switzerland or the EU without telling the club.
 We help with requests from the people whose data it is, with data-protection impact assessments,
 and with breach notification. We tell the club **without undue delay** on becoming aware of a
 breach.
+
+## What we process, for how long
+
+The club instructs us to keep **match video for twelve months** from upload, after which it is
+deleted automatically. A club may instruct a shorter period. This is the club's decision, recorded
+here — not a setting we chose for them.
+
+Duration: this agreement runs for as long as the club uses the service.
+Nature and purpose: storing, displaying and analysing what the club puts in, so its coaches can
+plan training and review matches. Nothing else.
 
 ## Deletion
 
