@@ -51,17 +51,82 @@ staging on a subdomain. Any subdomain of `thplay.ch` is inside the passkey scope
 JavaScript can call `navigator.credentials.get({rpId: 'thplay.ch'})` and the browser will hand it
 production credentials. The file should say so instead of suggesting it.
 
-## Phase 2 — A home that is not a laptop
+## Phase 2 — A home that is not a laptop, and the paperwork to put clubs on it
 
-**Needs the owner: a hosting decision, and a DNS change at GoDaddy.**
+**Needs the owner: a hosting decision, a DNS change at GoDaddy, and sign-off on the legal set.**
 
-- Choose where it runs. This is the one real decision and it is about money and who fixes it at
-  02:00, not about code.
+### 2a. Where it runs
+
+The decision is about money and who fixes it at 02:00, not about code. The app is two containers
+and a volume; the thing that actually drives cost is **video storage, not compute** — a season of
+match footage for one club is tens of gigabytes, and the app currently deletes none of it (see 2c).
+
+| Option | For | Against |
+|---|---|---|
+| **Swiss VPS** (Infomaniak, Exoscale) | Data stays in Switzerland, which is a real sentence to say to a Swiss club about video of their children, and it keeps the FADP story short | Dearer per GB than the German options; you are still the one fixing it at 02:00 |
+| **EU VPS** (Hetzner and similar) | Cheapest storage by a distance, which matters most for video | Data in the EU, so the notice has to say so and a club may ask why; still your 02:00 |
+| **Cloudflare Tunnel, from either** | No inbound ports at all, which is most of what `TRUSTED_PROXY` in Phase 3 is about | One more moving part, and the 100 MB body cap arrives with it |
+| **Managed PaaS** | Somebody else is on call | Docker + SQLite + a large persistent volume fits these badly, and video storage there gets expensive fast |
+
+**The recommendation:** one small VPS with block storage for video, behind a Cloudflare Tunnel.
+Swiss if you want to tell clubs their children's video never leaves Switzerland — for youth sport
+that sentence is worth more than the price difference. Prices move; get current quotes rather than
+trusting a number in a document.
+
 - Stand the host up, put the app on it, point `thplay.ch` at it, TLS.
 - `CANONICAL_HOST=thplay.ch` so every other hostname 301s before the app is served.
 
 **Done when** `https://thplay.ch` serves the app from the host, `www` and any bare address redirect
 to it, and `scripts/test-nginx-canonical.sh` passes against that deployment.
+
+### 2b. The legal set
+
+Not one document. Clubs, and eventually a club's lawyer, will expect all of these:
+
+| | What | Required, or prudent |
+|---|---|---|
+| Terms of Service | The contract, with the **club** as a legal entity — not with the coach personally | Required |
+| Privacy notice | Under the **revised Swiss FADP**, which is the law that governs here. GDPR is *additional* once an EU club joins, not instead of | Required |
+| Data Processing Agreement | The club is the controller, THPLAY is the processor. The first serious club will ask for one | Required under GDPR Art. 28; expected regardless |
+| Sub-processor list | The host, Cloudflare, Stripe, bexio, and Anthropic if the support bot is built. Plus how a club is told when it changes | Required |
+| Parental consent | For minors' data, and **separately** for video — they are not the same permission | Required |
+| Image rights | Swiss personality rights (ZGB Art. 28) are distinct from data protection. A parent can object to their child's image on grounds that have nothing to do with the FADP | Required |
+| Impressum | Provider identification | Required |
+| Subscription terms | Cancellation, price changes, and **what happens to the club's data when they stop paying**. That last one decides whether a club trusts you | Required |
+| Breach notification | Who is told, how fast | Required |
+| Acceptance capture | The code that records it — see below | Required |
+
+**Two things the owner asked for that need correcting before they go in writing.** "GDPR" is the
+wrong lead: Swiss revFADP governs, GDPR is additive. And **"all designs are trademarks of THPLAY"
+would be false.** The logo is licensed from SmashingLogo, non-exclusively, from a shared icon
+library, and their terms say across every version that no trademark is conveyed
+(`brand/README.md`). What is genuinely ours: the **software**, the **wordmark** (*Triibholz*,
+*THPLAY*), the app's own content, and the database design. The wordmark is the thing to register.
+
+One more term to decide rather than default: **a coach's plays are the coach's**. Claiming them
+would put clubs off and is not needed — the product needs a licence to store and display them,
+nothing more. The same goes for uploaded match video. And the anonymous learning the app already
+does (`js/privacy.js`, `/api/insights`) is THPLAY learning from club data: it has to be disclosed
+and permitted, or switched off.
+
+### 2c. The two findings that outrank the paperwork
+
+Both are code, and a privacy notice cannot honestly promise anything until they are fixed.
+
+- **Nothing ever deletes match video.** Not on the device (sign-out clears rosters but never the
+  IndexedDB blobs, and the app cannot delete a match at all) and not on the server — verified,
+  nothing in `server/` unlinks anything in the video or clip directories. The honest current answer
+  to "how long do you keep video of my son?" is *for ever*, which is not an answer a club will
+  accept.
+- **An erasure request for a child cannot be honoured.** A rostered child is not a user — they are
+  a `club_players` row, which cascades from the **club**, not from a user. `deleteUser` removes an
+  account; removing a player sets `removed_at` and keeps the row; and neither touches the match
+  video the child appears in. Both the FADP and the GDPR give that right, and the app cannot
+  currently deliver it.
+
+**Neither of us is a lawyer.** I can draft these honestly, in the four languages the app already
+speaks, and build the acceptance machinery — a Swiss lawyer should review before a club signs,
+and that review is much cheaper against a complete, accurate draft than a blank page.
 
 ## Phase 3 — The edge, told the truth
 
