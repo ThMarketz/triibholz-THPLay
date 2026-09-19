@@ -44,6 +44,12 @@ echo "[4] caching: long for code and art, short for the rule book"
 ok "an icon is cached for a week" "$(cc /icons/icon-192.png)"      "public, max-age=604800"
 ok "the rule book is not"         "$(cc /data/rules.json)"         ""
 
+echo "[4b] the legal documents: readable by anyone, as UTF-8 text, never long-cached, 404 when missing"
+ok "the manifest"              "$(ctype /legal/manifest.json)"     application/json
+ok "the privacy notice"        "$(ctype /legal/privacy.en.md)"     "text/markdown; charset=utf-8"
+ok "…is not cached for a week" "$(cc /legal/privacy.en.md)"        "no-cache"
+ok "a document that is not there" "$(code /legal/typo.en.md)"      404
+
 echo "[5] every URL the service worker precaches resolves to something that is not the shell"
 bad=0
 for u in $(node -e "

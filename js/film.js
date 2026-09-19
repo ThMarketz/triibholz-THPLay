@@ -631,7 +631,13 @@ const FILM = (() => {
      ('upload-413', 'backend-no-ffmpeg', 'too-large:900:500') or a club-server code: a job error arrives as
      scout- plus the code, a direct analysis error as cloud-error: plus the code. tests/smoke.mjs [6q2] reads the server
      and this file and fails if a code can reach the coach without a reason of its own. */
-  const SERVER_REASONS = { 'no-frames': 'film.whyNoFrames', 'field-not-found': 'film.whyFieldNotFound', 'ffmpeg': 'film.whyDecodeFailed',
+  /* A refused request, as an error the coach can be told about. One refusal is theirs to know by
+     name: the club has no contract with us yet, which no retry and no reload will fix. */
+  async function refusal(r, otherwise) {
+    if (r && r.status === 403) { try { if ((await r.clone().json()).error === 'club-not-under-contract') return new Error('club-not-under-contract'); } catch (e) {} }
+    return otherwise;
+  }
+  const SERVER_REASONS = { 'club-not-under-contract': 'film.whyNoContract', 'no-frames': 'film.whyNoFrames', 'field-not-found': 'film.whyFieldNotFound', 'ffmpeg': 'film.whyDecodeFailed',
     'ffmpeg-unavailable': 'film.whyNoFfmpeg', 'bad-calibration': 'film.whyBadCalibration', 'video-not-found': 'film.whyVideoGone',
     'no-input': 'film.whyNoInput', 'model': 'film.whyModelDown', 'too-large': 'film.whyUpload413' };
   function errorReason(message) {
@@ -641,6 +647,7 @@ const FILM = (() => {
     if (m === 'upload-network') return { key: 'film.whyUploadCut' };
     if (m === 'backend-no-ffmpeg') return { key: 'film.whyNoFfmpeg' };
     if (m === 'video-missing') return { key: 'film.whyVideoMissing' };
+    if (m === 'club-not-under-contract') return { key: 'film.whyNoContract' };
     if (m === 'timed-out') return { key: 'film.whyTimedOut' };
     if (m === 'upload-bad-json') return { key: 'film.whyServerOdd' };
     if ((x = /^(?:scout-|cloud-error: )(.+)$/.exec(m))) return { key: Object.prototype.hasOwnProperty.call(SERVER_REASONS, x[1]) ? SERVER_REASONS[x[1]] : 'film.whyServerUnknown' };
@@ -671,7 +678,7 @@ const FILM = (() => {
       if (health && health.maxUploadMB && mb > health.maxUploadMB) throw new Error(`too-large:${Math.round(mb)}:${health.maxUploadMB}`);
       const videoRef = await uploadWithProgress(base + '/api/upload', blob, pct => { setScoutStatus(TX('film.statusUploadingPct', { pct }), 'cloud'); if (out) out.innerHTML = `<div class="muted">${TX('film.uploadingMb', { mb: Math.round(mb), pct })}</div>`; });
       const job = await API.fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, calibration: { H: vHomography, mode: (root.querySelector('#film-moving') || {}).checked ? 'auto' : 'fixed', minConf: 0.4 }, scout: true, us, opts: { fps: 6, chunkSec: 20 } }) });
-      if (!job.ok) throw new Error('job-' + job.status);
+      if (!job.ok) throw await refusal(job, new Error('job-' + job.status));
       const { id } = await job.json();
       setScoutStatus(TX('film.statusScouting'), 'cloud'); if (out) out.innerHTML = `<div class="muted">${TX('film.scoutingWholeVideo', { id: esc(id) })}</div>`;
       let st = 'queued', tries = 0, j;
@@ -696,7 +703,12 @@ const FILM = (() => {
       xhr.setRequestHeader('content-type', 'application/octet-stream');
       if (typeof SESSION !== 'undefined' && SESSION.on && SESSION.on()) xhr.setRequestHeader('x-thp-client', String(SESSION.CLIENT_VERSION));
       xhr.upload.onprogress = ev => { if (ev.lengthComputable && onPct) onPct(Math.round(100 * ev.loaded / ev.total)); };
-      xhr.onload = () => { if (xhr.status === 200) { try { resolve(JSON.parse(xhr.responseText).videoRef); } catch (e) { reject(new Error('upload-bad-json')); } } else reject(new Error('upload-' + xhr.status)); };
+      xhr.onload = () => {
+        if (xhr.status === 200) { try { resolve(JSON.parse(xhr.responseText).videoRef); } catch (e) { reject(new Error('upload-bad-json')); } return; }
+        // the one refusal a coach cannot fix and should not retry: the club has no contract with us yet
+        let code = null; try { code = JSON.parse(xhr.responseText).error; } catch (e) {}
+        reject(new Error(code === 'club-not-under-contract' ? code : 'upload-' + xhr.status));
+      };
       xhr.onerror = () => reject(new Error('upload-network'));
       xhr.send(blob);
     });
@@ -883,7 +895,8 @@ const FILM = (() => {
         close();
       } catch (err) {
         go.disabled = false;
-        state.textContent = TX(err && err.message === 'video-missing' ? 'film.sendNeedsFile' : 'film.sendFailed');
+        state.textContent = TX(err && err.message === 'video-missing' ? 'film.sendNeedsFile'
+          : err && (err.message === 'club-not-under-contract' || err.error === 'club-not-under-contract') ? 'film.sendNoContract' : 'film.sendFailed');
       }
     };
   }
@@ -896,7 +909,7 @@ const FILM = (() => {
   async function cutClip(videoRef, t0, t1, pad = 2) {
     const start = Math.max(0, t0 - pad), end = t1 + pad;
     const r = await API.fetch(scoutBase() + '/api/clip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ videoRef, start, end }) });
-    if (!r.ok) throw new Error('clip-' + r.status);
+    if (!r.ok) throw await refusal(r, new Error('clip-' + r.status));
     const j = await r.json();
     // videoRef is the same bytes registered as a video, so one situation can be scouted on its own
     return { url: j.clipUrl, videoRef: j.videoRef || null, start: j.start, end: j.end, truncated: (j.end - j.start) + 0.5 < (end - start) };
@@ -941,7 +954,7 @@ const FILM = (() => {
       if (st) st.textContent = ' — ' + TX('film.publishing');
       const body = { team: teamOf(ctx.user), title: TX('film.debriefTitle', { title: dt(cur.title) }), matchTitle: dt(cur.title), author: ctx.user && ctx.user.name, us, summary: (sc.narrative || []).concat(sc.summary || []).slice(0, 12), plan: rows, items };
       const r = await API.fetch(scoutBase() + '/api/debriefs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-      if (!r.ok) throw new Error('debrief-' + r.status);
+      if (!r.ok) throw await refusal(r, new Error('debrief-' + r.status));
       if (st) st.textContent = ' — ' + TX('film.sharedSeeBelow'); ctx.toast(TX('film.debriefShared'));
       await loadDebriefs(); const d = root.querySelector('#film-debriefs'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) { if (st) st.textContent = ` — ${TX('film.shareFailed', { error: whyText(e.message) })}`; btn.disabled = false; }
@@ -1269,7 +1282,7 @@ const FILM = (() => {
     const job = await API.fetch(base + '/api/jobs', { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ videoRef, calibration: calibrationFor(cur),
         scout: true, us: (root.querySelector('#scout-us') || {}).value || 'white', opts: { fps: 6, chunkSec: 20 } }) });
-    if (!job.ok) throw new Error('job-' + job.status);
+    if (!job.ok) throw await refusal(job, new Error('job-' + job.status));
     const { id } = await job.json();
     let st = 'queued', tries = 0, j;
     // a cut is seconds long, so this never needs the whole-match patience of runAutoScout

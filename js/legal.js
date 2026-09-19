@@ -102,7 +102,87 @@ const LEGAL = (() => {
 
   const blockingOutstanding = list => (list || []).filter(x => x.blocking && (!x.accepted || x.stale));
 
-  return { DOCS, BY_ID, LANGS, VERSION_RE, versionOf, outstanding, checkAcceptance, blockingOutstanding };
+  /* WHICH LANGUAGE A READER IS REALLY SHOWN. The version is derived from the ENGLISH text, so a
+     translation is only the same document while it still translates the current English. When the
+     English changes its version moves on, and a German text of last month's English would be a
+     different document wearing this month's version. So a translation is used only while its
+     `translates:` names the current version; until it catches up the reader gets English, and the
+     server and the app both say so. One rule, here, so the app cannot show German while the
+     server records English, or the other way round. */
+  function pickLang(entry, lang) {
+    if (!entry || !entry.langs) return null;
+    const t = entry.langs[lang];
+    if (t && (lang === 'en' || t.translates === entry.version)) return lang;
+    return entry.langs.en ? 'en' : null;
+  }
+
+  /* A document on disk is Markdown with a few lines of front matter (date, status, and for a
+     translation, which English version it translates). */
+  function parse(md) {
+    const s = String(md == null ? '' : md).replace(/\r\n?/g, '\n');
+    const m = /^---\n([\s\S]*?)\n---\n/.exec(s);
+    const meta = {};
+    if (m) m[1].split('\n').forEach(line => { const kv = /^([a-z][a-z0-9_-]*):\s*(.*)$/.exec(line); if (kv) meta[kv[1]] = kv[2].trim(); });
+    return { meta, body: m ? s.slice(m[0].length) : s };
+  }
+
+  /* THE RENDERER. These texts are shown to parents and bind clubs, so they are rendered by one
+     small function that EVERY reader goes through, and it trusts nothing: the text is escaped
+     first and only a closed set of Markdown is recognised afterwards — headings, paragraphs,
+     lists, tables, rules, bold, italic, code, and links to http(s) or mailto. Raw HTML in a
+     document comes out as visible text, never as markup, so a document edited carelessly (or by
+     someone else) cannot put a script or a form in front of a reader. */
+  const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function inline(t) {
+    return esc(t)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*\w])\*(?!\s)([^*]+?)\*(?!\*)/g, '$1<em>$2</em>')
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (all, text, url) => /^(https?:\/\/|mailto:)/i.test(url)
+        ? `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>` : text);
+  }
+  function render(md) {
+    const { meta, body } = parse(md);
+    const lines = body.split('\n');
+    const out = [];
+    let para = [], list = null;      // list = { tag, items: [string] }
+    const flushPara = () => { if (para.length) { out.push('<p>' + inline(para.join(' ')) + '</p>'); para = []; } };
+    const flushList = () => { if (list) { out.push(`<${list.tag}>` + list.items.map(i => '<li>' + inline(i) + '</li>').join('') + `</${list.tag}>`); list = null; } };
+    const flush = () => { flushPara(); flushList(); };
+    const cells = row => row.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.trim()) { flush(); continue; }
+      let m;
+      if ((m = /^(#{1,6})\s+(.*)$/.exec(line))) { flush(); const n = m[1].length; out.push(`<h${n}>${inline(m[2])}</h${n}>`); continue; }
+      if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) { flush(); out.push('<hr>'); continue; }
+      if (/^\s*\|/.test(line) && i + 1 < lines.length && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1])) {
+        flush();
+        const head = cells(line); i++;
+        const rows = [];
+        while (i + 1 < lines.length && /^\s*\|/.test(lines[i + 1])) { i++; rows.push(cells(lines[i])); }
+        out.push('<div class="legal-table"><table><thead><tr>' + head.map(h => '<th>' + inline(h) + '</th>').join('') + '</tr></thead><tbody>'
+          + rows.map(r => '<tr>' + head.map((_, k) => '<td>' + inline(r[k] || '') + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>');
+        continue;
+      }
+      if ((m = /^\s*([-*+]|\d+\.)\s+(.*)$/.exec(line))) {
+        flushPara();
+        const tag = /\d/.test(m[1]) ? 'ol' : 'ul';
+        if (list && list.tag !== tag) flushList();
+        if (!list) list = { tag, items: [] };
+        list.items.push(m[2]);
+        continue;
+      }
+      // an indented line under a list item continues that item; anything else is running text
+      if (list && /^\s+\S/.test(line)) { list.items[list.items.length - 1] += ' ' + line.trim(); continue; }
+      flushList();
+      para.push(line.trim());
+    }
+    flush();
+    return { meta, html: out.join('\n') };
+  }
+
+  return { DOCS, BY_ID, LANGS, VERSION_RE, versionOf, outstanding, checkAcceptance, blockingOutstanding, pickLang, parse, render };
 })();
 
 // Node/CommonJS interop (no-op in the browser)

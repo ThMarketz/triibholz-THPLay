@@ -203,6 +203,47 @@ over-claims in the first drafts were worth finding before a lawyer ever saw them
 speaks, and build the acceptance machinery — a Swiss lawyer should review before a club signs,
 and that review is much cheaper against a complete, accurate draft than a blank page.
 
+### 2b, where it stands (2026-09-19)
+
+**The accept screen is built, and the server enforces it.**
+
+- A club admin who owes the terms or the data-processing agreement meets a full-screen page
+  before the app opens: both texts in full, in their language, each with its version; a tick per
+  document; and a separate tick that they may act for the club, because what they accept binds the
+  club, not them. What is recorded is the version and the language **that were on screen**, with
+  the hash of that exact text. A text that changed while it was being read is shown again rather
+  than accepted.
+- A coach or trainer gets a banner for the privacy notice, a Read button and "I have read it". It
+  never blocks. A player is asked nothing — many are children — and can read everything.
+- Every document is readable by anyone, **before signing up** and with accounts off: links on the
+  sign-in screen and on the dashboard, a reader with a tab per document. The files ship in the web
+  image and are fetched fresh, never from a stale cache.
+- **Until one of the club's admins has accepted both the terms and the DPA, the server stores none
+  of the club's team data** — no roster, no player, no team staff link, no video, no clip, no kept
+  file, no debrief or comment, no announcement or read receipt (`server/legal.js` `underContract`).
+  What it does hold before that is what running a club at all needs: the club, its members and
+  their join requests, and the invites. Any accepted version counts, so a lawyer's edit does not
+  lock a coach out mid-season; the admin is asked again at their next sign-in. Deleting, erasing
+  and releasing a kept file back to the retention sweep always work.
+- Every acceptance names the **exact text** that was on screen (its hash), not only the version:
+  a German text can be corrected without the English version moving, and someone reading the old
+  German across a deploy is shown the new one rather than recorded as accepting it.
+- Reviewed after building by four independent reviewers (security, server, app flow, wording and
+  accessibility), each finding checked by a fifth trying to refute it: 20 confirmed and fixed —
+  among them a coach's "I have read it" that never counted (asked again at every sign-in),
+  the exact-text rule above, and the accept screen claiming more than the server enforced.
+- Found on the way: **the API image shipped without `legal/`**, so `/api/legal` listed nothing and
+  every acceptance would have been refused as "not published". The tests never saw it because they
+  run from the repository. Both images now carry the documents, and a test says so.
+
+**The translations exist, as drafts, and are bound to the English they translate.** Each one names
+the English version it translates (`translates:` in its front matter). The server and the app show
+a translation **only while that is the current English version**; the moment the English changes,
+every reader gets English — with a note saying the translation is being updated — until it is
+translated again. So the lawyer can edit the English freely without a German reader ever being
+shown, or accepting, a German text of last month's English. Each translation also says that where
+it and the English differ, the English applies: see question 8 below.
+
 ## Phase 3 — The edge, told the truth
 
 **Mine, once Phase 2 exists.** All three are silent failures: the app looks healthy and is not.
@@ -334,8 +375,9 @@ the thing that needs consent first.
 
 From reading the FADP (SR 235.1), the Data Protection Ordinance (SR 235.11) and the Civil Code
 (SR 210) on Fedlex. The English translations there carry no legal force; the German, French and
-Italian texts govern, which is itself a reason the translations of these documents should follow a
-review rather than precede it.
+Italian texts govern. The translations of our own documents were made before the review, at the
+owner's request; they are bound to the English version they translate, so a review that changes
+the English takes every translation out of service until it is redone.
 
 1. **Sole proprietorship or GmbH, before the first club signs.** Not a paperwork question — a
    sole proprietorship has no separate legal personality, so private assets stand behind a product
@@ -355,6 +397,11 @@ review rather than precede it.
    a decision somebody qualified should sign off.
 7. **Must a geographic address appear in the Impressum, and does a c/o address suffice?**
    UWG Art. 3(1)(s), criminal on complaint.
+8. **Which language governs?** The drafts say the English text applies where a translation
+   differs, and the version a club accepts is derived from the English. A German-speaking club
+   board may reasonably expect its contract in German. Whether to keep English as the binding text,
+   make each language binding for the clubs that accepted in it, or name one of the national
+   languages, is a decision — and the translations must be checked again by the lawyer either way.
 
 Two things established firmly enough to act on now: **there is no 72-hour breach deadline in Swiss
 law** — the standard is "as quickly as possible", and nothing in these documents should say

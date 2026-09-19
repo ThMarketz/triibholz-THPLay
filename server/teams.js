@@ -36,6 +36,7 @@ const { tx } = require('./db.js');
 const ID = require('./identity.js');
 const { makeGuard } = require('./clubs.js');
 const TEAMSYNC = require('../js/teamsync.js');
+const LEGALSRV = require('./legal.js');
 
 const CLUB = '(c_[A-Za-z0-9_-]{22})', TEAM = '(ct_[A-Za-z0-9_-]{22})', PLAYER = '(cp_[A-Za-z0-9_-]{22})';
 const STAFF = ID.STAFF_ROLES;
@@ -233,6 +234,9 @@ function routes(core) {
     if (!clean.ok) throw httpError(400, clean.error);
     const v = clean.value;
     const allowed = tx(db, () => guard(s, clubId, { roles: STAFF, stepUp: true }, t));
+    // a roster is children's data: none of it on the server before the club has a contract with us.
+    // After the membership check, so somebody outside the club still gets the one 404, not this.
+    LEGALSRV.requireContract(db, clubId, httpError);
     /* Charged after the membership check and outside the write, so: a club id somebody invented
        never writes a row into the shared table, and a sync that is then refused for a reason of
        its own (a stale rev, a full club) does not get its budget back by rolling the counter up
@@ -314,6 +318,7 @@ function routes(core) {
     const p = clean.value;
     const out = tx(db, () => {
       const { member, team } = guardTeam(s, clubId, teamId, { stepUp: true }, t);
+      LEGALSRV.requireContract(db, clubId, httpError);
       if (p.licence && overLimit(`players:${clubId}:${s.userId}`, { max: TEAMSYNC.LIMITS.newLicencesPerDay, windowMs: DAY }, t)) throw tooMany(DAY);
       // a caller has no legitimate rev for a player they have never read, and honouring one would
       // let them ask "is this child already here?" by watching which revs are refused
@@ -386,6 +391,7 @@ function routes(core) {
     const t = now(), s = requireSession(req);
     const out = tx(db, () => {
       guard(s, clubId, { roles: ['admin'], stepUp: true }, t);
+      LEGALSRV.requireContract(db, clubId, httpError);
       const team = db.prepare('SELECT * FROM club_teams WHERE id = ? AND club_id = ?').get(teamId, clubId);
       if (!team) throw httpError(404, 'not-found');
       const target = ID.getMemberByRef(db, clubId, body.memberRef);
@@ -407,6 +413,7 @@ function routes(core) {
     const t = now(), s = requireSession(req);
     const out = tx(db, () => {
       guardTeam(s, clubId, teamId, { stepUp: true }, t);
+      LEGALSRV.requireContract(db, clubId, httpError);
       const target = ID.getMemberByRef(db, clubId, body.memberRef);
       if (!target || target.status !== 'approved') throw httpError(404, 'not-found');
       if (body.remove) db.prepare('DELETE FROM club_team_members WHERE team_id = ? AND user_id = ?').run(teamId, target.user_id);

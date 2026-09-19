@@ -1,5 +1,5 @@
 ---
-date: 2026-09-18
+date: 2026-09-19
 status: draft
 review: A Swiss lawyer has not yet read this. It must not be put in front of a paying club until one has.
 ---
@@ -17,7 +17,7 @@ uses it to hold its own team data, including data about its players, some of who
 ## What the club is responsible for
 
 - Having the right to put its players' data into the service, including **parental consent for
-  every player under the age at which they cannot consent for themselves**, and separate consent
+  every player too young to consent for themselves**, and separate consent
   for video where a player is identifiable.
 - Keeping its coaches' access current, and telling us when someone should no longer have it.
 - The accuracy of what it enters.

@@ -72,6 +72,18 @@ export class Device {
   get(path) { return this.call('GET', path, { cookie: this.cookie }); }
   post(path, body = {}) { return this.call('POST', path, { body, cookie: this.cookie }); }
   me() { return this.get('/api/auth/me'); }
+  /* The club's admin accepts the terms and the data-processing agreement, as the accept screen
+     does. Until they have, the server holds no club data (server/legal.js underContract), so any
+     test that puts a roster, a video or a note on the server needs this first. */
+  async acceptClubTerms(clubId) {
+    const docs = ((await this.get('/api/legal')).json || { docs: [] }).docs.filter(d => d.scope === 'club');
+    const out = [];
+    for (const d of docs) {
+      const shown = (await this.get(`/api/legal/${d.id}?lang=en`)).json;    // what the screen shows, and its hash
+      out.push(await this.post('/api/legal/accept', { doc: d.id, version: shown.version, lang: shown.lang, sha256: shown.sha256, clubId }));
+    }
+    return out;
+  }
 }
 
 export { FLAG, b64u };

@@ -39,6 +39,15 @@ export function build() {
     const sha256 = createHash('sha256').update(text).digest('hex');
     const d = docs[doc] || (docs[doc] = { version: null, status, langs: {} });
     d.langs[lang] = { sha256, bytes: Buffer.byteLength(text), date };
+    /* A TRANSLATION SAYS WHICH ENGLISH IT TRANSLATES. Without it there is no way to tell a German
+       text of today's English from one of last month's, and the version a reader accepts is the
+       English one. The server and the app use a translation only while this names the current
+       English version (LEGAL.pickLang); otherwise they show English and say so. */
+    if (lang !== 'en') {
+      const tr = (/^translates:\s*(\d{4}-\d{2}-\d{2}\+[0-9a-f]{8})\s*$/m.exec(fm[1]) || [])[1];
+      if (!tr) throw new Error(`legal/${name}: a translation needs "translates: <English version>" in its front matter`);
+      d.langs[lang].translates = tr;
+    }
     // the canonical version comes from the English text; a translation that drifts is caught below
     if (lang === 'en') { d.version = `${date}+${sha256.slice(0, 8)}`; d.status = status; }
   }
@@ -48,8 +57,22 @@ export function build() {
   return { docs };
 }
 
+/* translations that no longer translate the current English — shown as English until updated */
+export function behind(built) {
+  const out = [];
+  for (const [id, d] of Object.entries((built || build()).docs)) {
+    for (const [lang, l] of Object.entries(d.langs)) if (lang !== 'en' && l.translates !== d.version) out.push(`${id}.${lang} translates ${l.translates}, English is ${d.version}`);
+  }
+  return out;
+}
+
 function main() {
   const built = build();
+  const late = behind(built);
+  if (late.length) {
+    console.warn(`${late.length} translation(s) are behind the English and will be shown as English until updated:`);
+    late.forEach(l => console.warn('  ' + l));
+  }
   const text = JSON.stringify(built, null, 1) + '\n';
   let have = null;
   try { have = readFileSync(OUT, 'utf8'); } catch (e) { have = null; }

@@ -28,10 +28,11 @@ const PENDING = (localId, name, extra = {}) => Object.assign({ localId, name, fi
 const team = (localId, over = {}) => Object.assign({ localId, name: 'U14 blue', category: 'U14', season: SEASON, leagueLabel: '', players: [] }, over);
 
 /* a club, its admin, a coach and a player — each account made the way that person really would */
-async function club(name) {
+async function club(name, opts = {}) {
   const clubId = ID.createClub(db, { name, actor: 'operator' }, Date.now());
   const admin = dev();
   await admin.register(ID.issueCode(db, { kind: 'club-admin', clubId, role: 'admin', actor: 'operator' }, Date.now()).code, `Admin ${name}`);
+  if (!opts.unsigned) await admin.acceptClubTerms(clubId);
   await admin.stepUp();
   const base = `/api/clubs/${clubId}`;
   const add = async (role, who) => {
@@ -425,6 +426,45 @@ await section('[15] Forgetting a player — erasure, not removal', async () => {
   await A.admin.stepUp();
   ok('a player id from another club is not found here',
     (await A.admin.post(`${A.base}/players/cp_AAAAAAAAAAAAAAAAAAAAAA/forget`, {})).status === 404);
+});
+
+await section('[16] No roster on the server before the club has a contract', async () => {
+  /* Under the FADP a processor works for a controller under a contract, and here the data-
+     processing agreement is that contract. Until one of the club's admins has accepted it and the
+     terms, a roster — children's names and licence numbers — does not go on the server at all. */
+  const U = await club('Unsigned WPC', { unsigned: true });
+  await U.coach.stepUp();
+  const refused = await up(U.coach, U, team('u1', { players: [P('59001', 'Ohne Vertrag')] }));
+  ok('a coach of a club that has accepted nothing cannot put a roster on the server', refused.status === 403 && refused.json.error === 'club-not-under-contract');
+  ok('…and nothing was written', !db.prepare('SELECT 1 FROM club_players WHERE club_id = ?').get(U.clubId));
+  ok('somebody from another club still gets the one 404, so this does not reveal the club exists',
+    (await up(B.coach, U, team('u2'))).status === 404);
+  const mine = (await U.coach.get(`/api/legal/mine?club=${U.clubId}`)).json;
+  ok('the coach’s app can say why: the club is not under contract yet', mine.underContract === false);
+
+  const shown = async id => (await U.admin.get(`/api/legal/${id}?lang=en`)).json;
+  const accept = async id => { const t = await shown(id); return U.admin.post('/api/legal/accept', { doc: id, version: t.version, lang: t.lang, sha256: t.sha256, clubId: U.clubId }); };
+  await accept('terms');
+  ok('the terms alone are not enough — the data-processing agreement is the contract that matters',
+    (await up(U.coach, U, team('u1', { players: [P('59001', 'Ohne Vertrag')] }))).status === 403);
+  await accept('dpa');
+  ok('once an admin has accepted both, the same upload goes through',
+    (await up(U.coach, U, team('u1', { players: [P('59001', 'Ohne Vertrag')] }))).status === 200);
+  ok('…and the coach’s app hears the club is under contract', (await U.coach.get(`/api/legal/mine?club=${U.clubId}`)).json.underContract === true);
+
+  /* A changed document must not stop a club mid-season: what it accepted binds it until its
+     admin accepts the new text. Only a club that never accepted anything is refused. */
+  const O = await club('Older Terms WPC', { unsigned: true });
+  const adminId = db.prepare('SELECT user_id FROM club_members WHERE club_id = ? AND role = ?').get(O.clubId, 'admin').user_id;
+  for (const doc of ['terms', 'dpa']) {
+    db.prepare(`INSERT INTO acceptances (id, user_id, club_id, doc, version, sha256, lang, scope, accepted_at) VALUES (?, ?, ?, ?, '2026-01-01+00000000', ?, 'en', 'club', ?)`)
+      .run('ac_old_' + doc, adminId, O.clubId, doc, 'f'.repeat(64), Date.now() - 30 * 86400e3);
+  }
+  await O.coach.stepUp();
+  ok('a club that accepted an OLDER version keeps working — a changed comma does not lock a coach out on a Saturday',
+    (await up(O.coach, O, team('o1', { players: [P('59101', 'Alte Fassung')] }))).status === 200);
+  ok('…while its admin is told the terms changed, and asked again',
+    (await O.admin.get(`/api/legal/mine?club=${O.clubId}`)).json.outstanding.filter(x => x.stale).map(x => x.doc).sort().join() === 'dpa,terms');
 });
 
 S.close();

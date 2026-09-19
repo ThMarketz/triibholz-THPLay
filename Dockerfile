@@ -18,6 +18,9 @@ COPY css/   /usr/share/nginx/html/css/
 COPY js/    /usr/share/nginx/html/js/
 COPY data/  /usr/share/nginx/html/data/
 COPY icons/ /usr/share/nginx/html/icons/
+# the legal documents, readable by anyone before they sign up and whether or not accounts are on:
+# the privacy notice has to be there at the moment data is collected, and the impressum always
+COPY legal/ /usr/share/nginx/html/legal/
 # demo clips so anyone can try Auto-scout without their own footage
 COPY docs/demo/ /usr/share/nginx/html/docs/demo/
 

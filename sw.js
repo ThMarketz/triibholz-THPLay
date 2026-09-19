@@ -3,7 +3,7 @@
    worker only refills its cache when this string changes, so tying it to the bytes means a changed
    asset can never ship behind an unchanged cache name — which is how new icons nearly went out
    while every installed app kept the old ones. The vNN in front is for reading in devtools. */
-const ASSET_STAMP = '7529f23393ad';
+const ASSET_STAMP = 'dc45ffa60d1d';
 const CACHE = 'triibholz-v87-' + ASSET_STAMP;
 const ASSETS = [
   './', './index.html',
@@ -54,8 +54,9 @@ self.addEventListener('fetch', e => {
   // data must not outlive a sign-out on a shared device, or be served stale to someone else
   if (url.pathname.startsWith('/api/')) return;
 
-  // rule books: network-first so they stay current, fall back to cache offline
-  if (url.pathname.endsWith('/data/rules.json')) {
+  // rule books and legal documents: network-first so they stay current, fall back to cache offline.
+  // Cache-first would keep showing a document after it changed — and accepting it records a version.
+  if (url.pathname.endsWith('/data/rules.json') || url.pathname.startsWith('/legal/')) {
     e.respondWith(
       fetch(req).then(r => cacheable(r) ? keep(req, r) : caches.match(req).then(hit => hit || r))
         .catch(() => caches.match(req))

@@ -365,9 +365,12 @@ const server = http.createServer(async (req, res) => {
        accounts off and a keep list that only worked in one mode would quietly lose clips in the
        other. The id is the clip's own name; its hard-linked twin inherits the decision. */
     if (req.method === 'POST' && p === '/api/keep') {
-      const who = access.requireActor(req); access.requireStaff(who);
+      // releasing a kept file lets it go to the retention sweep, so it must work for a club with no
+      // contract; keeping one holds club data longer, so that needs the contract like anything else
+      const who = access.requireActor(req), kc = access.requireStaff(who, null, { contract: false });
       const body = await readBody(req);
       let kr; try { kr = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
+      if (kr.keep) access.requireContract(kc.clubId);
       const id = safeToken(kr.id);
       if (!id) return send(res, 400, { error: 'no-id' });
       // only something that is really here: a keep list of names that do not exist is a slow leak
@@ -475,6 +478,7 @@ const server = http.createServer(async (req, res) => {
       if (access.on && !access.visibleRecord(deb, dwho)) return send(res, 404, { error: 'not-found' });
       if (req.method === 'GET' && !dm[2]) return send(res, 200, deb);
       if (req.method === 'POST' && dm[2]) {
+        if (access.on) access.requireContract(deb.clubId);     // a comment is club data like the debrief
         const body = await readBody(req);
         let c; try { c = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
         if (!clean(c.text, 1000).trim()) return send(res, 400, { error: 'empty-comment' });
@@ -523,6 +527,7 @@ const server = http.createServer(async (req, res) => {
       if (access.on && !announcementFor(a, awho)) return send(res, 404, { error: 'not-found' });
       if (req.method === 'GET' && !anm[2]) return send(res, 200, a);
       if (req.method === 'POST' && anm[2]) {
+        if (access.on) access.requireContract(a.clubId);        // who read what, and when, is club data too
         const body = await readBody(req);
         let rb; try { rb = JSON.parse(body.toString() || '{}'); } catch (e) { return send(res, 400, { error: 'bad-json' }); }
         const by = access.on ? awho.userId : String(rb.by || '').trim().toLowerCase();   // who read it comes from the session

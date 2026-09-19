@@ -38,7 +38,7 @@ function openAccess() {
   const club = { clubId: null, role: 'admin', open: true };
   return {
     on: false, newId, CLIENT_HEADER, MIN_CLIENT,
-    gate() {}, actorOf: () => open, requireActor: () => open, requireClub: () => club, requireStaff: () => club,
+    gate() {}, actorOf: () => open, requireActor: () => open, requireClub: () => club, requireStaff: () => club, requireContract() {},
     recordAsset() {}, assetOf: () => null, requireAssetRead: () => null, ownedVideo: () => true,
     issueFeed: () => null, feedFor: () => ({ open: true }), listFeeds: () => [],
     scopeOf: () => null, visibleRecord: () => true, stampRecord: r => r,
@@ -64,10 +64,16 @@ function createAccess({ db, auth, cfg, now = Date.now, clipShownTo }) {
     if (!id || !actor.clubs.has(id)) throw httpError(404, 'not-found');
     return { clubId: id, role: actor.clubs.get(id) };
   }
-  function requireStaff(actor, clubId) {
+  /* video, clips, debriefs, comments and announcements are club data: none of it before the club
+     has a contract with us (server/legal.js underContract) */
+  const requireContract = clubId => require('./legal.js').requireContract(db, clubId, httpError);
+  /* { contract: false } is for the few staff actions that let data GO — releasing a kept file back
+     to the retention sweep — which must work for a club with no contract, or its data would stay. */
+  function requireStaff(actor, clubId, opts) {
     const c = requireClub(actor, clubId);
     if (!STAFF.includes(c.role)) throw httpError(404, 'not-found');
     if (!actor.uv) throw httpError(403, 'user-verification-required');
+    if (!(opts && opts.contract === false)) requireContract(c.clubId);
     return c;
   }
 
@@ -135,7 +141,7 @@ function createAccess({ db, auth, cfg, now = Date.now, clipShownTo }) {
 
   return {
     on: true, newId, CLIENT_HEADER, MIN_CLIENT,
-    gate, actorOf, requireActor, requireClub, requireStaff,
+    gate, actorOf, requireActor, requireClub, requireStaff, requireContract,
     recordAsset, assetOf, requireAssetRead, ownedVideo,
     issueFeed, feedFor, listFeeds, stampRecord, visibleRecord,
   };

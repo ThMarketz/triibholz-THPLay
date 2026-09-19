@@ -528,14 +528,31 @@ await section('[13] What was agreed to, and proving which text that was', async 
   ok('a document can be read, with the version and the hash of the exact text', terms.status === 200
     && terms.json.text.includes('Terms of Service') && /^[0-9a-f]{64}$/.test(terms.json.sha256));
 
-  /* The app may ask for German before a German text exists. English appears on screen, so English
-     is what the record must say — "she accepted the German version" has to be true or not said. */
+  /* The app may ask for German. It gets German only while a German text of the CURRENT English
+     exists; otherwise English appears on screen, so English is what the record must say — "she
+     accepted the German version" has to be true or not said. */
+  const LS = require('../server/legal.js');
+  const man = LS.load();
+  const deServed = LEGAL.pickLang(man.docs.privacy, 'de');
   const de = await C.admin.get('/api/legal/privacy?lang=de');
-  ok('asking for a language with no translation yet returns English AND says so',
-    de.status === 200 && de.json.lang === 'en' && de.json.askedFor === 'de');
+  ok('asking for German returns the language really served, and says what was asked for',
+    de.status === 200 && de.json.lang === deServed && de.json.askedFor === 'de' && de.json.sha256 === man.docs.privacy.langs[deServed].sha256);
+  const behindMan = JSON.parse(JSON.stringify(man));
+  behindMan.docs.privacy.langs.de = Object.assign({ sha256: '0'.repeat(64), bytes: 1, date: '2020-01-01' }, behindMan.docs.privacy.langs.de || {}, { translates: '2020-01-01+00000000' });
+  const late = LS.textOf('privacy', 'de', behindMan);
+  ok('a German text of an OLDER English is not served: English is, and it says the translation is behind',
+    late.lang === 'en' && late.behind === true && late.version === man.docs.privacy.version);
 
   const v = idx.json.docs.find(d => d.id === 'terms').version;
-  const acc = await C.admin.post('/api/legal/accept', { doc: 'terms', version: v, lang: 'en', clubId: C.clubId });
+  const shaOf = (doc, lang = 'en') => man.docs[doc].langs[LEGAL.pickLang(man.docs[doc], lang)].sha256;
+  /* THE TEXT, NOT ONLY THE VERSION. A translation can be corrected without the English version
+     moving, so the app sends the hash of the text it showed, and anything else is refused. */
+  const noHash = await C.admin.post('/api/legal/accept', { doc: 'terms', version: v, lang: 'en', clubId: C.clubId });
+  ok('an acceptance that does not name the exact text shown is refused, and nothing is recorded',
+    noHash.status === 409 && noHash.json.error === 'stale-text' && count('acceptances', "doc = 'terms'") === 0);
+  ok('…and so is one naming a text this server is not serving',
+    (await C.admin.post('/api/legal/accept', { doc: 'terms', version: v, lang: 'en', sha256: 'a'.repeat(64), clubId: C.clubId })).status === 409);
+  const acc = await C.admin.post('/api/legal/accept', { doc: 'terms', version: v, lang: 'en', sha256: shaOf('terms'), clubId: C.clubId });
   ok('an admin can accept for the club', acc.status === 200 && acc.json.accepted.doc === 'terms');
   const row = db.prepare("SELECT * FROM acceptances WHERE doc = 'terms'").get();
   ok('…and the row carries the version, the hash and the language actually shown',
@@ -543,7 +560,7 @@ await section('[13] What was agreed to, and proving which text that was', async 
   ok('…and it is bound to the club, not only to the person who clicked', row.club_id === C.clubId);
 
   ok('accepting the same version twice is the same fact, not a second one',
-    (await C.admin.post('/api/legal/accept', { doc: 'terms', version: v, lang: 'en', clubId: C.clubId })).status === 200
+    (await C.admin.post('/api/legal/accept', { doc: 'terms', version: v, lang: 'en', sha256: shaOf('terms'), clubId: C.clubId })).status === 200
     && count('acceptances', "doc = 'terms'") === 1);
 
   /* The refusal that keeps the record worth having: a version this server does not serve means
@@ -555,13 +572,14 @@ await section('[13] What was agreed to, and proving which text that was', async 
   ok('…and a language nobody could have read it in', 
     (await C.admin.post('/api/legal/accept', { doc: 'terms', version: v, lang: 'zz', clubId: C.clubId })).status === 400);
 
-  /* "She accepted the German version" has to be true or not said at all. Until a German text
-     exists, asking for German puts ENGLISH on screen — so English is what the row must say. */
+  /* "She accepted the German version" has to be true or not said at all. The row says the language
+     the server really served for that request — German with the German text's hash while a current
+     German text exists, English otherwise — never simply the language that was asked for. */
   const pv = idx.json.docs.find(d => d.id === 'privacy').version;
-  const deAcc = await C.admin.post('/api/legal/accept', { doc: 'privacy', version: pv, lang: 'de', clubId: C.clubId });
-  ok('accepting "in German" while English is on screen records ENGLISH',
-    deAcc.status === 200 && deAcc.json.accepted.lang === 'en'
-    && db.prepare("SELECT lang FROM acceptances WHERE doc = 'privacy'").get().lang === 'en');
+  const deAcc = await C.admin.post('/api/legal/accept', { doc: 'privacy', version: pv, lang: 'de', sha256: shaOf('privacy', 'de'), clubId: C.clubId });
+  const deRow = db.prepare("SELECT lang, sha256 FROM acceptances WHERE doc = 'privacy'").get();
+  ok('accepting "in German" records the language that was really served, with that text’s hash',
+    deAcc.status === 200 && deAcc.json.accepted.lang === deServed && deRow.lang === deServed && deRow.sha256 === man.docs.privacy.langs[deServed].sha256);
 
   const outstanding = acc.json.outstanding;
   ok('an admin is told what is still owed, by name, not "you must accept something"',
@@ -574,6 +592,16 @@ await section('[13] What was agreed to, and proving which text that was', async 
   ID.decideRequest(db, { clubId: C.clubId, memberRef: cp.memberRef, requestNo: cp.requestNo, approve: true, actor: 'test' }, Date.now());
   const cOut = (await coach.get(`/api/legal/mine?club=${C.clubId}`)).json;
   ok('a coach owes the privacy notice and no club document', cOut.outstanding.length === 1 && cOut.outstanding[0].doc === 'privacy');
+  /* The privacy notice is the coach's own: stored with no club, and it must still count when the
+     app asks about the coach's club — which it always does. It used to be invisible there, so the
+     banner came back at every sign-in and every "I have read it" added another row. */
+  const pAcc = () => coach.post('/api/legal/accept', { doc: 'privacy', version: pv, lang: 'en', sha256: shaOf('privacy'), clubId: C.clubId });
+  ok('a coach can say they have read the privacy notice', (await pAcc()).status === 200);
+  ok('…and asked about their club afterwards, the server says they have',
+    (await coach.get(`/api/legal/mine?club=${C.clubId}`)).json.outstanding.find(x => x.doc === 'privacy').accepted === true);
+  await pAcc(); await pAcc();
+  ok('…and saying it three times is one fact, not three rows',
+    count('acceptances', "doc = 'privacy' AND user_id = ?", userId('A Coach')) === 1);
   ok('a coach cannot bind the club to its terms',
     (await coach.post('/api/legal/accept', { doc: 'terms', version: v, lang: 'en', clubId: C.clubId })).status === 404);
 
@@ -614,7 +642,7 @@ await section('[13] What was agreed to, and proving which text that was', async 
   ok('…and the older acceptance is kept, because it is evidence of what was agreed then',
     count('acceptances', "doc = 'dpa' AND version = '2026-01-01+00000000'") === 1);
   const nowV = (await C.admin.get('/api/legal')).json.docs.find(d => d.id === 'dpa').version;
-  const re = await C.admin.post('/api/legal/accept', { doc: 'dpa', version: nowV, lang: 'en', clubId: C.clubId });
+  const re = await C.admin.post('/api/legal/accept', { doc: 'dpa', version: nowV, lang: 'en', sha256: shaOf('dpa'), clubId: C.clubId });
   ok('re-accepting the current text clears it', re.status === 200 && !re.json.outstanding.find(x => x.doc === 'dpa').stale);
   ok('…and both versions are on the record, so "what did they agree to, and when" has two answers',
     count('acceptances', "doc = 'dpa'") === 2);

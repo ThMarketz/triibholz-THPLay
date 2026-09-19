@@ -80,9 +80,9 @@ window.navigator.credentials = {
 
 const files = ['js/theme.js', 'js/i18n.js', 'js/help.js', 'js/draft.js', 'js/commands.js', 'js/solver.js', 'js/qr.js', 'js/fx.js', 'js/pool.js', 'js/data.js', 'js/animate.js',
   'js/vision.js', 'js/field.js', 'js/shot.js', 'js/testlog.js', 'js/chart.js', 'js/sheetdoc.js', 'js/eligibility.js', 'js/teamsheet.js', 'js/scout.js', 'js/teamsync.js', 'js/teams.js', 'js/manikin.js', 'js/track.js',
-  'js/bytetrack.js', 'js/events.js', 'js/webdetector.js', 'js/videogen.js', 'js/calendar.js', 'js/planner.js', 'js/privacy.js', 'js/tactics.js', 'js/gameplan.js', 'js/share.js',
+  'js/bytetrack.js', 'js/events.js', 'js/webdetector.js', 'js/videogen.js', 'js/calendar.js', 'js/planner.js', 'js/privacy.js', 'js/tactics.js', 'js/gameplan.js', 'js/legal.js', 'js/share.js',
   'js/announce.js', 'js/wpmatch.js', 'js/api.js', 'js/session.js', 'js/analysis.js', 'js/film.js', 'js/app.js'];
-window.eval(files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n') + '\n;\nwindow.__T = { SESSION, API, DATA, TEAMS, TEAMSYNC };');
+window.eval(files.map(f => readFileSync(join(APP, f), 'utf8')).join('\n;\n') + '\n;\nwindow.__T = { SESSION, API, DATA, TEAMS, TEAMSYNC, LEGAL, I18N };');
 
 const q = s => document.querySelector(s);
 const wait = ms => new Promise(r => window.setTimeout(r, ms));
@@ -108,10 +108,70 @@ await section('[2] An operator invite becomes a real account, with a real passke
   q('#auth-name').value = 'Ada Admin';
   q('#auth-create').click();
   await settle(40);
+
+  /* A NEW CLUB'S ADMIN ACCEPTS FOR THE CLUB BEFORE ANYTHING ELSE. The terms and the data-processing
+     agreement bind the club, so the screen says so, shows the exact text the server will record,
+     and asks the admin to confirm they may act for the club. */
+  ok('before the app opens, the admin is asked to accept for the club, by name',
+    q('#legal-screen').classList.contains('active') && !q('#app-screen').classList.contains('active') && /Signin WPC/.test(q('#legal-gate-title').textContent));
+  const gateDocs = [...document.querySelectorAll('#legal-gate-docs [data-doc]')].map(e => e.dataset.doc).sort().join();
+  ok('…the terms and the data-processing agreement, and nothing a coach or player owes', gateDocs === 'dpa,terms');
+  ok('…each shown in full, from the server’s own text', /Terms of Service/.test(q('#legal-gate-docs [data-doc="terms"] .legal-doc h1').textContent)
+    && /Data Processing Agreement/.test(q('#legal-gate-docs [data-doc="dpa"] .legal-doc h1').textContent));
+  ok('…with the version each is at', [...document.querySelectorAll('#legal-gate-docs .legal-meta')].every(m => /\d{4}-\d{2}-\d{2}\+[0-9a-f]{8}/.test(m.textContent)));
+  ok('…and it says plainly they are drafts no lawyer has read yet', q('#legal-gate-draft').hidden === false);
+  ok('nothing can be accepted before anything is ticked', q('#legal-gate-accept').disabled === true);
+  document.querySelectorAll('#legal-gate-docs input[data-accept]').forEach(i => { i.checked = true; i.dispatchEvent(new window.Event('change')); });
+  ok('…nor with every document ticked but no word that they may act for the club', q('#legal-gate-accept').disabled === true);
+  q('#legal-gate-authority').checked = true; q('#legal-gate-authority').dispatchEvent(new window.Event('change'));
+  ok('…and with both, it can', q('#legal-gate-accept').disabled === false);
+
+  /* The language changes the text, so it clears the ticks: what was ticked was the other text. */
+  const { I18N, LEGAL } = window.__T;
+  I18N.setLang('de'); await settle(30);
+  const man = JSON.parse(readFileSync(join(APP, 'legal/manifest.json'), 'utf8'));
+  const deCurrent = LEGAL.pickLang(man.docs.terms, 'de') === 'de';
+  ok('switching to German shows German where a current translation exists, and says so where not',
+    deCurrent ? !/Terms of Service/.test(q('#legal-gate-docs [data-doc="terms"] .legal-doc h1').textContent) && q('#legal-gate-docs [data-doc="terms"] .legal-note').hidden
+              : /Terms of Service/.test(q('#legal-gate-docs [data-doc="terms"] .legal-doc h1').textContent) && !q('#legal-gate-docs [data-doc="terms"] .legal-note').hidden);
+  ok('…and the ticks are cleared, because what was ticked was a different text', q('#legal-gate-accept').disabled === true
+    && [...document.querySelectorAll('#legal-gate-docs input[data-accept]')].every(i => !i.checked));
+  document.querySelectorAll('#legal-gate-docs input[data-accept]').forEach(i => { i.checked = true; i.dispatchEvent(new window.Event('change')); });
+  q('#legal-gate-authority').checked = true; q('#legal-gate-authority').dispatchEvent(new window.Event('change'));
+  q('#legal-gate-accept').click();
+  await settle(40);
+  I18N.setLang('en'); await settle(10);
+  const rows = db.prepare("SELECT doc, version, sha256, lang, scope, club_id FROM acceptances WHERE club_id = ? ORDER BY doc").all(clubId);
+  const shown = deCurrent ? 'de' : 'en';
+  ok('the club’s acceptance is on the server: both documents, for this club, at the current version',
+    rows.map(r => r.doc).join() === 'dpa,terms' && rows.every(r => r.scope === 'club' && r.club_id === clubId && r.version === man.docs[r.doc].version));
+  ok('…in the language that was really on screen, with the hash of that exact text',
+    rows.every(r => r.lang === shown && r.sha256 === man.docs[r.doc].langs[shown].sha256));
   ok('the app is entered, signed in as that person', q('#app-screen').classList.contains('active') && /Ada Admin/.test(q('#user-pill').textContent));
+  ok('every document can be read from the dashboard', [...document.querySelectorAll('#view-dashboard .legal-links [data-legal]')].map(b => b.dataset.legal).join() === 'privacy,terms,impressum');
   ok('the server agrees who it is', (await (await window.fetch('/api/auth/me')).json()).user.displayName === 'Ada Admin');
   ok('a passkey now exists for that account', db.prepare("SELECT count(*) AS n FROM credentials WHERE user_id = (SELECT id FROM users WHERE display_name = 'Ada Admin')").get().n === 1);
   ok('nothing about the person is kept in this browser’s storage', !JSON.stringify(window.localStorage).includes('Ada Admin'));
+});
+
+await section('[2b] The privacy notice is personal, and asks without stopping anyone', async () => {
+  /* The admin also works with the club's data, so the privacy notice is theirs to read — personally,
+     not for the club. It does not block: a banner, a Read button, and an "I have read it". */
+  ok('once in, a banner asks the admin to read the privacy notice — the app is not blocked',
+    q('#app-screen').classList.contains('active') && q('#legal-notice').hidden === false && /Privacy notice/.test(q('#legal-notice-text').textContent));
+  q('#legal-notice-read').click();
+  await settle(30);
+  ok('Read opens the privacy notice itself', q('#legal-modal').hidden === false && /Privacy notice/.test(q('#legal-modal-doc h1').textContent)
+    && q('#legal-tabs .legal-tab.active').dataset.doc === 'privacy');
+  ok('…with an "I have read it" for this document only', q('#legal-modal-foot').hidden === false);
+  q('#legal-tabs .legal-tab[data-doc="terms"]').click(); await settle(20);
+  ok('…which is not offered on a document nobody asked them about', q('#legal-modal-foot').hidden === true);
+  q('#legal-tabs .legal-tab[data-doc="privacy"]').click(); await settle(20);
+  q('#legal-modal-accept').click();
+  await settle(30);
+  const row = db.prepare("SELECT * FROM acceptances WHERE doc = 'privacy' AND user_id = (SELECT id FROM users WHERE display_name = 'Ada Admin')").get();
+  ok('it is recorded as the person’s own, not the club’s', row && row.scope === 'personal' && row.club_id === null);
+  ok('…and the banner goes, and the reader closes', q('#legal-notice').hidden === true && q('#legal-modal').hidden === true);
 });
 
 let player, playerRef;
@@ -281,6 +341,11 @@ await section('[4] Signing out and back in with the passkey alone', async () => 
   q('#signin-passkey').click();
   await settle(40);
   ok('the passkey alone signs back in — no name, no e-mail, no password', q('#app-screen').classList.contains('active') && /Ada Admin/.test(q('#user-pill').textContent));
+  ok('…and a club that has accepted is not asked again', !q('#legal-screen').classList.contains('active'));
+  /* The privacy notice read in [2b] was stored as the admin's own, with no club — and the app asks
+     about the club. It used to be invisible there, so the banner came back at every sign-in. */
+  ok('…nor is the privacy notice the admin already read', q('#legal-notice').hidden === true);
+  ok('…and it is on record once, not once per sign-in', db.prepare("SELECT count(*) AS n FROM acceptances WHERE doc = 'privacy' AND user_id = (SELECT id FROM users WHERE display_name = 'Ada Admin')").get().n === 1);
 });
 
 await section('[5] An app the server has moved past is told to update', async () => {

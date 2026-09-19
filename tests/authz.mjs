@@ -1,7 +1,7 @@
 /* Slice 4 — with accounts ON, every endpoint that existed before accounts is authorized: a session,
    a club, a role, and one 404 for everything a person may not see.
    Run:  node tests/authz.mjs */
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { startServer, makeCall, Device, ORIGIN } from './accounts-harness.mjs';
 
@@ -26,6 +26,7 @@ async function club(name) {
   const clubId = ID.createClub(db, { name, actor: 'operator' }, Date.now());
   const admin = dev();
   await admin.register(ID.issueCode(db, { kind: 'club-admin', clubId, role: 'admin', actor: 'operator' }, Date.now()).code, `Admin ${name}`);
+  await admin.acceptClubTerms(clubId);
   await admin.stepUp();
   const join = (await admin.post(`/api/clubs/${clubId}/join-codes`, { label: 'players' })).json;
   const player = dev();
@@ -201,6 +202,36 @@ await section('[9] What was there before accounts belongs to nobody', async () =
   ok('…and their old clip is theirs to watch', (await get(A.admin, '/api/clips/legacyclip.mp4')).status === 200);
   ok('another club is no better off than before', (await get(B.admin, '/api/clips/legacyclip.mp4')).status === 404 && (await get(B.admin, '/api/debriefs/legacy1')).status === 404);
   ok('a player of the adopting club still may not watch a clip nothing shows them', (await get(A.player, '/api/clips/legacyclip.mp4')).status === 404);
+});
+
+await section('[x] Video and notes wait for the club’s contract too', async () => {
+  const clubId = ID.createClub(db, { name: 'Unsigned Video WPC', actor: 'operator' }, Date.now());
+  const admin = dev();
+  await admin.register(ID.issueCode(db, { kind: 'club-admin', clubId, role: 'admin', actor: 'operator' }, Date.now()).code, 'Admin Unsigned Video');
+  const up = await call('POST', '/api/upload', { raw: 'pretend-video-bytes', type: 'application/octet-stream', cookie: admin.cookie });
+  ok('a club that has accepted nothing cannot put match video on the server', up.status === 403 && up.json.error === 'club-not-under-contract');
+  const deb = await post(admin, '/api/debriefs', { title: 'x', gameplan: {}, report: {} }, { headers: { 'x-club': clubId } });
+  ok('…nor a debrief', deb.status === 403);
+  /* Letting data GO must never wait for a contract: releasing a kept file hands it back to the
+     retention sweep. Keeping one holds club data longer, so that does wait. A legacy clip adopted
+     into this club stands in for data that was there before the club had a contract. */
+  writeFileSync(join(S.DATA, 'clips', 'unsignedclip.mp4'), Buffer.alloc(16, 7));
+  const unkeep = await post(admin, '/api/keep', { id: 'unsignedclip.mp4', keep: false }, { headers: { 'x-club': clubId } });
+  ok('releasing a kept file back to the retention sweep works for a club with no contract', unkeep.status === 200 && unkeep.json.keep === false);
+  const keep = await post(admin, '/api/keep', { id: 'unsignedclip.mp4', keep: true }, { headers: { 'x-club': clubId } });
+  ok('…while keeping one, which holds club data longer, waits for the contract', keep.status === 403 && keep.json.error === 'club-not-under-contract');
+  /* Records that already exist for a club with no contract — from before this rule, or adopted
+     legacy data — must not keep collecting personal data: no comments, no read receipts. */
+  writeFileSync(join(S.DATA, 'debriefs', 'unsigneddeb.json'), JSON.stringify({ id: 'unsigneddeb', clubId, team: 'club', title: 'Old', items: [], comments: [], createdAt: Date.now() }));
+  const cm = await post(admin, '/api/debriefs/unsigneddeb/comments', { text: 'Kid Muster hurt his shoulder' });
+  ok('no comment is added to such a club’s debrief', cm.status === 403 && JSON.parse(readFileSync(join(S.DATA, 'debriefs', 'unsigneddeb.json'), 'utf8')).comments.length === 0);
+  const adminUser = db.prepare("SELECT id FROM users WHERE display_name = 'Admin Unsigned Video'").get().id;
+  writeFileSync(join(S.DATA, 'announcements', 'unsignedann.json'), JSON.stringify({ id: 'unsignedann', clubId, scope: 'team', title: 'x', body: 'y', createdAt: Date.now(), readBy: [], authorUserId: adminUser }));
+  const rr = await post(admin, '/api/announcements/unsignedann/read', {});
+  ok('…and no read receipt is written for such a club’s announcement', rr.status === 403 && rr.json.error === 'club-not-under-contract');
+  await admin.acceptClubTerms(clubId);
+  const again = await call('POST', '/api/upload', { raw: 'pretend-video-bytes', type: 'application/octet-stream', cookie: admin.cookie });
+  ok('…and once its admin has accepted, the same upload is taken', again.status === 200);
 });
 
 S.close();

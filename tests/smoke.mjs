@@ -1582,8 +1582,8 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
 
     /* Every key named in the markup must actually exist, or apply() writes the key name onto
        the screen — which is how the pending gate briefly read "ui.yourAccessRequestIs". */
-    const named = [...document.querySelectorAll('[data-i18n],[data-i18n-html],[data-i18n-ph],[data-i18n-title]')]
-      .flatMap(el => ['data-i18n', 'data-i18n-html', 'data-i18n-ph', 'data-i18n-title']
+    const named = [...document.querySelectorAll('[data-i18n],[data-i18n-html],[data-i18n-ph],[data-i18n-title],[data-i18n-aria]')]
+      .flatMap(el => ['data-i18n', 'data-i18n-html', 'data-i18n-ph', 'data-i18n-title', 'data-i18n-aria']
         .map(a => el.getAttribute(a)).filter(Boolean));
     const unknown = [...new Set(named)].filter(k => I.DICT.en[k] === undefined);
     ok(`all ${new Set(named).size} keys named in index.html exist in the dictionary` +
@@ -3185,6 +3185,140 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     }
     ok('…and nor do the shot zones or the goals', /const c = poly3\(\[\{ x: q\.x0/.test(appSrc) && /const l = seg3\(seg\[0\], seg\[1\]\)/.test(appSrc));
     [b, rb].forEach(e => e.remove());
+  }
+
+  console.log('\n[24] What people agree to, and being able to read it');
+  {
+    const { LEGAL, I18N } = window.__T;
+    const appSrc = readFileSync(join(APP, 'js/app.js'), 'utf8');
+
+    /* THE RENDERER trusts nothing: these texts are shown to parents and bind clubs. */
+    const r1 = LEGAL.render('---\ndate: 2026-09-18\nstatus: draft\ntranslates: 2026-09-18+df925d24\n---\n\n# Title\n\nText <script>alert(1)</script> and <img src=x onerror=alert(1)>.\n');
+    ok('front matter is read, and not shown', r1.meta.status === 'draft' && r1.meta.translates === '2026-09-18+df925d24' && !/date:/.test(r1.html));
+    ok('raw HTML in a document comes out as visible text, never as markup', !/<script|<img/i.test(r1.html) && /&lt;script&gt;/.test(r1.html));
+    const r2 = LEGAL.render('[bad](javascript:alert(1)) [ok](https://thplay.ch) [mail](mailto:a@b.ch) [rel](/x)');
+    ok('a link runs nothing: only http(s) and mailto become links, and they open safely',
+      !/javascript:/i.test(r2.html.replace(/>[^<]*</g, '><')) && !/href="\/x"/.test(r2.html)
+      && /<a href="https:\/\/thplay\.ch" target="_blank" rel="noopener noreferrer">ok<\/a>/.test(r2.html) && /href="mailto:a@b\.ch"/.test(r2.html));
+    const r3 = LEGAL.render('- **one** item\n  that continues\n- two\n\n1. first\n2. second\n\n| A | B |\n|---|---|\n| x | *y* |\n\n---\n\n*(a placeholder)*');
+    ok('the Markdown the documents use: lists that wrap, numbered lists, tables, rules, emphasis',
+      /<ul><li><strong>one<\/strong> item that continues<\/li><li>two<\/li><\/ul>/.test(r3.html) && /<ol><li>first<\/li><li>second<\/li><\/ol>/.test(r3.html)
+      && /<th>A<\/th><th>B<\/th>/.test(r3.html) && /<td><em>y<\/em><\/td>/.test(r3.html) && /<hr>/.test(r3.html) && /<em>\(a placeholder\)<\/em>/.test(r3.html));
+    const docs = readdirSync(join(APP, 'legal')).filter(n => n.endsWith('.md'));
+    ok('every real document renders with a title and every one of its tables',
+      docs.length >= 6 && docs.every(n => { const t = readFileSync(join(APP, 'legal', n), 'utf8'); const h = LEGAL.render(t).html;
+        return /<h1>/.test(h) && (h.match(/<table>/g) || []).length === (t.match(/^\|\s*-{2,}/gm) || []).length && !/<script/i.test(h); }));
+
+    /* ONE RULE for which language a reader is shown, shared by the app and the server. */
+    const E = { version: '2026-09-18+aaaaaaaa', langs: { en: {}, de: { translates: '2026-09-18+aaaaaaaa' }, fr: { translates: '2026-01-01+bbbbbbbb' } } };
+    ok('a translation of the current English is shown', LEGAL.pickLang(E, 'de') === 'de');
+    ok('…a translation of an OLDER English is not: English is, because that is the version being accepted', LEGAL.pickLang(E, 'fr') === 'en');
+    ok('…nor a language with no translation at all', LEGAL.pickLang(E, 'it') === 'en' && LEGAL.pickLang(E, 'en') === 'en');
+    ok('the server uses that same rule, not a copy of it', /const use = LEGAL\.pickLang\(d, lang\);/.test(readFileSync(join(APP, 'server/legal.js'), 'utf8')));
+
+    const { build, behind } = await import('../scripts/legal-stamp.mjs');
+    const built = build();
+    ok('every translation says which English version it translates', Object.values(built.docs).every(d => Object.entries(d.langs).every(([l, x]) => l === 'en' || /^\d{4}-\d{2}-\d{2}\+[0-9a-f]{8}$/.test(x.translates || ''))));
+    ok('…and none has fallen behind the English it is shown for', behind(built).length === 0);
+    ok('every document exists in all four languages', Object.values(built.docs).every(d => ['en', 'de', 'fr', 'it'].every(l => d.langs[l])));
+    /* A TRANSLATION SAYS THE SAME THINGS. Not a check of wording — three reviewers per language did
+       that — but of what can be counted: the same headings in the same order, the same list items,
+       the same tables, the same placeholders, and every number (days, francs, articles, SR numbers)
+       exactly once as often as in the English. A translation that drops a promise usually drops a
+       line with it, and one that changes "30 days" changes a number. */
+    const shapeOf = t => {
+      const b = t.replace(/^---\n[\s\S]*?\n---\n/, ''), L = b.split('\n');
+      return JSON.stringify({
+        heads: L.filter(l => /^#{1,6} /.test(l)).map(l => l.match(/^#+/)[0].length).join(''),
+        bullets: L.filter(l => /^\s*[-*+] /.test(l)).length, ordered: L.filter(l => /^\s*\d+\. /.test(l)).length,
+        table: L.filter(l => /^\s*\|/.test(l)).map(l => l.trim().replace(/^\||\|$/g, '').split('|').length).join(','),
+        hr: L.filter(l => /^\s*-{3,}\s*$/.test(l)).length,
+        slots: (b.match(/\{[A-Z_]+\}/g) || []).sort().join(),
+        numbers: (b.replace(/\d{4}-\d{2}-\d{2}\+[0-9a-f]{8}/g, '').match(/\d+/g) || []).sort().join(),
+      });
+    };
+    const drift = [];
+    for (const [id, d] of Object.entries(built.docs)) {
+      const en = shapeOf(readFileSync(join(APP, `legal/${id}.en.md`), 'utf8'));
+      for (const l of Object.keys(d.langs)) if (l !== 'en' && shapeOf(readFileSync(join(APP, `legal/${id}.${l}.md`), 'utf8')) !== en) drift.push(`${id}.${l}`);
+    }
+    ok('every translation has the English’s headings, lists, tables, placeholders and numbers' + (drift.length ? ' — differs: ' + drift.join(', ') : ''), drift.length === 0);
+    ok('Swiss German is written without ß', readdirSync(join(APP, 'legal')).filter(n => n.endsWith('.de.md')).every(n => !/ß/.test(readFileSync(join(APP, 'legal', n), 'utf8'))));
+    ok('each translation says, in its own words, that the English applies where they differ',
+      readdirSync(join(APP, 'legal')).filter(n => /\.(de|fr|it)\.md$/.test(n)).every(n => {
+        // the first line of text under the title — not just any italic line near the top
+        const L = readFileSync(join(APP, 'legal', n), 'utf8').replace(/^---\n[\s\S]*?\n---\n/, '').split('\n');
+        const first = L.slice(L.findIndex(l => /^# /.test(l)) + 1).find(l => l.trim());
+        return /^\*[^*].*\*$/.test(first || '') && ((first || '').match(/englisch|anglais|inglese/gi) || []).length >= 2;
+      }));
+
+    /* READABLE BEFORE SIGNING UP, and with accounts off: the privacy notice belongs at the moment
+       data is collected, and the impressum always. The files ship with the app. */
+    ok('the sign-in screen links to the privacy notice, the terms and the impressum',
+      ['privacy', 'terms', 'impressum'].every(id => !!q(`#auth-screen .legal-links [data-legal="${id}"]`)));
+    const served = [];
+    const prevFetch = window.fetch;
+    window.fetch = async (u) => {
+      const url = String(u); served.push(url);
+      const m = /^legal\/(manifest\.json|[a-z]+\.[a-z]{2}\.md)$/.exec(url);
+      if (!m) return { ok: false, status: 404, json: async () => ({}), text: async () => '' };
+      const body = readFileSync(join(APP, 'legal', m[1]), 'utf8');
+      return { ok: true, status: 200, json: async () => JSON.parse(body), text: async () => body };
+    };
+    try {
+      const langBefore = I18N.lang;
+      I18N.setLang('en'); await wait(50);
+      q('#auth-screen .legal-links [data-legal="impressum"]').click(); await wait(80);
+      ok('a link opens the reader on that document, from the files the app ships with',
+        q('#legal-modal').hidden === false && /Who runs this/.test(q('#legal-modal-doc h1').textContent) && served.includes('legal/impressum.en.md'));
+      ok('…with every document one tab away', [...document.querySelectorAll('#legal-tabs .legal-tab')].map(b => b.dataset.doc).join() === 'privacy,terms,dpa,subprocessors,consent,impressum');
+      ok('…saying it is a draft', q('#legal-modal-draft').hidden === false);
+      ok('…and no "I have read it": with accounts off there is nothing to record it in', q('#legal-modal-foot').hidden === true);
+      const man = JSON.parse(readFileSync(join(APP, 'legal/manifest.json'), 'utf8'));
+      I18N.setLang('it'); await wait(120);
+      const itCurrent = LEGAL.pickLang(man.docs.impressum, 'it') === 'it';
+      ok('in Italian: the Italian text where a current one exists, English with a note where not',
+        itCurrent ? served.includes('legal/impressum.it.md') && q('#legal-modal-note').hidden
+                  : /Who runs this/.test(q('#legal-modal-doc h1').textContent) && q('#legal-modal-note').hidden === false);
+      document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' })); await wait(20);
+      ok('Escape closes it', q('#legal-modal').hidden === true);
+      I18N.setLang(langBefore || 'en'); await wait(50);
+    } finally { window.fetch = prevFetch; }
+
+    ok('the documents are in both images: the API records against them, the web app shows them',
+      /COPY legal\/ \.\/legal\//.test(readFileSync(join(APP, 'server/Dockerfile'), 'utf8')) && /COPY legal\/ \/usr\/share\/nginx\/html\/legal\//.test(readFileSync(join(APP, 'Dockerfile'), 'utf8')));
+    ok('nginx serves them as UTF-8 text, 404 when missing, never long-cached',
+      /location ~\* \^\/legal\/\.\+\\\.md\$ \{[\s\S]*?charset=utf-8[\s\S]*?no-cache[\s\S]*?try_files \$uri =404;\s*\}/.test(readFileSync(join(APP, 'nginx.conf'), 'utf8')));
+    ok('the service worker fetches them fresh, so a changed document is the one shown',
+      /url\.pathname\.startsWith\('\/legal\/'\)/.test(readFileSync(join(APP, 'sw.js'), 'utf8')));
+
+    /* THE GATE. Only a club admin who owes the club's documents meets it; the app opens for everyone else. */
+    ok('an approved account goes through the legal check before the app opens', /if \(await legalGateNeeded\(user\)\) return;\s*\/\/[^\n]*\n\s*enterApp\(\); showLegalNotice\(\);/.test(appSrc));
+    ok('…which blocks only on what js/legal.js calls blocking', /const owed = LEGAL\.blockingOutstanding\(legalState\.outstanding\);/.test(appSrc));
+    ok('the screen exists and the router knows it', !!q('#legal-screen') && /'legal-screen','app-screen'/.test(appSrc));
+    ok('accepting sends the version and the language that were on screen, not the ones asked for',
+      /body: \{ doc: d\.doc, version: d\.version, lang: d\.lang, sha256: d\.sha256, clubId: g\.user\.clubId \}/.test(appSrc)
+      && /d\.version = r\.version; d\.lang = r\.lang; d\.sha256 = r\.sha256 \|\| null;/.test(appSrc)
+      && /body: \{ doc, version: shown\.version, lang: shown\.lang, sha256: shown\.sha256,/.test(appSrc));
+    ok('a text that changed while being read is shown again, not accepted — and the screen says why, where a screen reader hears it',
+      /if \(e && e\.status === 409\) \{ await openLegalGate\([^;]*\); legalGateStatus\(T\('legal\.gateChangedWhileReading'\)\); return; \}/.test(appSrc)
+      && q('#legal-gate-status').getAttribute('role') === 'status');
+    ok('one press of Accept is one acceptance: the button stays off while it is on its way, and a sign-out stops it',
+      /if \(!g \|\| g\.busy\) return;/.test(appSrc) && /!legalGate\.busy && legalGate\.docs\.every/.test(appSrc) && /if \(legalGate !== g \|\| state\.user !== g\.user\) return;/.test(appSrc));
+    ok('a document that fails to load can be tried again from the screen', /class="btn-ghost sm legal-retry"/.test(appSrc));
+    ok('the accept screen has its own language choice', !!q('#legal-screen #lang-switch-legal') && /buildLangSwitch\('lang-switch-legal'\)/.test(appSrc));
+    ok('the reader is a real tab list, and the page behind it is inert while it is open',
+      /role="tab" id="legal-tab-\$\{id\}" aria-controls="legal-modal-doc"/.test(appSrc) && /e\.key === 'ArrowRight'/.test(appSrc) && /el\.setAttribute\('inert', ''\)/.test(appSrc));
+    ok('playbook keys do not fire behind the reader', (appSrc.match(/!\$\('legal-modal'\)\.hidden/g) || []).length >= 2);
+    ok('signing out forgets what the last person was asked', /legalGate = null; legalState = \{ outstanding: \[\], underContract: null \};/.test(appSrc));
+    ok('a coach refused because the club has no contract yet is told why, in roster sync and in the Film Room',
+      /e\.error === 'club-not-under-contract'\) return T\('tm\.whyNoContract'\)/.test(readFileSync(join(APP, 'js/teams.js'), 'utf8'))
+      && /if \(m === 'club-not-under-contract'\) return \{ key: 'film\.whyNoContract' \};/.test(readFileSync(join(APP, 'js/film.js'), 'utf8')));
+
+    /* A BUG FOUND ON THE WAY: data-i18n-aria was used on eight elements and read by nothing. */
+    I18N.setLang('de'); await wait(50);
+    ok('what a screen reader says follows the language too', q('#zoom-out').getAttribute('aria-label') === I18N.t('ui.zoomOut') && I18N.t('ui.zoomOut') !== 'Zoom out');
+    I18N.setLang('en'); await wait(50);
   }
 
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);

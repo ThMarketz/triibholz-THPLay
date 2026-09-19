@@ -421,6 +421,7 @@ const TEAMS = (() => {
     if (!e) return T('tm.whyUnknown');
     if (e.status === 0 || e.error === 'offline') return T('tm.whyOffline');
     if (e.status === 403 && e.error === 'full-sign-in-required') return T('tm.whyNeedsSignIn');
+    if (e.status === 403 && e.error === 'club-not-under-contract') return T('tm.whyNoContract');
     if (e.status === 403) return T('tm.whyNeedsPasskey');
     if (e.status === 409 && e.error === 'too-many-teams') return T('tm.whyTooManyTeams');
     if (e.status === 409 && e.error === 'too-many-players') return T('tm.whyClubFull');

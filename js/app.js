@@ -26,7 +26,7 @@
 
   /* ---------------- screens / toast ---------------- */
   function show(screenId) {
-    ['auth-screen','setup-screen','pending-screen','denied-screen','app-screen']
+    ['auth-screen','setup-screen','pending-screen','denied-screen','legal-screen','app-screen']
       .forEach(s => $(s).classList.toggle('active', s===screenId));
   }
   function toast(msg) {
@@ -80,6 +80,9 @@
      server being reachable is not a wipe. */
   function signOutEverything() {
     if (realAccounts && typeof SESSION !== 'undefined') SESSION.signOut().catch(()=>{});
+    // what the last person was asked to read is not the next person's business
+    legalGate = null; legalState = { outstanding: [], underContract: null };
+    if ($('legal-notice')) $('legal-notice').hidden = true;
     if (typeof TEAMS !== 'undefined') TEAMS.wipeDevice();
     clearSession();
     state.user = null;
@@ -142,13 +145,268 @@
   function cleanAuthHash() {
     try { if (codeFromHash() && history.replaceState) history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
   }
-  function routeReal(user) {
+  async function routeReal(user) {
     if (!user) return show('auth-screen');
     state.user = user;
-    if (user.status === 'approved') return enterApp();
+    if (user.status === 'approved') {
+      if (await legalGateNeeded(user)) return;      // an admin who owes the club's terms accepts them first
+      enterApp(); showLegalNotice();
+      return;
+    }
     const num = user.pending && user.pending.requestNo;
     if ($('pending-email')) $('pending-email').textContent = num ? T('auth.waitingApproval', { n: num }) : user.name;
     show('pending-screen');
+  }
+
+  /* ---------------- legal: accepting for the club, the notice, and reading the documents ----------------
+     The rules live in js/legal.js and are shared with the server; the server records and enforces
+     (server/legal.js). This part only shows people what they are asked to agree to, in their own
+     language where a current translation exists, and says so when it does not.
+
+     WHO IS ASKED WHAT.
+       · A club ADMIN who owes the terms or the data-processing agreement accepts them before the
+         app opens. They bind the CLUB, so the screen says so, and asks the admin to confirm they
+         may act for it. Until an admin has, the club server holds no club data at all.
+       · A COACH or TRAINER is shown the privacy notice and can say they have read it. It does not
+         stop them working.
+       · A PLAYER is asked nothing. Many are children, and a child's tick is not consent; the club
+         warrants that a parent agreed. They can read every document from the links, in their
+         own language. */
+  let legalState = { outstanding: [], underContract: null };
+  let legalGate = null;          // { user, docs: [{ doc, stale, version, lang, draft }] }
+  /* a language's name as it sits inside a sentence in the reader's language — "en français",
+     "in italiano", "auf Deutsch" — not its own capitalised label from the language menu */
+  const langName = code => T('legal.lang.' + code);
+  const uiLang = () => (typeof I18N !== 'undefined' && I18N.lang) || 'en';
+  const legalTitle = doc => T('legal.doc.' + doc);
+
+  async function legalGateNeeded(user) {
+    legalState = { outstanding: [], underContract: null };
+    if (typeof LEGAL === 'undefined' || typeof SESSION === 'undefined' || !user || !user.clubId) return false;
+    let mine;
+    /* Cannot ask right now: the app opens, and asks again at the next sign-in. Nothing is lost by
+       that — the SERVER refuses club data until the club is under contract, whatever the app shows. */
+    try { mine = await SESSION.api(`/api/legal/mine?club=${encodeURIComponent(user.clubId)}`); } catch (e) { return false; }
+    legalState = { outstanding: mine.outstanding || [], underContract: mine.underContract };
+    const owed = LEGAL.blockingOutstanding(legalState.outstanding);
+    if (!owed.length) return false;
+    await openLegalGate(user, owed);
+    return true;
+  }
+
+  /* what the reader is shown instead of what they asked for, and why */
+  function legalNoteText(r) {
+    if (!r || r.lang === r.askedFor) return '';
+    return T(r.behind ? 'legal.behind' : 'legal.shownInEnglish', { lang: langName(r.askedFor) });
+  }
+  /* One source for the text. With accounts on it is the server, because the server records the
+     acceptance and must record the very text that was on screen. With accounts off (no server, or
+     one without accounts) it is the files the app ships with, chosen by the same rule. */
+  async function fetchLegal(doc, lang) {
+    if (realAccounts && typeof SESSION !== 'undefined') return SESSION.api(`/api/legal/${encodeURIComponent(doc)}?lang=${encodeURIComponent(lang)}`);
+    const mr = await fetch('legal/manifest.json', { cache: 'no-cache' });
+    if (!mr.ok) throw new Error('not-found');
+    const man = await mr.json();
+    const entry = (man.docs || {})[doc];
+    const use = LEGAL.pickLang(entry, lang);
+    if (!use) throw new Error('not-found');
+    const r = await fetch(`legal/${doc}.${use}.md`, { cache: 'no-cache' });
+    if (!r.ok) throw new Error('not-found');
+    return { doc, lang: use, askedFor: lang, behind: use !== lang && !!entry.langs[lang], version: entry.version, status: entry.status, sha256: entry.langs[use].sha256, text: await r.text() };
+  }
+
+  async function openLegalGate(user, owed) {
+    const club = user.clubName || '';
+    const g = legalGate = { user, busy: false, docs: owed.map(o => ({ doc: o.doc, stale: !!o.stale, version: null, lang: null, sha256: null, draft: false })) };
+    const changed = owed.every(o => o.stale);
+    $('legal-gate-title').textContent = T(changed ? 'legal.gateTitleChanged' : 'legal.gateTitle', { club });
+    $('legal-gate-lead').textContent = T(changed ? 'legal.gateLeadChanged' : 'legal.gateLead', { club });
+    $('legal-gate-authority-text').textContent = T('legal.tickAuthority', { club });
+    $('legal-gate-authority').checked = false;
+    $('legal-gate-draft').hidden = true;
+    legalGateStatus('');
+    $('legal-gate-accept').textContent = T('legal.gateAccept');
+    $('legal-gate-docs').innerHTML = g.docs.map(d => `<div class="legal-gate-doc" data-doc="${escapeHtml(d.doc)}">
+        <div class="legal-gate-head"><strong>${escapeHtml(legalTitle(d.doc))}</strong>${d.stale ? ` <span class="legal-changed">${escapeHtml(T('legal.changed'))}</span>` : ''}</div>
+        <div class="legal-note" hidden></div>
+        <div class="legal-doc legal-scroll" tabindex="0" role="document" aria-label="${escapeHtml(legalTitle(d.doc))}"><p class="muted">${escapeHtml(T('legal.loading'))}</p></div>
+        <p class="legal-meta"></p>
+        <label class="legal-tick"><input type="checkbox" data-accept="${escapeHtml(d.doc)}" disabled> <span>${escapeHtml(T('legal.tickDoc', { doc: legalTitle(d.doc), club }))}</span></label>
+      </div>`).join('');
+    $('legal-gate-docs').querySelectorAll('input[data-accept]').forEach(i => i.onchange = updateLegalGate);
+    refreshLangSwitches();
+    show('legal-screen');
+    updateLegalGate();
+    await Promise.all(g.docs.map(d => loadGateDoc(g, d)));
+  }
+  /* The accept screen's own messages stay on the screen, in a live region: a 2-second toast is gone
+     before a screen reader says it, and a 409 has just cleared every tick with no explanation. */
+  function legalGateStatus(msg) { const el = $('legal-gate-status'); if (el) { el.textContent = msg || ''; el.hidden = !msg; } }
+  async function loadGateDoc(g, d) {
+    const el = document.querySelector(`#legal-gate-docs [data-doc="${d.doc}"]`);
+    if (!el) return;
+    let r = null;
+    try { r = await fetchLegal(d.doc, uiLang()); } catch (e) { r = null; }
+    if (legalGate !== g) return;                      // signed out, or the screen was rebuilt, while this loaded
+    if (r) {
+      // what is on screen is what gets recorded: this version, in this language, this exact text
+      d.version = r.version; d.lang = r.lang; d.sha256 = r.sha256 || null; d.draft = r.status === 'draft';
+      el.querySelector('.legal-doc').innerHTML = LEGAL.render(r.text).html;
+      const note = legalNoteText(r), n = el.querySelector('.legal-note');
+      n.hidden = !note; n.textContent = note;
+      el.querySelector('.legal-meta').textContent = T('legal.version', { v: r.version });
+      el.querySelector('input[data-accept]').disabled = false;
+    } else {
+      d.version = null;
+      /* one document that did not load must not leave the screen stuck with nothing to press */
+      el.querySelector('.legal-doc').innerHTML = `<p class="legal-error">${escapeHtml(T('legal.loadFailed'))}</p><button type="button" class="btn-ghost sm legal-retry">${escapeHtml(T('legal.retry'))}</button>`;
+      el.querySelector('.legal-retry').onclick = () => { el.querySelector('.legal-doc').innerHTML = `<p class="muted">${escapeHtml(T('legal.loading'))}</p>`; loadGateDoc(g, d); };
+    }
+    $('legal-gate-draft').hidden = !g.docs.some(x => x.draft);
+    updateLegalGate();
+  }
+  function updateLegalGate() {
+    const btn = $('legal-gate-accept'); if (!btn) return;
+    // never while an acceptance is on its way: unticking and reticking used to re-enable the button,
+    // and a second press sent the club's acceptance twice and entered the app twice
+    const ready = !!legalGate && !legalGate.busy && legalGate.docs.every(d => d.version && d.sha256)
+      && [...document.querySelectorAll('#legal-gate-docs input[data-accept]')].every(i => i.checked)
+      && $('legal-gate-authority').checked;
+    btn.disabled = !ready;
+  }
+  async function acceptLegalGate() {
+    const g = legalGate;
+    if (!g || g.busy) return;
+    const btn = $('legal-gate-accept');
+    g.busy = true; updateLegalGate(); btn.textContent = T('legal.gateAccepting'); legalGateStatus('');
+    try {
+      // one at a time, and idempotent on the server, so a retry after a half-finished attempt is safe
+      for (const d of g.docs) {
+        if (legalGate !== g) return;                  // signed out mid-way: stop, and do not open the app for nobody
+        await SESSION.api('/api/legal/accept', { method: 'POST', body: { doc: d.doc, version: d.version, lang: d.lang, sha256: d.sha256, clubId: g.user.clubId } });
+      }
+    } catch (e) {
+      if (legalGate !== g) return;
+      g.busy = false; btn.textContent = T('legal.gateAccept');
+      /* 409: the text changed on the server while it was being read. Accepting what was on screen
+         would record agreement to a text the server no longer serves, so it is shown again. */
+      if (e && e.status === 409) { await openLegalGate(g.user, g.docs.map(d => ({ doc: d.doc, stale: d.stale }))); legalGateStatus(T('legal.gateChangedWhileReading')); return; }
+      legalGateStatus(T('legal.gateFailed')); updateLegalGate(); return;
+    }
+    if (legalGate !== g || state.user !== g.user) return;
+    btn.textContent = T('legal.gateAccept');
+    legalGate = null;
+    legalState.outstanding = legalState.outstanding.filter(x => !g.docs.some(d => d.doc === x.doc));
+    legalState.underContract = true;
+    toast(T('legal.recorded'));
+    enterApp(); showLegalNotice();
+  }
+
+  /* Not a gate: something to read that does not stop anyone working. */
+  function showLegalNotice() {
+    const bar = $('legal-notice'); if (!bar || typeof LEGAL === 'undefined' || !state.user) return;
+    const soft = (legalState.outstanding || []).filter(x => !x.blocking && (!x.accepted || x.stale));
+    const staff = ['coach', 'trainer'].includes(state.user.clubRole);
+    let msg = '', doc = null;
+    if (legalState.underContract === false && staff) msg = T('legal.notUnderContract');
+    else if (soft.length) { doc = soft[0].doc; msg = T(soft[0].stale ? 'legal.noticeChanged' : 'legal.noticePrivacy', { doc: legalTitle(doc) }); }
+    bar.hidden = !msg;
+    if (!msg) return;
+    $('legal-notice-text').textContent = msg;
+    $('legal-notice-read').hidden = !doc;
+    $('legal-notice-read').onclick = () => openLegalViewer(doc, { accept: doc });
+    $('legal-notice-later').onclick = () => { bar.hidden = true; focusMain(); };
+  }
+  /* somewhere sensible to put the keyboard when the thing it was on goes away */
+  function focusMain() {
+    const t = document.querySelector('#main-nav .nav-btn.active') || document.querySelector('#main-nav .nav-btn');
+    if (t && t.focus) try { t.focus(); } catch (e) {}
+  }
+
+  /* ---- the reader: every document, for anyone ---- */
+  const LEGAL_VIEW = ['privacy', 'terms', 'dpa', 'subprocessors', 'consent', 'impressum'];
+  let legalView = null;          // { doc, accept, loaded, back, busy }
+  function openLegalViewer(doc, opts) {
+    if (typeof LEGAL === 'undefined') return;
+    const keepBack = legalView && legalView.back;        // re-opened for a language switch: still return to where it was opened from
+    legalView = { doc: LEGAL_VIEW.includes(doc) ? doc : 'privacy', accept: (opts && opts.accept) || null, loaded: null, back: keepBack || document.activeElement };
+    /* a real tab list: named, each tab tied to the panel, one tab stop, arrows move between them */
+    const tabs = $('legal-tabs');
+    tabs.setAttribute('aria-label', T('legal.links'));
+    tabs.innerHTML = LEGAL_VIEW.map(id => `<button type="button" class="legal-tab" role="tab" id="legal-tab-${id}" aria-controls="legal-modal-doc" data-doc="${id}" tabindex="-1">${escapeHtml(legalTitle(id))}</button>`).join('');
+    tabs.querySelectorAll('.legal-tab').forEach(b => b.onclick = () => { if (!legalView) return; legalView.doc = b.dataset.doc; loadLegalView(); });
+    tabs.onkeydown = e => {
+      const list = [...tabs.querySelectorAll('.legal-tab')], i = list.findIndex(b => b.dataset.doc === (legalView && legalView.doc));
+      const to = e.key === 'ArrowRight' ? (i + 1) % list.length : e.key === 'ArrowLeft' ? (i - 1 + list.length) % list.length
+        : e.key === 'Home' ? 0 : e.key === 'End' ? list.length - 1 : -1;
+      if (to < 0 || !legalView) return;
+      e.preventDefault(); legalView.doc = list[to].dataset.doc; loadLegalView(); list[to].focus();
+    };
+    $('legal-modal').hidden = false;
+    setLegalInert(true);
+    loadLegalView();
+    const x = $('legal-modal-close'); if (x && x.focus) x.focus();
+  }
+  /* aria-modal says the page behind is not there; inert makes that true for the keyboard as well */
+  function setLegalInert(on) {
+    ['auth-screen', 'setup-screen', 'pending-screen', 'denied-screen', 'legal-screen', 'app-screen'].forEach(id => {
+      const el = $(id); if (!el) return;
+      if (on) el.setAttribute('inert', ''); else el.removeAttribute('inert');
+    });
+  }
+  function closeLegalViewer() {
+    $('legal-modal').hidden = true;
+    setLegalInert(false);
+    const back = legalView && legalView.back; legalView = null;
+    // back to where it was opened from — unless that has gone (the banner it lived in was hidden)
+    if (back && back.focus && back.isConnected && !back.closest('[hidden]')) { try { back.focus(); } catch (e) {} }
+    else focusMain();
+  }
+  async function loadLegalView() {
+    const v = legalView; if (!v) return;
+    const doc = v.doc;
+    $('legal-tabs').querySelectorAll('.legal-tab').forEach(b => {
+      const on = b.dataset.doc === doc;
+      b.classList.toggle('active', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); b.tabIndex = on ? 0 : -1;
+    });
+    $('legal-modal-doc').setAttribute('aria-labelledby', 'legal-tab-' + doc);
+    $('legal-modal-doc').innerHTML = `<p class="muted">${escapeHtml(T('legal.loading'))}</p>`;
+    $('legal-modal-note').hidden = true; $('legal-modal-draft').hidden = true; $('legal-modal-meta').textContent = '';
+    $('legal-modal-foot').hidden = true;
+    v.loaded = null;
+    let r;
+    try { r = await fetchLegal(doc, uiLang()); } catch (e) { r = null; }
+    if (legalView !== v || v.doc !== doc) return;       // the reader moved on while this loaded
+    if (!r) { $('legal-modal-doc').innerHTML = `<p class="legal-error">${escapeHtml(T('legal.loadFailed'))}</p>`; return; }
+    v.loaded = r;
+    $('legal-modal-doc').innerHTML = LEGAL.render(r.text).html;
+    const note = legalNoteText(r);
+    $('legal-modal-note').hidden = !note; $('legal-modal-note').textContent = note;
+    $('legal-modal-draft').hidden = r.status !== 'draft';
+    $('legal-modal-meta').textContent = T('legal.version', { v: r.version });
+    // "I have read it" only for the document this person was asked about, and only with accounts on
+    $('legal-modal-foot').hidden = !(realAccounts && v.accept === doc);
+  }
+  async function acceptFromViewer() {
+    const v = legalView; if (!v || !v.loaded || v.accept !== v.doc || v.busy) return;
+    // what was read, taken now: a tab switched while this is on its way must not change what is recorded
+    const doc = v.doc, shown = v.loaded;
+    const btn = $('legal-modal-accept'); btn.disabled = true; v.busy = true;
+    try {
+      await SESSION.api('/api/legal/accept', { method: 'POST', body: { doc, version: shown.version, lang: shown.lang, sha256: shown.sha256, clubId: state.user && state.user.clubId } });
+      legalState.outstanding = (legalState.outstanding || []).filter(x => x.doc !== doc);
+      toast(T('legal.recorded'));
+      showLegalNotice();                                   // before focus goes back: the button it would return to may be gone
+      if (legalView === v) closeLegalViewer();
+    } catch (e) {
+      if (legalView !== v) return;
+      if (e && e.status === 409) { toast(T('legal.gateChangedWhileReading')); if (v.doc === doc) loadLegalView(); }
+      else toast(T('legal.gateFailed'));
+    } finally { btn.disabled = false; v.busy = false; }
+  }
+  function legalLinksHtml() {
+    return `<nav class="legal-links" aria-label="${escapeHtml(T('legal.links'))}">${['privacy', 'terms', 'impressum'].map(id =>
+      `<button type="button" class="legal-link" data-legal="${id}">${escapeHtml(legalTitle(id))}</button>`).join('')}</nav>`;
   }
 
   // route an existing user record by status
@@ -348,6 +606,7 @@
       <div class="dash-list">${acts.filter(a=>a.type==='play').slice(0,6).map(activityRow).join('')||`<div class="muted">${T('dash.noEditsYet')}</div>`}</div>`;
       html += insightsPanelHtml();
     }
+    html += legalLinksHtml();       // every document, one tap from the first screen after sign-in
     html += `</div>`;
     v.innerHTML = html;
     // staff get an invite (link + QR) card
@@ -3812,6 +4071,18 @@
 
     $('pending-recheck').onclick = ()=>{ const u=DATA.findUserByEmail(state.user.email); if(u&&u.status!=='pending'){ routeUser(u); toast(T(u.status==='approved'?'ui.approvedWelcome':'ui.accessDeclined')); } else toast(T('ui.stillPendingApproval')); };
     $('pending-signout').onclick = ()=>{ signOutEverything(); show('auth-screen'); };
+    // accepting for the club, and reading any document from anywhere
+    $('legal-gate-authority').onchange = updateLegalGate;
+    $('legal-gate-accept').onclick = acceptLegalGate;
+    $('legal-gate-signout').onclick = ()=>{ signOutEverything(); show('auth-screen'); };
+    $('legal-modal-close').onclick = closeLegalViewer;
+    $('legal-modal-accept').onclick = acceptFromViewer;
+    $('legal-modal').addEventListener('click', e => { if (e.target === $('legal-modal')) closeLegalViewer(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && legalView && !$('legal-modal').hidden) closeLegalViewer(); });
+    document.addEventListener('click', e => {
+      const b = e.target && e.target.closest && e.target.closest('[data-legal]');
+      if (b) { e.preventDefault(); openLegalViewer(b.dataset.legal); }
+    });
     $('denied-signout').onclick = ()=>{ signOutEverything(); show('auth-screen'); };
 
     document.querySelectorAll('#main-nav .nav-btn').forEach(b=> b.onclick=()=>switchView(b.dataset.view));
@@ -3882,6 +4153,7 @@
     document.querySelectorAll('#fsb-speed [data-speed]').forEach(b => b.onclick = () => applySpeed(b.dataset.speed));
     document.addEventListener('keydown', e => {
       const full = $('view-playbook').classList.contains('stage-full');
+      if (!$('legal-modal').hidden) return;          // the reader is open: its keys are its own
       if (e.key === 'Escape' && full) { toggleFull(false); return; }
       if (!full || /input|textarea|select/i.test((e.target && e.target.tagName) || '')) return;
       if (e.key === ' ' || e.key === 'k') { e.preventDefault(); $('play-btn').click(); fsBarShow(); }
@@ -3930,7 +4202,7 @@
     // keyboard shortcuts in the playbook: Space = play/pause, ←/→ = step
     document.addEventListener('keydown', e => {
       if (!$('app-screen').classList.contains('active') || state.view!=='playbook') return;
-      if (!$('editor-modal').hidden || (typeof HELP!=='undefined' && document.querySelector('.help-backdrop:not([hidden])'))) return;
+      if (!$('editor-modal').hidden || !$('legal-modal').hidden || (typeof HELP!=='undefined' && document.querySelector('.help-backdrop:not([hidden])'))) return;
       const tag = (e.target && e.target.tagName || '').toLowerCase();
       if (tag==='input' || tag==='textarea' || tag==='select') return;
       if (!state.viewer && !adjust.live) return;
@@ -3987,7 +4259,7 @@
       el.appendChild(b);
     });
   }
-  function refreshLangSwitches(){ buildLangSwitch('lang-switch-auth'); buildLangSwitch('lang-switch-top'); }
+  function refreshLangSwitches(){ buildLangSwitch('lang-switch-auth'); buildLangSwitch('lang-switch-top'); buildLangSwitch('lang-switch-legal'); }
   /* After a look change, everything drawn with colour VALUES (the board and its layers, the 3D replay, the keeper's
      view, dashboards with the mascot) is redrawn — CSS alone follows the look, drawn SVG and canvas do not. */
   function redrawForLook(){
@@ -4042,6 +4314,11 @@
           if (state.view === 'playbook' && state.selectedId) openScenario(state.selectedId);
         }
         if ($('setup-screen').classList.contains('active')) updatePositionBlock();
+        /* the documents follow the language too. The accept screen loads them again and clears the
+           ticks: what someone ticked was a text in the other language, and the record says which. */
+        if ($('legal-screen').classList.contains('active') && legalGate && !legalGate.busy) openLegalGate(legalGate.user, legalGate.docs.map(d => ({ doc: d.doc, stale: d.stale })));
+        if (legalView) openLegalViewer(legalView.doc, { accept: legalView.accept });
+        if (!$('legal-notice').hidden) showLegalNotice();
       });
     }
     wire();

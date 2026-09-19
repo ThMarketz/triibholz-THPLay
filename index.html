@@ -81,6 +81,30 @@
       </div>
     </div>
     <p class="auth-foot" data-i18n="auth.foot">Designated access only · Coaches &amp; Players</p>
+    <!-- readable BEFORE anyone signs up: the privacy notice belongs at the moment data is collected -->
+    <nav class="legal-links" aria-label="Legal" data-i18n-aria="legal.links">
+      <button type="button" class="legal-link" data-legal="privacy" data-i18n="legal.doc.privacy">Privacy notice</button>
+      <button type="button" class="legal-link" data-legal="terms" data-i18n="legal.doc.terms">Terms of Service</button>
+      <button type="button" class="legal-link" data-legal="impressum" data-i18n="legal.doc.impressum">Who runs this</button>
+    </nav>
+  </section>
+
+  <!-- ===================== ACCEPTING FOR THE CLUB (accounts on, a club admin who owes the terms) ===================== -->
+  <section id="legal-screen" class="screen">
+    <div class="auth-card legal-card">
+      <!-- the binding texts, in the reader's own language: the choice must be here, not only on other screens -->
+      <div class="lang-switch" id="lang-switch-legal"></div>
+      <h2 class="setup-title" id="legal-gate-title"></h2>
+      <p class="setup-sub" id="legal-gate-lead"></p>
+      <div class="legal-draft" id="legal-gate-draft" hidden data-i18n="legal.draft">Draft — a Swiss lawyer has not yet reviewed these texts.</div>
+      <div id="legal-gate-docs"></div>
+      <label class="legal-tick legal-authority"><input type="checkbox" id="legal-gate-authority"> <span id="legal-gate-authority-text"></span></label>
+      <p class="legal-status" id="legal-gate-status" role="status" aria-live="polite" hidden></p>
+      <div class="status-actions">
+        <button class="btn-primary" id="legal-gate-accept" disabled data-i18n="legal.gateAccept">Accept and continue</button>
+        <button class="btn-ghost" id="legal-gate-signout" data-i18n="common.signout">Sign out</button>
+      </div>
+    </div>
   </section>
 
   <!-- ===================== ROLE / POSITION SETUP ===================== -->
@@ -206,6 +230,12 @@
       </div>
     </header>
 
+    <!-- something to read that does not stop anyone working: a changed privacy notice, or a club whose admin has not accepted yet -->
+    <div class="legal-notice" id="legal-notice" role="status" hidden>
+      <span id="legal-notice-text"></span>
+      <button type="button" class="btn-ghost sm" id="legal-notice-read" data-i18n="legal.read">Read</button>
+      <button type="button" class="btn-ghost sm" id="legal-notice-later" data-i18n="legal.later">Later</button>
+    </div>
     <main class="views">
 
     <!-- ===== DASHBOARD VIEW ===== -->
@@ -450,6 +480,21 @@
       <div class="modal-foot"><button class="btn-ghost" id="paste-cancel" data-i18n="common.cancel">Cancel</button><button class="btn-primary" id="paste-import" data-i18n="ui.import2">⬆ Import</button></div>
     </div>
   </div>
+  <!-- the legal documents, for anyone, signed in or not -->
+  <div class="modal-backdrop" id="legal-modal" hidden>
+    <div class="modal legal-modal" role="dialog" aria-modal="true" aria-labelledby="legal-modal-title">
+      <div class="modal-head"><h3 id="legal-modal-title" data-i18n="legal.title">Legal &amp; privacy</h3><span class="spacer"></span><button class="modal-x" id="legal-modal-close" aria-label="Close" data-i18n-aria="common.close">✕</button></div>
+      <div class="legal-tabs" id="legal-tabs" role="tablist"></div>
+      <div class="modal-body">
+        <div class="legal-note" id="legal-modal-note" hidden></div>
+        <div class="legal-draft" id="legal-modal-draft" hidden data-i18n="legal.draftOne">Draft — a Swiss lawyer has not yet reviewed this text.</div>
+        <div class="legal-doc" id="legal-modal-doc" role="tabpanel"></div>
+        <p class="legal-meta" id="legal-modal-meta"></p>
+      </div>
+      <div class="modal-foot" id="legal-modal-foot" hidden><button class="btn-primary" id="legal-modal-accept" data-i18n="legal.iHaveRead">I have read it</button></div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="confirm-modal" hidden>
     <div class="modal modal-sm">
       <div class="modal-body"><p id="confirm-text"></p></div>
@@ -609,7 +654,7 @@
     </div>
   </div>
 
-  <div id="toast" class="toast" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="js/i18n.js"></script>
   <script src="js/help.js"></script>
