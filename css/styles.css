@@ -954,6 +954,14 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 .lib-fix select{max-width:190px}
 .lib-keep{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-faint)}
 .lib-meta .bad{color:var(--red-71)}
+
+/* Turning the board (js/pool.js setView) turns the whole drawing — so each player's number is
+   turned back the other way to stay upright and readable. Net turn of every number is zero.
+   Done here rather than in code because discs are recreated on every animation frame. */
+.disc text{transform-box:fill-box;transform-origin:center}
+svg[data-rot="90"] .disc text{transform:rotate(-90deg)}
+svg[data-rot="180"] .disc text{transform:rotate(180deg)}
+svg[data-rot="270"] .disc text{transform:rotate(90deg)}
 .lib-actions{display:flex;flex-direction:column;gap:6px;align-items:stretch}
 .lib-actions a{text-decoration:none;text-align:center}
 @media(max-width:560px){

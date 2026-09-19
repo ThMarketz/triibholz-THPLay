@@ -2993,6 +2993,89 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
       DEVICE.isOurs(FILM._videoAtKey) && DEVICE.kind(FILM._videoAtKey) === 'work');
   }
 
+  console.log('\n[22] The half board, and turning it — for showing a play on an iPad in a timeout');
+  {
+    /* A set play happens entirely in the attacking half, so the full pool spends half the board on
+       water nobody is using. Measured on an iPad-width board: a man-up got ~17 px a metre. */
+    const { POOL, DEVICE } = window.__T;
+    const S = () => { const e = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); document.body.appendChild(e); return e; };
+    const vb = el => el.getAttribute('viewBox').split(/\s+/).map(Number);
+
+    const b = S(); POOL.render(b);
+    ok('the full board is the whole pool', vb(b).join() === '0,0,320,262' && b.dataset.view === 'full');
+    POOL.setView(b, 'half');
+    ok('the half is the attacking half, centre line through the goal', vb(b).join() === [POOL.HALF.x, POOL.HALF.y, POOL.HALF.w, POOL.HALF.h].join());
+
+    /* THE TRAP THE MEASUREMENT FOUND. Keeping the full board height makes the half taller than it
+       is wide, and on a landscape iPad a height-limited board then scales exactly like the full
+       pool: +0%. It looks done and helps nobody. The crop is tight so it is +49% in landscape. */
+    const fit = (w, h, box) => Math.min(box[0] / w, box[1] / h);
+    const land = [586, 401];
+    const gain = fit(POOL.HALF.w, POOL.HALF.h, land) / fit(320, 262, land) - 1;
+    ok('on a landscape iPad the half really is bigger — not the +0% a loose crop gives', gain > 0.4);
+    ok('…because it is cropped to the water, not to the full board height', POOL.HALF.h < 200 && fit(170, 262, land) / fit(320, 262, land) - 1 < 0.01);
+
+    /* Field players never leave the tight half — measured across every play — but a substitute
+       can enter the water, and a frame that hides the bench makes a player appear from nowhere. */
+    ok('a play with no bench keeps the tight half', POOL.needsDeck([{ att: {}, def: {}, extra: [] }]) === false);
+    ok('a play with a bench brings the deck into frame, so nobody is ever cut off',
+      POOL.needsDeck([{ extra: [{ x: 280, y: 210 }] }]) === true && POOL.HALF_DECK.y + POOL.HALF_DECK.h >= 218);
+    /* THE GUARANTEE THAT MATTERS: for every play on the device — shipped, imported or drawn by a
+       coach — the fitted frame contains every player it moves, at every step. A fixed half was
+       nearly right, and "nearly" meant a play received from a friend lost a player deep in the
+       other half without a word. Found by this suite, not by looking. */
+    const inside = (F, p) => !p || typeof p.x !== 'number' || (p.x >= F.x && p.x <= F.x + F.w && p.y >= F.y && p.y <= F.y + F.h);
+    const everyone = f => [...['att', 'def'].flatMap(t => Object.values(f[t] || {})), f.gk, ...(f.extra || []), f.ball];
+    const missed = DATA.load().filter(sc => { const F = POOL.fitFrame(sc.frames); return !(sc.frames || []).every(f => everyone(f).every(p => inside(F, p))); });
+    ok('for every play on the device, the frame holds every player at every step' + (missed.length ? ' — not: ' + missed.map(m => m.title).join(', ') : ''), missed.length === 0);
+    const deep = POOL.fitFrame([{ att: { 1: { x: 100, y: 100 } }, def: {}, extra: [] }]);
+    ok('a player starting deep in the other half widens the frame instead of being cut off', deep.x <= 100 - 9);
+    ok('a play that stays in the half keeps the tight frame and all of its gain',
+      JSON.stringify(POOL.fitFrame([{ att: { 1: { x: 250, y: 100 } }, def: {}, extra: [] }])) === JSON.stringify({ x: POOL.HALF.x, y: POOL.HALF.y, w: POOL.HALF.w, h: POOL.HALF.h }));
+    ok('the frame never reaches past the edge of the pool drawing',
+      (f => f.x >= 0 && f.y >= 0 && f.x + f.w <= 320 && f.y + f.h <= 262)(POOL.fitFrame([{ att: { 1: { x: -50, y: 400 } } }])));
+
+    /* TURNING. One group holds the whole drawing and is turned about the frame's centre. */
+    const t = S(); POOL.render(t);
+    ok('the drawing is gathered into one group that can be turned — defs stay outside it',
+      !!t.querySelector('g.pool-root') && !t.querySelector('g.pool-root defs') && !!t.querySelector(':scope > defs'));
+    POOL.setView(t, 'half', { rot: 270 });
+    const tv = vb(t);
+    ok('a quarter turn swaps the frame’s width and height, so it still fills the screen', tv[2] === POOL.HALF.h && tv[3] === POOL.HALF.w);
+    ok('…and turns the drawing about the centre of that frame', /^rotate\(270 [\d.]+ [\d.]+\)$/.test(t.querySelector('g.pool-root').getAttribute('transform')));
+    POOL.setView(t, 'half', { rot: 0 });
+    ok('turning back leaves no transform behind', !t.querySelector('g.pool-root').hasAttribute('transform'));
+    ok('a turn that is not a quarter is refused rather than drawn crooked', (POOL.setView(t, 'full', { rot: 45 }), t.dataset.rot === '0'));
+
+    // redrawing a step must not snap the board back to the full pool or to upright
+    POOL.setView(t, 'half', { rot: 90 });
+    POOL.render(t);
+    ok('redrawing keeps the half AND the turn, so playback does not jump every step',
+      t.dataset.view === 'half' && t.dataset.rot === '90' && /^rotate\(90 /.test(t.querySelector('g.pool-root').getAttribute('transform')));
+
+    /* NUMBERS STAY UPRIGHT. The whole drawing turns, so each player's number is turned back the
+       other way — in CSS, because discs are recreated on every animation frame. */
+    const css = readFileSync(join(APP, 'css/styles.css'), 'utf8');
+    ok('every quarter turn has a rule that turns the numbers back', [['90', '-90deg'], ['180', '180deg'], ['270', '90deg']]
+      .every(([r, a]) => css.includes(`svg[data-rot="${r}"] .disc text{transform:rotate(${a})}`)));
+    ok('…about each number’s own centre, so it stays on its disc', /\.disc text\{transform-box:fill-box;transform-origin:center\}/.test(css));
+
+    /* DRAGGING. Verified live on every turn: zero drift between a finger and the board point. jsdom
+       has no screen matrix, so here it is the rule that makes that true. */
+    const poolSrc = readFileSync(join(APP, 'js/pool.js'), 'utf8');
+    ok('a drag is mapped through the turned group, so a finger lands where it always did',
+      /const frame = svgEl\.querySelector\('g\.pool-root'\) \|\| svgEl;\s+const ctm = frame\.getScreenCTM\(\)\.inverse\(\);/.test(poolSrc));
+
+    // the controls
+    const appSrc3 = readFileSync(join(APP, 'js/app.js'), 'utf8');
+    ok('there is a Half switch and a Turn button on the board', !!q('#half-toggle') && !!q('#rot-btn'));
+    ok('the first turn puts the goal at the top — the whiteboard view most coaches want', /const ROT_CYCLE = \[0, 270, 180, 90\];/.test(appSrc3));
+    ok('both are remembered, so the bench iPad is set up the same next Saturday',
+      appSrc3.includes("'thplay.halfView'") && appSrc3.includes("'thplay.boardRot'") && DEVICE.isOurs('thplay.boardRot'));
+    ok('opening another play re-fits the frame, so a play with a bench gets its deck', /applyHalf\(\);\s+\/\/ a play with a bench/.test(appSrc3));
+    [b, t].forEach(e => e.remove());
+  }
+
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);
   process.exit(fail?1:0);
  } catch(e){ console.error('THREW:', e && e.stack || e); process.exit(2); }

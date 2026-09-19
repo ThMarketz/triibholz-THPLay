@@ -14,6 +14,27 @@ const POOL = (() => {
      scanner never saw them — it now watches textContent assignments too. */
   const T = k => (typeof I18N !== 'undefined') ? I18N.t(k) : k;
   const VB = { w: 320, h: 262 };
+  /* THE HALF. A set play — 6-on-6, man-up, a penalty — happens entirely in the attacking half, so
+     the full pool spends half the board on water nobody is using. Measured on an iPad-width board:
+     every player of a man-up sat between x 226 and 292, and a formation got about 20 px a metre.
+
+     The crop is TIGHT on purpose, and that is the whole trick. Keeping the full board height (the
+     officials' table and the substitution strips) makes the half taller than it is wide, and on a
+     landscape iPad — which is how it is held on a bench — a height-limited board then scales
+     exactly as the full pool did: +0%, a view that looks done and helps nobody. Cropped to the
+     water from the centre line through the goal it is +49% in landscape and +90% in portrait.
+     Turning it so the goal is at the top adds seven points in landscape and costs eight in
+     portrait, so the size comes from the crop and the turn is a choice, not a need.
+
+     It is a VIEWBOX, not a redraw: every disc, arrow and path keeps its coordinates, and dragging
+     keeps working because eventToVB reads getScreenCTM(), which already accounts for the viewBox. */
+  const HALF = { x: 146, y: 22, w: 168, h: 176 };
+  /* The same half, reaching down to the substitution deck. Measured across every play on a
+     device: field players NEVER leave the tight half (not one position out of all of them), but in
+     2 plays of 15 a substitute enters the water — and a frame that hides the bench makes a player
+     appear from nowhere mid-play. So a play with a bench gets the deck in frame; the rest keep the
+     full gain. Nobody on the board is ever cut off. */
+  const HALF_DECK = { x: 146, y: 22, w: 168, h: 200 };
   const WATER = { x0: 24, y0: 30, x1: 296, y1: 190 };
   WATER.w = WATER.x1 - WATER.x0;   // 272
   WATER.h = WATER.y1 - WATER.y0;   // 160
@@ -59,7 +80,7 @@ const POOL = (() => {
   /* Render the static pool. Returns layer <g> elements. */
   function render(svgEl) {
     while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
-    svgEl.setAttribute('viewBox', `0 0 ${VB.w} ${VB.h}`);
+    // the framing is applied at the end, once the group it turns exists
 
     const defs = svg('defs', {});
     const grad = svg('linearGradient', { id: 'waterGrad', x1: '0', y1: '0', x2: '0', y2: '1' });
@@ -200,6 +221,19 @@ const POOL = (() => {
     svgEl.appendChild(pathLayer);
     svgEl.appendChild(splashLayer);
     svgEl.appendChild(discLayer);
+    /* Gather the whole drawing into one group so the board can be turned as a single thing. The
+       <defs> stay outside it — gradients, markers and clip paths are referenced by id and must
+       not be rotated themselves. The layer references returned below stay valid: moving an
+       element into a group keeps the same element. */
+    const root = svg('g', { class: 'pool-root' });
+    [...svgEl.childNodes].forEach(n => { if (n.nodeName !== 'defs') root.appendChild(n); });
+    svgEl.appendChild(root);
+    // keep the framing and turn the board already had — redrawing a step must not snap it back
+    const kept = (svgEl.dataset.frame || '').split(',').map(Number);
+    setView(svgEl, svgEl.dataset.view === 'half' ? 'half' : 'full', {
+      deck: svgEl.dataset.deck === '1', rot: +svgEl.dataset.rot || 0,
+      frame: kept.length === 4 && kept.every(Number.isFinite) ? { x: kept[0], y: kept[1], w: kept[2], h: kept[3] } : null,
+    });
     return { zoneLayer, pathLayer, splashLayer, discLayer, WATER };
   }
 
@@ -256,11 +290,81 @@ const POOL = (() => {
     return { x: (zone.x1 - 8) - col * gap, y: zone.y0 + 10 + row * 14 };
   }
 
+  /* Which part of the pool the board shows. 'full' is the whole pool; 'half' is the attacking half.
+     Nothing is redrawn — the same picture is framed differently. */
+  /* TURNING THE BOARD. A coach on a bench holds the iPad however the bench lets them, and the
+     players looking at it see the real pool from where THEY sit — so the board can be turned in
+     quarter turns until it matches. rot is how far the picture is turned, clockwise:
+       0 → the goal we attack is on the right (the way every play is drawn)
+       270 → the goal is at the top — the whiteboard view, attack running up the screen
+       180 → on the left      90 → at the bottom
+
+     The turn is applied to ONE group holding the whole drawing, about the centre of the frame,
+     and the viewBox is swapped to the turned frame's shape. Nothing is redrawn and no coordinate
+     changes: a disc at x 250 is still at x 250, which is why every play, arrow and step keeps
+     working. Dragging keeps working because eventToVB reads that group's own screen matrix, which
+     includes the turn — so a finger maps back to the same board point it always did.
+
+     Player numbers must stay readable, so css/styles.css turns each disc's number back the other
+     way. That is CSS rather than code on purpose: discs are recreated on every animation frame,
+     and a rule applies to all of them without anybody remembering to. */
+  const ROTS = [0, 90, 180, 270];
+  function setView(svgEl, mode, opts) {
+    if (!svgEl) return;
+    opts = opts || {};
+    const deck = !!opts.deck;
+    const rot = ROTS.includes(+opts.rot) ? +opts.rot : 0;
+    const given = opts.frame && opts.frame.w > 0 && opts.frame.h > 0 ? opts.frame : null;
+    const F = mode === 'half' ? (given || (deck ? HALF_DECK : HALF)) : { x: 0, y: 0, w: VB.w, h: VB.h };
+    const cx = F.x + F.w / 2, cy = F.y + F.h / 2;
+    const turned = rot === 90 || rot === 270;
+    const w = turned ? F.h : F.w, h = turned ? F.w : F.h;
+    svgEl.setAttribute('viewBox', `${cx - w / 2} ${cy - h / 2} ${w} ${h}`);
+    const root = svgEl.querySelector('g.pool-root');
+    if (root) { if (rot) root.setAttribute('transform', `rotate(${rot} ${cx} ${cy})`); else root.removeAttribute('transform'); }
+    svgEl.dataset.view = mode === 'half' ? 'half' : 'full';
+    svgEl.dataset.deck = deck ? '1' : '0';
+    svgEl.dataset.rot = String(rot);
+    // remembered so a redraw keeps the same frame rather than falling back to the plain half
+    svgEl.dataset.frame = mode === 'half' ? [F.x, F.y, F.w, F.h].join(',') : '';
+  }
+  /* Does this play need the deck in frame? True when any frame carries a bench player. */
+  const needsDeck = frames => (frames || []).some(f => f && Array.isArray(f.extra) && f.extra.length > 0);
+
+  /* THE FRAME A PLAY ACTUALLY NEEDS. The tight half is the starting point, and it grows to take in
+     everyone this play moves — every step, both teams, the keeper, the bench, the ball.
+
+     A fixed half was nearly right: every shipped play keeps its field players inside it. But a
+     coach can draw a play, or be sent one, where somebody starts deep in the other half — a
+     counter, a press — and a fixed crop would cut that player off without a word. A board shown
+     to players must never hide one of them, so the frame is fitted to the play rather than the
+     play being trusted to fit the frame. A play that uses the whole pool simply gets the whole
+     pool: as large as it can be while still showing everybody. */
+  function fitFrame(frames) {
+    const M = 9;                                  // a disc's width of margin, so nobody sits on the edge
+    let x0 = HALF.x, y0 = HALF.y, x1 = HALF.x + HALF.w, y1 = HALF.y + HALF.h;
+    const take = p => {
+      if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') return;
+      x0 = Math.min(x0, p.x - M); y0 = Math.min(y0, p.y - M);
+      x1 = Math.max(x1, p.x + M); y1 = Math.max(y1, p.y + M);
+    };
+    for (const f of frames || []) {
+      if (!f) continue;
+      ['att', 'def'].forEach(t => Object.values(f[t] || {}).forEach(take));
+      take(f.gk);
+      (Array.isArray(f.extra) ? f.extra : []).forEach(take);
+      take(f.ball);
+    }
+    x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(VB.w, x1); y1 = Math.min(VB.h, y1);
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }
   function eventToVB(svgEl, evt) {
     const pt = svgEl.createSVGPoint();
     const src = evt.touches ? evt.touches[0] : evt;
     pt.x = src.clientX; pt.y = src.clientY;
-    const ctm = svgEl.getScreenCTM().inverse();
+    // the turned group's own matrix includes the turn, so this maps a finger back to board space
+    const frame = svgEl.querySelector('g.pool-root') || svgEl;
+    const ctm = frame.getScreenCTM().inverse();
     const p = pt.matrixTransform(ctm);
     return { x: p.x, y: p.y };
   }
@@ -283,5 +387,5 @@ const POOL = (() => {
   }
 
   return { VB, WATER, SUBZONE, SUB_L, EXCZONE, CORNERS, pxPerM, fromLeft, fromRight, svg, render, disc, ball, setDepth,
-           stackPos, eventToVB, clampToWater, clampAnywhere, zoneOf };
+           stackPos, eventToVB, clampToWater, clampAnywhere, zoneOf, HALF, HALF_DECK, ROTS, setView, needsDeck, fitFrame };
 })();

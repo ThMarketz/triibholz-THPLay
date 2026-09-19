@@ -1465,6 +1465,7 @@
     if ($('tpl-btn')) { $('tpl-btn').hidden = !(canEdit() && !scn.builtIn && !scn.shared); $('tpl-btn').textContent = scn.template ? '⭐ Template ✓' : '☆ Template'; $('tpl-btn').classList.toggle('active', !!scn.template); }
     if ($('shared-banner')) $('shared-banner').hidden = !scn.shared;
     state.focus = (state.viewMode==='me') ? defaultFocus() : null;
+    applyHalf();          // a play with a bench needs the deck in frame; one without keeps the full gain
     buildViewer(0, false);
     syncFocusUI();
     // Problem→Solution: players start in "problem" mode, staff in "solution"
@@ -1531,6 +1532,34 @@
     if (edit.layers) paintZones(edit.layers);
   }
   function toggleZones() { try { localStorage.setItem('thplay.showZones', zonesShown() ? '0' : '1'); } catch (e) {} applyZones(); }
+
+  /* ---- the half: the attacking half, framed to fill the screen ----
+     For showing a play on an iPad in a timeout, where a formation drawn on the full pool is a
+     cluster of discs in one corner. Remembered per device, like the other view switches — a coach
+     who uses it on the bench wants it there next Saturday. */
+  function halfShown() { try { return localStorage.getItem('thplay.halfView') === '1'; } catch (e) { return false; } }
+  /* How far the board is turned, in quarter turns, so the coach can match it to the real pool from
+     wherever the bench is. Each tap turns it a quarter the other way (anticlockwise), so the FIRST
+     tap puts the goal at the top — the whiteboard view — which is the one most coaches want. */
+  const ROT_CYCLE = [0, 270, 180, 90];
+  function boardRot() { try { const r = +localStorage.getItem('thplay.boardRot'); return ROT_CYCLE.includes(r) ? r : 0; } catch (e) { return 0; } }
+  const GOAL_AT = { 0: 'right', 270: 'top', 180: 'left', 90: 'bottom' };
+  function applyHalf() {
+    const on = halfShown(), rot = boardRot(), b = $('half-toggle'), rb = $('rot-btn');
+    if (b) { b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+    if (rb) { rb.classList.toggle('active', rot !== 0); rb.dataset.goal = GOAL_AT[rot]; rb.setAttribute('title', T('ui.rotTitle', { where: T('ui.goalAt.' + GOAL_AT[rot]) })); }
+    // the play decides whether the deck comes into frame, so a substitute is never hidden
+    // fit the frame to everyone this play moves, so no player — deep defender, bench, the ball — is cut off
+    const scn = state.scenarios && state.scenarios.find(s => s.id === state.selectedId);
+    const frame = on ? POOL.fitFrame(scn && scn.frames) : null;
+    ['pool', 'editor-pool'].forEach(id => { const el = $(id); if (el) POOL.setView(el, on ? 'half' : 'full', { frame, rot }); });
+  }
+  function toggleHalf() { try { localStorage.setItem('thplay.halfView', halfShown() ? '0' : '1'); } catch (e) {} applyHalf(); }
+  function turnBoard() {
+    const next = ROT_CYCLE[(ROT_CYCLE.indexOf(boardRot()) + 1) % ROT_CYCLE.length];
+    try { localStorage.setItem('thplay.boardRot', String(next)); } catch (e) {}
+    applyHalf();
+  }
 
   /* ---- the keeper's view ---- */
   function gkShown() { try { return localStorage.getItem('thplay.showGk') === '1'; } catch (e) { return false; } }
@@ -3723,6 +3752,8 @@
     $('view-team').onclick = ()=>{ state.viewMode='team'; state.focus=null; afterFocusChange(); };
     $('steps-toggle').onclick = toggleSteps;
     $('zones-toggle').onclick = toggleZones; applyZones();
+    if ($('half-toggle')) { $('half-toggle').onclick = toggleHalf; applyHalf(); }
+    if ($('rot-btn')) $('rot-btn').onclick = turnBoard;
     $('gk-toggle').onclick = toggleGk; applyGk();
     $('scene3d-toggle').onclick = toggle3d;
     scene3dTarget = scene3dLoadTarget(); if ($('scene3d-target')) $('scene3d-target').value = scene3dTarget;
