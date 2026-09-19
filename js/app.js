@@ -1467,6 +1467,7 @@
     state.focus = (state.viewMode==='me') ? defaultFocus() : null;
     applyHalf();          // a play with a bench needs the deck in frame; one without keeps the full gain
     buildViewer(0, false);
+    sync3dToBoard();      // another play fills a different half, so the 3D re-aims with the board
     syncFocusUI();
     // Problem→Solution: players start in "problem" mode, staff in "solution"
     $('mode-toggle').hidden = false;
@@ -1553,8 +1554,63 @@
     const scn = state.scenarios && state.scenarios.find(s => s.id === state.selectedId);
     const frame = on ? POOL.fitFrame(scn && scn.frames) : null;
     ['pool', 'editor-pool'].forEach(id => { const el = $(id); if (el) POOL.setView(el, on ? 'half' : 'full', { frame, rot }); });
+    applyCamera();       // the view set the base frame; the zoom and the ball are applied inside it
   }
-  function toggleHalf() { try { localStorage.setItem('thplay.halfView', halfShown() ? '0' : '1'); } catch (e) {} applyHalf(); }
+  function toggleHalf() { try { localStorage.setItem('thplay.halfView', halfShown() ? '0' : '1'); } catch (e) {} boardSettingsChanged(); }
+
+  /* ---- zoom, and following the ball ----
+     Zoom in on a moment, or let the camera stay on the ball as the play runs — the thing players'
+     eyes follow anyway. Both are remembered, like the half and the turn. */
+  const ZOOM_STEPS = [1, 1.5, 2, 3, 4];
+  function boardZoom() { try { const z = +localStorage.getItem('thplay.boardZoom'); return ZOOM_STEPS.includes(z) ? z : 1; } catch (e) { return 1; } }
+  function followBall() { try { return localStorage.getItem('thplay.followBall') === '1'; } catch (e) { return false; } }
+  /* The ball where the play currently has it — the same interpolated position the discs are
+     drawn at, so the camera never lags a frame behind the ball it is following. */
+  function ballNow() {
+    const scn = state.scenarios && state.scenarios.find(s => s.id === state.selectedId);
+    if (!scn || !scn.frames || !scn.frames.length || typeof ANIM === 'undefined') return null;
+    const t = state.viewer && typeof state.viewer.t === 'number' ? state.viewer.t : (+($('scrub') || {}).value || 0) / 1000;
+    try { return ANIM.ballPoint(ANIM.stateAt(scn, t)); } catch (e) { return null; }
+  }
+  function applyCamera() {
+    const z = boardZoom(), follow = followBall();
+    const zin = $('zoom-in'), zout = $('zoom-out'), fb = $('follow-ball'), zl = $('zoom-label');
+    if (zin) zin.disabled = z >= ZOOM_STEPS[ZOOM_STEPS.length - 1];
+    if (zout) zout.disabled = z <= 1;
+    if (zl) zl.textContent = (z === 1 ? '1' : String(z)) + '×';
+    if (fb) { fb.classList.toggle('active', follow); fb.setAttribute('aria-pressed', follow ? 'true' : 'false'); }
+    // following the ball at 1× would do nothing visible, so it zooms in a step rather than looking broken
+    const effective = follow && z === 1 ? 1.5 : z;
+    const el = $('pool'); if (el) POOL.setCamera(el, { zoom: effective, focus: follow ? ballNow() : null });
+  }
+  // a board setting changed: re-frame the 2D and re-aim the 3D once, together
+  function boardSettingsChanged() { applyHalf(); sync3dToBoard(); }
+  function zoomBy(dir) {
+    const i = ZOOM_STEPS.indexOf(boardZoom());
+    const next = ZOOM_STEPS[Math.max(0, Math.min(ZOOM_STEPS.length - 1, i + dir))];
+    try { localStorage.setItem('thplay.boardZoom', String(next)); } catch (e) {}
+    applyCamera(); sync3dToBoard();
+  }
+  function toggleFollow() { try { localStorage.setItem('thplay.followBall', followBall() ? '0' : '1'); } catch (e) {} applyCamera(); }
+
+  /* Pinch on an iPad, ctrl/⌘ + wheel on a laptop. A pinch is two fingers: one finger on the board
+     is still a drag of a player, so the two can never be confused. */
+  function wireBoardZoom() {
+    const el = $('pool'); if (!el || el.dataset.zoomWired) return;
+    el.dataset.zoomWired = '1';
+    let pinch = null;
+    const span = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    el.addEventListener('touchstart', e => { if (e.touches.length === 2) { pinch = { d: span(e.touches), z: boardZoom() }; e.preventDefault(); } }, { passive: false });
+    el.addEventListener('touchmove', e => {
+      if (!pinch || e.touches.length !== 2) return;
+      e.preventDefault();
+      const want = pinch.z * span(e.touches) / pinch.d;
+      const near = ZOOM_STEPS.reduce((a, b) => Math.abs(b - want) < Math.abs(a - want) ? b : a);
+      if (near !== boardZoom()) { try { localStorage.setItem('thplay.boardZoom', String(near)); } catch (_) {} applyCamera(); }
+    }, { passive: false });
+    el.addEventListener('touchend', () => { pinch = null; });
+    el.addEventListener('wheel', e => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); zoomBy(e.deltaY < 0 ? 1 : -1); }, { passive: false });
+  }
   function turnBoard() {
     const next = ROT_CYCLE[(ROT_CYCLE.indexOf(boardRot()) + 1) % ROT_CYCLE.length];
     try { localStorage.setItem('thplay.boardRot', String(next)); } catch (e) {}
@@ -1578,7 +1634,7 @@
     const on = scene3dShown(), b = $('scene3d-toggle'), cv = $('scene3d'), hint = $('scene3d-hint'), sel = $('scene3d-target');
     if (b) { b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
     if (cv) cv.hidden = !on; if (hint) hint.hidden = !on; if (sel) sel.hidden = !on;
-    if (on && !scene3dCam) scene3dCam = MANIKIN.makeCamera({});
+    if (on && !scene3dCam) reset3dCam();
     if (on) { resize3d(); draw3dNow(); }
   }
   function resize3d() {
@@ -1590,6 +1646,10 @@
   }
   /* project a world point, honouring the canvas's device-pixel size */
   function proj3(p) { const cv = $('scene3d'); return MANIKIN.project(scene3dCam, p, { w: cv.width, h: cv.height }); }
+  // flat shapes and lines are CLIPPED at the lens rather than dropped whole when part of them is behind it
+  function poly3(pts) { const cv = $('scene3d'); return MANIKIN.projectPoly(scene3dCam, pts, { w: cv.width, h: cv.height }); }
+  function seg3(a, b) { const cv = $('scene3d'); return MANIKIN.projectSeg(scene3dCam, a, b, { w: cv.width, h: cv.height }); }
+  function fillPoly(ctx, c) { ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y); c.slice(1).forEach(p => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.fill(); }
   /* lighten a #rrggbb hex by `amt` (0..1) toward white — used for the cap's sculpted highlight */
   function lighten(hex, amt) {
     const n = parseInt(hex.replace('#', ''), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
@@ -1602,33 +1662,40 @@
     ctx.clearRect(0, 0, cv.width, cv.height);
     ctx.fillStyle = C('--scene3d-air'); ctx.fillRect(0, 0, cv.width, cv.height);   // above the water — deck / air
     const pool = MANIKIN.worldPool();
-    const corners = [{ x: -pool.halfLen, y: 0, z: -pool.halfWid }, { x: pool.halfLen, y: 0, z: -pool.halfWid }, { x: pool.halfLen, y: 0, z: pool.halfWid }, { x: -pool.halfLen, y: 0, z: pool.halfWid }].map(proj3);
-    // the water itself — a filled, gently gradient surface, not a dry floor
-    if (!corners.some(p => !p)) {
+    // the water itself — a filled, gently gradient surface, not a dry floor. Clipped at the lens: it
+    // used to be skipped entirely whenever one pool corner was behind the camera, which is every
+    // distance closer than about 10 — so pinching in, or the half view, left players on black.
+    const corners = poly3([{ x: -pool.halfLen, y: 0, z: -pool.halfWid }, { x: pool.halfLen, y: 0, z: -pool.halfWid }, { x: pool.halfLen, y: 0, z: pool.halfWid }, { x: -pool.halfLen, y: 0, z: pool.halfWid }]);
+    if (corners) {
       const g = ctx.createLinearGradient(0, Math.min(...corners.map(p => p.y)), 0, Math.max(...corners.map(p => p.y)));
       g.addColorStop(0, C('--scene3d-water-top')); g.addColorStop(1, C('--scene3d-water-bottom'));
-      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(corners[0].x, corners[0].y); corners.slice(1).forEach(p => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = g; fillPoly(ctx, corners);
     }
     // lane markings on the water surface (not a court grid)
     ctx.strokeStyle = C('--scene3d-ripple'); ctx.lineWidth = Math.max(1, cv.height / 480);
-    for (let x = -Math.floor(pool.halfLen); x <= pool.halfLen; x += 5) { const a = proj3({ x, y: 0, z: -pool.halfWid }), b = proj3({ x, y: 0, z: pool.halfWid }); if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); } }
+    for (let x = -Math.floor(pool.halfLen); x <= pool.halfLen; x += 5) { const l = seg3({ x, y: 0, z: -pool.halfWid }, { x, y: 0, z: pool.halfWid }); if (l) { ctx.beginPath(); ctx.moveTo(l[0].x, l[0].y); ctx.lineTo(l[1].x, l[1].y); ctx.stroke(); } }
     // the same shot-chance zones as the 2D board, only when Zones is on
     if (zonesShown()) MANIKIN.zoneFloorQuads().forEach(q => {
-      const c = [{ x: q.x0, y: 0, z: q.z0 }, { x: q.x1, y: 0, z: q.z0 }, { x: q.x1, y: 0, z: q.z1 }, { x: q.x0, y: 0, z: q.z1 }].map(proj3);
-      if (c.some(p => !p)) return;
-      ctx.fillStyle = q.color + '40'; ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y); c.slice(1).forEach(p => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.fill();
+      const c = poly3([{ x: q.x0, y: 0, z: q.z0 }, { x: q.x1, y: 0, z: q.z0 }, { x: q.x1, y: 0, z: q.z1 }, { x: q.x0, y: 0, z: q.z1 }]);
+      if (!c) return;
+      ctx.fillStyle = q.color + '40'; fillPoly(ctx, c);
     });
     // goals (both ends, for context and depth)
     ctx.strokeStyle = C('--scene3d-line'); ctx.lineWidth = Math.max(1.4, cv.height / 260);
-    MANIKIN.goalPosts().forEach(g => g.segs.forEach(seg => { const a = proj3(seg[0]), b = proj3(seg[1]); if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); } }));
+    MANIKIN.goalPosts().forEach(g => g.segs.forEach(seg => { const l = seg3(seg[0], seg[1]); if (l) { ctx.beginPath(); ctx.moveTo(l[0].x, l[0].y); ctx.lineTo(l[1].x, l[1].y); ctx.stroke(); } }));
     // a small ripple under each player — everyone is at the surface, nothing stands on a floor
-    scene.mannequins.forEach(m => { const rp = proj3({ x: m.pos.x, y: 0, z: m.pos.z }); if (!rp) return;
+    const fadeOf = m => MANIKIN.nearFade(scene3dCam, Object.values(m.joints || {}).concat([{ x: m.pos.x, y: 0, z: m.pos.z }]));
+    scene.mannequins.forEach(m => { const rp = proj3({ x: m.pos.x, y: 0, z: m.pos.z }); const fade = fadeOf(m); if (!rp || !fade) return;
+      ctx.globalAlpha = fade;
       ctx.strokeStyle = C('--scene3d-lane'); ctx.lineWidth = 1;
       ctx.beginPath(); ctx.ellipse(rp.x, rp.y, rp.scale * 0.22, rp.scale * 0.22 * 0.35, 0, 0, TAU_LOCAL); ctx.stroke();
     });
+    ctx.globalAlpha = 1;
     // mannequins — upper body only, farthest first (painter's algorithm)
     const withDepth = scene.mannequins.map(m => ({ m, d: (proj3({ x: m.pos.x, y: 0, z: m.pos.z }) || { depth: 1e9 }).depth })).sort((a, b) => b.d - a.d);
     withDepth.forEach(({ m }) => {
+      const fade = fadeOf(m); if (!fade) return;   // the player the camera is inside is not drawn over the whole pool
+      ctx.globalAlpha = fade;
       const cap = MANIKIN.CAP[m.team] || MANIKIN.CAP.A;
       const pts = {}; let any = false;
       Object.keys(m.joints).forEach(k => { const pr = proj3(m.joints[k]); pts[k] = pr; if (pr) any = true; });
@@ -1664,6 +1731,7 @@
         if (m.key !== 'GK') { ctx.fillStyle = m.team === 'D' ? C('--cap3d-dark-ink') : C('--cap3d-light-ink'); /* by team, never by comparing a colour a look can change */ const fs = Math.max(7, pts.head.scale * 0.19); ctx.font = '700 ' + fs + 'px Helvetica, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(m.key.replace(/^[AD]/, ''), pts.head.x, pts.head.y + fs * 0.32); }
       }
     });
+    ctx.globalAlpha = 1;
     // the ball
     if (scene.ball) { const bp = proj3(scene.ball); if (bp) { ctx.fillStyle = C('--ball'); ctx.beginPath(); ctx.arc(bp.x, bp.y, Math.max(2, bp.scale * 0.10), 0, TAU_LOCAL); ctx.fill(); } }
   }
@@ -1678,11 +1746,35 @@
     const scn = adjust.live && adjust.scn ? adjust.scn : scene3dCurrentScenario();
     if (!scn) return;
     const scene = MANIKIN.sceneAt(scn, scene3dCurrentT(), {});
-    // "switch player or ball view" — the camera target follows the chosen entity every frame
-    if (scene3dTarget === 'ball' && scene.ball) scene3dCam.target = { x: scene.ball.x, y: 0.4, z: scene.ball.z };
+    // "switch player or ball view" — the camera target follows the chosen entity every frame.
+    // On Overview, the 2D board's "Follow ball" drives it too, so the two views watch the same thing.
+    if ((scene3dTarget === 'ball' || (!scene3dTarget && followBall())) && scene.ball) scene3dCam.target = { x: scene.ball.x, y: 0.4, z: scene.ball.z };
     else if (scene3dTarget) { const m = scene.mannequins.find(x => x.key === scene3dTarget || x.key === 'A' + scene3dTarget || x.key === 'D' + scene3dTarget); if (m) scene3dCam.target = { x: m.pos.x, y: 0.45, z: m.pos.z }; }
     draw3d(scene);
   }
+  /* THE 3D TAKES ITS AIM FROM THE BOARD. Switching to the half on the bench and then opening the
+     3D used to show the whole pool again, because the 3D Overview knew nothing about the 2D view.
+     Now, on Overview, it aims at the same half, at the same zoom. A player chosen in the 3D menu
+     still wins — that is a deliberate choice the coach made.
+     It is applied when a board setting CHANGES, not every frame, so it never fights a coach who is
+     pinching or orbiting the 3D by hand: their angle is kept, only where it looks and how close. */
+  function sync3dToBoard() {
+    if (typeof MANIKIN === 'undefined' || !scene3dCam || scene3dTarget) return;
+    const scn = state.scenarios && state.scenarios.find(s => s.id === state.selectedId);
+    const half = halfShown(), z = boardZoom();
+    let target = { x: 0, y: 0.3, z: 0 };
+    if (half) {
+      const F = POOL.fitFrame(scn && scn.frames);
+      const w = MANIKIN.toWorld({ x: F.x + F.w / 2, y: F.y + F.h / 2 });
+      target = { x: w.x, y: 0.3, z: w.z };
+    }
+    scene3dCam = MANIKIN.makeCamera({ yaw: scene3dCam.yaw, pitch: scene3dCam.pitch, fov: scene3dCam.fov, target, dist: (half ? 9 : 14) / z });
+    draw3dNow();
+  }
+  /* Opening the 3D, double-clicking to reset it and going back to Overview all land on what the board
+     shows. They used to land on the whole pool, so a coach on the half opened the 3D and saw the
+     wrong picture until they happened to touch a board setting. */
+  function reset3dCam() { scene3dCam = MANIKIN.makeCamera({}); sync3dToBoard(); }
   function wire3dInteraction() {
     const cv = $('scene3d'); if (!cv) return;
     const pointers = new Map();
@@ -1698,7 +1790,7 @@
     const up = e => { pointers.delete(e.pointerId); if (pointers.size < 2) scene3dPinch = null; if (pointers.size === 0) scene3dDrag = null; };
     cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
     cv.addEventListener('wheel', e => { e.preventDefault(); scene3dCam = MANIKIN.orbit(scene3dCam, 0, 0, e.deltaY * 0.01); draw3dNow(); }, { passive: false });
-    cv.addEventListener('dblclick', () => { scene3dCam = MANIKIN.makeCamera({}); draw3dNow(); });
+    cv.addEventListener('dblclick', () => { reset3dCam(); draw3dNow(); });
   }
   function applyGk() {
     const on = gkShown(), b = $('gk-toggle');
@@ -1829,6 +1921,7 @@
     updateMyCue(step, total);
     if (step !== lastGkStep) { lastGkStep = step; updateGkView(); }   // once per step, not per frame
     draw3dNow();   // the 3D camera redraws every tick — it's animating the same interpolated motion
+    if (followBall()) applyCamera();   // the 2D camera stays on the ball at the same moment
   }
   let lastGkStep = -1;
   /* ---- "what do I do now?" — one line for the focused player, per step ---- */
@@ -3754,10 +3847,14 @@
     $('zones-toggle').onclick = toggleZones; applyZones();
     if ($('half-toggle')) { $('half-toggle').onclick = toggleHalf; applyHalf(); }
     if ($('rot-btn')) $('rot-btn').onclick = turnBoard;
+    if ($('zoom-in')) $('zoom-in').onclick = () => zoomBy(1);
+    if ($('zoom-out')) $('zoom-out').onclick = () => zoomBy(-1);
+    if ($('follow-ball')) $('follow-ball').onclick = toggleFollow;
+    wireBoardZoom(); applyCamera();
     $('gk-toggle').onclick = toggleGk; applyGk();
     $('scene3d-toggle').onclick = toggle3d;
     scene3dTarget = scene3dLoadTarget(); if ($('scene3d-target')) $('scene3d-target').value = scene3dTarget;
-    $('scene3d-target').onchange = e => { scene3dTarget = e.target.value; scene3dSaveTarget(scene3dTarget); if (!scene3dTarget) scene3dCam = MANIKIN.makeCamera({}); draw3dNow(); };
+    $('scene3d-target').onchange = e => { scene3dTarget = e.target.value; scene3dSaveTarget(scene3dTarget); if (!scene3dTarget) reset3dCam(); draw3dNow(); };
     wire3dInteraction();
     window.addEventListener('resize', () => { if (scene3dShown()) { resize3d(); draw3dNow(); } });
     apply3d();

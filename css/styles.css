@@ -962,6 +962,9 @@ label.cloud-cfg{align-items:center;font-size:13px;cursor:pointer}
 svg[data-rot="90"] .disc text{transform:rotate(-90deg)}
 svg[data-rot="180"] .disc text{transform:rotate(180deg)}
 svg[data-rot="270"] .disc text{transform:rotate(90deg)}
+.zoom-seg{display:inline-flex;align-items:center;gap:2px}
+.zoom-label{font-size:11px;min-width:24px;text-align:center;color:var(--ink-faint);font-variant-numeric:tabular-nums}
+#pool{touch-action:none}
 .lib-actions{display:flex;flex-direction:column;gap:6px;align-items:stretch}
 .lib-actions a{text-decoration:none;text-align:center}
 @media(max-width:560px){
@@ -1112,9 +1115,12 @@ svg[data-rot="270"] .disc text{transform:rotate(90deg)}
 #scene3d{position:absolute;inset:0;width:100%;height:100%;z-index:2;cursor:grab;touch-action:none;border-radius:16px}
 #scene3d:active{cursor:grabbing}
 .scene3d-hint{position:absolute;right:12px;top:12px;z-index:3;font-size:.68rem;color:var(--cyan-76);background:rgba(var(--navy-07b-rgb),.72);
-  padding:4px 9px;border-radius:999px;pointer-events:none;backdrop-filter:blur(3px);max-width:60%;text-align:right}
+  padding:4px 9px;border-radius:12px;pointer-events:none;backdrop-filter:blur(3px);max-width:60%;text-align:right}
 #scene3d-target{max-width:150px}
-@media (max-width:760px){.scene3d-hint{font-size:.62rem;left:8px;bottom:8px}}
+/* On a phone the hint is a thin strip along the top. It used to get left+bottom here while keeping the
+   desktop right+top, so all four edges were pinned: it stretched over the whole 3D, and the pill
+   radius turned that box into a dark disc covering half the pool. */
+@media (max-width:760px){.scene3d-hint{font-size:.62rem;left:8px;right:8px;top:8px;bottom:auto;max-width:none;text-align:left}}
 
 /* ---- goalkeeper view: the shot menu (v1.32) ---- */
 .gk-view{max-height:min(70vh,520px);overflow-y:auto}

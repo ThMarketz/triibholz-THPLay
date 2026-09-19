@@ -234,6 +234,7 @@ const POOL = (() => {
       deck: svgEl.dataset.deck === '1', rot: +svgEl.dataset.rot || 0,
       frame: kept.length === 4 && kept.every(Number.isFinite) ? { x: kept[0], y: kept[1], w: kept[2], h: kept[3] } : null,
     });
+    if (+svgEl.dataset.zoom > 1) setCamera(svgEl, {});      // and the zoom — building a viewer must not reset it
     return { zoneLayer, pathLayer, splashLayer, discLayer, WATER };
   }
 
@@ -328,6 +329,47 @@ const POOL = (() => {
     // remembered so a redraw keeps the same frame rather than falling back to the plain half
     svgEl.dataset.frame = mode === 'half' ? [F.x, F.y, F.w, F.h].join(',') : '';
   }
+  /* THE CAMERA — zoom, and following the ball.
+
+     Both are the same move as the half: a frame over the drawing. The view (full, or the fitted
+     half) and the turn set the BASE frame; the camera shrinks that frame by `zoom` and centres it on
+     `focus` — the ball, when following it — and never lets it leave the base frame, so zooming in on
+     the ball near the goal does not swing the view off the edge of the pool.
+
+     `focus` is a BOARD point. The board may be turned, so it is carried through the same rotation
+     the drawing gets before the frame is centred on it; otherwise following the ball on a turned
+     board would chase a point a quarter-turn away from where the ball is drawn.
+
+     Only the viewBox changes. The turn stays on the group, so dragging still maps through it and a
+     finger still lands on the point it touches, at any zoom. */
+  const ZOOM_MAX = 4;
+  function setCamera(svgEl, opts) {
+    if (!svgEl) return;
+    opts = opts || {};
+    const zoom = Math.max(1, Math.min(ZOOM_MAX, +(opts.zoom != null ? opts.zoom : svgEl.dataset.zoom) || 1));
+    const kept = (svgEl.dataset.frame || '').split(',').map(Number);
+    const F = svgEl.dataset.view === 'half' && kept.length === 4 && kept.every(Number.isFinite)
+      ? { x: kept[0], y: kept[1], w: kept[2], h: kept[3] } : { x: 0, y: 0, w: VB.w, h: VB.h };
+    const rot = +svgEl.dataset.rot || 0;
+    const cx = F.x + F.w / 2, cy = F.y + F.h / 2;
+    const turned = rot === 90 || rot === 270;
+    const w = turned ? F.h : F.w, h = turned ? F.w : F.h;
+    const zw = w / zoom, zh = h / zoom;
+    let fx = cx, fy = cy;
+    const f = opts.focus;
+    if (f && typeof f.x === 'number' && typeof f.y === 'number') {
+      const a = rot * Math.PI / 180, dx = f.x - cx, dy = f.y - cy;
+      fx = cx + dx * Math.cos(a) - dy * Math.sin(a);
+      fy = cy + dx * Math.sin(a) + dy * Math.cos(a);
+    }
+    // keep the zoomed frame inside the base frame
+    fx = Math.max(cx - w / 2 + zw / 2, Math.min(cx + w / 2 - zw / 2, fx));
+    fy = Math.max(cy - h / 2 + zh / 2, Math.min(cy + h / 2 - zh / 2, fy));
+    svgEl.setAttribute('viewBox', `${fx - zw / 2} ${fy - zh / 2} ${zw} ${zh}`);
+    svgEl.dataset.zoom = String(zoom);
+    return { zoom, x: fx - zw / 2, y: fy - zh / 2, w: zw, h: zh };
+  }
+
   /* Does this play need the deck in frame? True when any frame carries a bench player. */
   const needsDeck = frames => (frames || []).some(f => f && Array.isArray(f.extra) && f.extra.length > 0);
 
@@ -387,5 +429,5 @@ const POOL = (() => {
   }
 
   return { VB, WATER, SUBZONE, SUB_L, EXCZONE, CORNERS, pxPerM, fromLeft, fromRight, svg, render, disc, ball, setDepth,
-           stackPos, eventToVB, clampToWater, clampAnywhere, zoneOf, HALF, HALF_DECK, ROTS, setView, needsDeck, fitFrame };
+           stackPos, eventToVB, clampToWater, clampAnywhere, zoneOf, HALF, HALF_DECK, ROTS, ZOOM_MAX, setView, setCamera, needsDeck, fitFrame };
 })();

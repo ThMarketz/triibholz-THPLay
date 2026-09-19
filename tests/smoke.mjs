@@ -3076,6 +3076,117 @@ const pick=(sel,correct)=>qa(sel).find(b=>parseInt(b.dataset.idx,10)===correct);
     [b, t].forEach(e => e.remove());
   }
 
+  console.log('\n[23] Zoom, following the ball, and a 3D that shows the same thing');
+  {
+    const { POOL, MANIKIN } = window.__T;
+    const S = () => { const e = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); document.body.appendChild(e); return e; };
+    const vb = el => el.getAttribute('viewBox').split(/\s+/).map(Number);
+
+    /* ZOOM is the same move as the half: a smaller frame over the same drawing. */
+    const b = S(); POOL.render(b);
+    POOL.setCamera(b, { zoom: 1 });
+    ok('1× is the frame the view already chose', vb(b).join() === '0,0,320,262');
+    POOL.setCamera(b, { zoom: 2 });
+    ok('2× shows half the width and half the height, about the centre', vb(b).join() === '80,65.5,160,131');
+    POOL.setCamera(b, { zoom: 99 });
+    ok('a zoom past the limit is held at it rather than zooming into nothing', +b.dataset.zoom === POOL.ZOOM_MAX);
+
+    /* FOLLOWING THE BALL: centred on it where it can be, and never swinging off the pool.
+       Verified live on a whole play: at every sampled moment the frame was exactly as centred on the
+       ball as the pool edge allowed — zero error. */
+    const f = POOL.setCamera(b, { zoom: 2, focus: { x: 296, y: 110 } });
+    ok('following a ball at the goal line keeps the frame inside the pool', f.x + f.w <= 320.001 && f.x >= 0);
+    const mid = POOL.setCamera(b, { zoom: 2, focus: { x: 160, y: 131 } });
+    ok('…and centres it exactly when there is room to', Math.abs(mid.x + mid.w / 2 - 160) < 0.01 && Math.abs(mid.y + mid.h / 2 - 131) < 0.01);
+
+    /* On a TURNED board the ball is drawn a quarter-turn round, so the frame must follow it there —
+       not to where the ball would be on an upright board. */
+    b.dataset.rot = '270';
+    const up = POOL.setCamera(b, { zoom: 2, focus: { x: 296, y: 110 } });
+    ok('on a board turned goal-up, following a ball at the goal moves the frame to the TOP', up.y < 0);
+    b.dataset.rot = '0';
+
+    const rb = S(); POOL.render(rb); POOL.setView(rb, 'half', { rot: 90 }); POOL.setCamera(rb, { zoom: 2 });
+    POOL.render(rb);
+    ok('a redraw keeps the zoom as well as the half and the turn', +rb.dataset.zoom === 2 && vb(rb)[2] < POOL.HALF.h);
+
+    const appSrc = readFileSync(join(APP, 'js/app.js'), 'utf8');
+    ok('the board has zoom out, zoom in and follow-ball controls', !!q('#zoom-out') && !!q('#zoom-in') && !!q('#follow-ball'));
+    ok('the camera stays on the ball on every tick of the play', /if \(followBall\(\)\) applyCamera\(\);/.test(appSrc));
+    ok('…using the player’s own clock, so it never lags a frame behind the ball', /typeof state\.viewer\.t === 'number' \? state\.viewer\.t/.test(appSrc));
+    ok('following at 1× zooms in a step, rather than switching on and visibly doing nothing', /follow && z === 1 \? 1\.5 : z/.test(appSrc));
+    ok('a pinch is two fingers, so one finger on the board is still dragging a player',
+      /e\.touches\.length === 2\) \{ pinch = /.test(appSrc) && /if \(!pinch \|\| e\.touches\.length !== 2\) return;/.test(appSrc));
+    ok('ctrl or ⌘ plus the wheel zooms on a laptop; the wheel alone still scrolls the page', /if \(!\(e\.ctrlKey \|\| e\.metaKey\)\) return;/.test(appSrc));
+    ok('the board takes its own touches, so a drag or a pinch does not scroll the page underneath',
+      /#pool\{touch-action:none\}/.test(readFileSync(join(APP, 'css/styles.css'), 'utf8')));
+    ok('zoom and follow are remembered on the device', appSrc.includes("'thplay.boardZoom'") && appSrc.includes("'thplay.followBall'"));
+
+    /* THE 3D SHOWS THE SAME THING. It used to show the whole pool no matter what the board showed. */
+    ok('on Overview, the 3D aims at the same half and zoom as the board',
+      /function sync3dToBoard\(\)/.test(appSrc) && /dist: \(half \? 9 : 14\) \/ z/.test(appSrc));
+    ok('…but a player chosen in the 3D menu still wins', /if \(typeof MANIKIN === 'undefined' \|\| !scene3dCam \|\| scene3dTarget\) return;/.test(appSrc));
+    ok('…and the board’s Follow ball drives the 3D too, so both watch the ball',
+      /\(scene3dTarget === 'ball' \|\| \(!scene3dTarget && followBall\(\)\)\) && scene\.ball/.test(appSrc));
+    ok('…re-aimed when a setting CHANGES, so it never fights a coach pinching the 3D by hand',
+      /function boardSettingsChanged\(\) \{ applyHalf\(\); sync3dToBoard\(\); \}/.test(appSrc));
+
+    ok('opening the 3D, double-click reset and Overview all land on the board’s view, not the whole pool',
+      (appSrc.match(/MANIKIN\.makeCamera\(\{\}\)/g) || []).length === 1
+      && /function reset3dCam\(\) \{ scene3dCam = MANIKIN\.makeCamera\(\{\}\); sync3dToBoard\(\); \}/.test(appSrc)
+      && /if \(on && !scene3dCam\) reset3dCam\(\);/.test(appSrc)
+      && /addEventListener\('dblclick', \(\) => \{ reset3dCam\(\);/.test(appSrc)
+      && /if \(!scene3dTarget\) reset3dCam\(\);/.test(appSrc));
+    ok('…and opening another play re-aims the 3D at that play’s half', /buildViewer\(0, false\);\n\s*sync3dToBoard\(\);/.test(appSrc));
+
+    /* THE WATER THAT VANISHED. draw3d drew the water only if all four pool corners projected, and a
+       corner behind the camera does not. With the 3D's OWN default aim — nothing new involved — the
+       water was drawn at distance 14 and gone at 10, 8, 6, 4 and 2.6: any coach who pinched the 3D in
+       a little lost the water and saw players on black. Clipped at the lens now. */
+    const pool = MANIKIN.worldPool(), vp = { w: 1176, h: 718 };
+    const C4 = [{ x: -pool.halfLen, y: 0, z: -pool.halfWid }, { x: pool.halfLen, y: 0, z: -pool.halfWid }, { x: pool.halfLen, y: 0, z: pool.halfWid }, { x: -pool.halfLen, y: 0, z: pool.halfWid }];
+    ok('the old rule really did lose the water close up: a corner is behind the camera at distance 10',
+      C4.some(c => !MANIKIN.project(MANIKIN.makeCamera({ dist: 10 }), c, vp)));
+    ok('the water is drawn at every distance the pinch allows, cut at the lens instead of dropped',
+      [14, 10, 8, 6, 4, 2.6].every(d => { const p = MANIKIN.projectPoly(MANIKIN.makeCamera({ dist: d }), C4, vp); return p && p.length >= 3; }));
+    ok('the new maths puts everything that already drew in exactly the same place',
+      [14, 10, 6].every(d => { const cam = MANIKIN.makeCamera({ dist: d }), sc = (vp.h / 2) / Math.tan(0.85 / 2);
+        return C4.every(c => { const p = MANIKIN.project(cam, c, vp); if (!p) return true; const v = MANIKIN.camSpace(cam, c);
+          return Math.hypot(vp.w / 2 + v.vx / v.vz * sc - p.x, vp.h / 2 - v.vy / v.vz * sc - p.y) < 1e-6; }); }));
+    ok('a lane line running past the camera keeps the part in front of it',
+      MANIKIN.projectSeg(MANIKIN.makeCamera({ dist: 3 }), { x: -pool.halfLen, y: 0, z: 0 }, { x: pool.halfLen, y: 0, z: 0 }, vp) !== null);
+    ok('…and a segment wholly behind the camera is still dropped, not drawn back to front',
+      MANIKIN.projectSeg(MANIKIN.makeCamera({ dist: 3 }), MANIKIN.eyeOf(MANIKIN.makeCamera({ dist: 6 })), MANIKIN.eyeOf(MANIKIN.makeCamera({ dist: 9 })), vp) === null);
+    ok('draw3d no longer skips the whole water when one corner is behind the lens',
+      !/if \(!corners\.some\(p => !p\)\) \{/.test(appSrc) && /const corners = poly3\(/.test(appSrc));
+    /* THE PLAYER ON TOP OF THE LENS. Seen live at half 2× on a phone: a defender about a metre from
+       the camera was drawn as a dark cap covering half the 3D. Faded like a game camera fades what it
+       passes through — and ONLY that player: everyone at a normal distance is drawn exactly as before. */
+    {
+      const cam = MANIKIN.makeCamera({ dist: 4.5 }), eye = MANIKIN.eyeOf(cam);
+      const f = MANIKIN.camSpace(cam, cam.target);   // straight ahead of the lens
+      const ahead = d => ({ x: eye.x + (cam.target.x - eye.x) * d / f.vz, y: eye.y + (cam.target.y - eye.y) * d / f.vz, z: eye.z + (cam.target.z - eye.z) * d / f.vz });
+      ok('a player at the aim point, and anyone 2 m or more away, is drawn in full', MANIKIN.nearFade(cam, [cam.target]) === 1 && MANIKIN.nearFade(cam, [ahead(2.2)]) === 1);
+      ok('…one a metre and a bit from the lens is see-through, not a wall', (a => a > 0 && a < 1)(MANIKIN.nearFade(cam, [ahead(1.3)])));
+      ok('…one the camera is practically inside is not drawn at all', MANIKIN.nearFade(cam, [ahead(0.5)]) === 0);
+      ok('…nor one with any part behind the lens, however far the rest of them reaches', MANIKIN.nearFade(cam, [cam.target, MANIKIN.eyeOf(MANIKIN.makeCamera({ dist: 6 }))]) === 0);
+      ok('draw3d fades both the player and the ring under them, and resets for the ball',
+        (appSrc.match(/const fade = fadeOf\(m\);/g) || []).length === 2 && /const fade = fadeOf\(m\); if \(!rp \|\| !fade\) return;/.test(appSrc)
+        && (appSrc.match(/ctx\.globalAlpha = 1;/g) || []).length >= 2);
+    }
+    /* THE DARK DISC ON A PHONE. Not the 3D at all: the orbit hint, pinned on all four edges below 760 px,
+       stretched over the whole 3D, and its pill radius made a disc of it. */
+    {
+      const css = readFileSync(join(APP, 'css/styles.css'), 'utf8');
+      const phone = (css.match(/@media \(max-width:760px\)\{\.scene3d-hint\{([^}]*)\}\}/) || [])[1] || '';
+      ok('on a phone the 3D hint is pinned to one edge, so it cannot stretch over the picture',
+        /bottom:auto/.test(phone) && /top:8px/.test(phone));
+      ok('…and it is not a pill, which is a disc once the text wraps', !/\.scene3d-hint\{[^}]*border-radius:999px/.test(css));
+    }
+    ok('…and nor do the shot zones or the goals', /const c = poly3\(\[\{ x: q\.x0/.test(appSrc) && /const l = seg3\(seg\[0\], seg\[1\]\)/.test(appSrc));
+    [b, rb].forEach(e => e.remove());
+  }
+
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);
   process.exit(fail?1:0);
  } catch(e){ console.error('THREW:', e && e.stack || e); process.exit(2); }

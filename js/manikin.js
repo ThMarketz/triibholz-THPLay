@@ -177,6 +177,68 @@ const MANIKIN = (() => {
     const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
     return { x: cam.target.x + cam.dist * cp * Math.sin(cam.yaw), y: cam.target.y + cam.dist * sp, z: cam.target.z + cam.dist * cp * Math.cos(cam.yaw) };
   }
+  /* A world point in CAMERA space: vx right, vy up, vz straight ahead. project() divides by vz and
+     so has to give up on anything at or behind the camera; this does not, which is what lets a
+     polygon that runs past the camera be CUT at the near plane instead of dropped whole. */
+  function camSpace(cam, p) {
+    const eye = eyeOf(cam);
+    let fx = cam.target.x - eye.x, fy = cam.target.y - eye.y, fz = cam.target.z - eye.z;
+    const fl = Math.hypot(fx, fy, fz) || 1; fx /= fl; fy /= fl; fz /= fl;
+    let rx = -fz, ry = 0, rz = fx;
+    const rl = Math.hypot(rx, ry, rz) || 1; rx /= rl; ry /= rl; rz /= rl;
+    const ux = ry * fz - rz * fy, uy = rz * fx - rx * fz, uz = rx * fy - ry * fx;
+    const px = p.x - eye.x, py = (p.y || 0) - eye.y, pz = p.z - eye.z;
+    return { vx: px * rx + py * ry + pz * rz, vy: px * ux + py * uy + pz * uz, vz: px * fx + py * fy + pz * fz };
+  }
+  /* A flat polygon on screen, clipped at the near plane (Sutherland–Hodgman against vz = NEAR).
+
+     WHY THIS EXISTS: draw3d() drew the water only when all four pool corners projected, and a corner
+     behind the camera does not. So the moment a coach pinched the 3D in past a distance of about 10 —
+     or the half view aimed it at the attacking half — the far corner at our own goal fell behind the
+     camera and the ENTIRE water surface vanished, leaving the players floating on black. Measured
+     with the 3D's own default aim: water drawn at 14, gone at 10, 8, 6, 4 and 2.6. The fix is to cut
+     the polygon where it crosses the plane just in front of the lens, which is what every 3D renderer
+     does and this one did not. */
+  const NEAR = 0.06;
+  function projectPoly(cam, pts, viewport) {
+    const vs = pts.map(p => camSpace(cam, p));
+    const out = [];
+    for (let i = 0; i < vs.length; i++) {
+      const a = vs[i], b = vs[(i + 1) % vs.length];
+      const ain = a.vz >= NEAR, bin = b.vz >= NEAR;
+      if (ain) out.push(a);
+      if (ain !== bin) {
+        const t = (NEAR - a.vz) / (b.vz - a.vz);
+        out.push({ vx: a.vx + t * (b.vx - a.vx), vy: a.vy + t * (b.vy - a.vy), vz: NEAR });
+      }
+    }
+    if (out.length < 3) return null;
+    const scale = (viewport.h / 2) / Math.tan((cam.fov || 0.85) / 2);
+    return out.map(v => ({ x: viewport.w / 2 + (v.vx / v.vz) * scale, y: viewport.h / 2 - (v.vy / v.vz) * scale }));
+  }
+  /* A line segment, clipped the same way — a lane line that passes beside the camera keeps the part
+     in front of it rather than disappearing. */
+  function projectSeg(cam, a, b, viewport) {
+    let A = camSpace(cam, a), B = camSpace(cam, b);
+    if (A.vz < NEAR && B.vz < NEAR) return null;
+    const cut = (P, Q) => { const t = (NEAR - P.vz) / (Q.vz - P.vz); return { vx: P.vx + t * (Q.vx - P.vx), vy: P.vy + t * (Q.vy - P.vy), vz: NEAR }; };
+    if (A.vz < NEAR) A = cut(A, B); else if (B.vz < NEAR) B = cut(B, A);
+    const scale = (viewport.h / 2) / Math.tan((cam.fov || 0.85) / 2);
+    const sc = v => ({ x: viewport.w / 2 + (v.vx / v.vz) * scale, y: viewport.h / 2 - (v.vy / v.vz) * scale });
+    return [sc(A), sc(B)];
+  }
+  /* WHAT IS RIGHT ON TOP OF THE LENS. Close in — the half view at 2×, or a coach pinching the 3D —
+     the camera ends up among the players, and one a metre from the lens was drawn as a cap several
+     hundred pixels across that blotted out half the pool. Games fade out whatever the camera is
+     about to pass through; this does the same. Fully drawn from 2 m, fading in between, gone inside
+     0.8 m — and gone if any part of the player is behind the lens, since then the camera is in them. */
+  const FADE_NEAR = 0.8, FADE_FULL = 2.0;
+  function nearFade(cam, pts) {
+    let d = Infinity;
+    (pts || []).forEach(p => { if (p) d = Math.min(d, camSpace(cam, p).vz); });
+    if (d === Infinity) return 1;
+    return Math.max(0, Math.min(1, (d - FADE_NEAR) / (FADE_FULL - FADE_NEAR)));
+  }
   function project(cam, p, viewport) {
     const eye = eyeOf(cam);
     let fx = cam.target.x - eye.x, fy = cam.target.y - eye.y, fz = cam.target.z - eye.z;
@@ -191,7 +253,7 @@ const MANIKIN = (() => {
     return { x: viewport.w / 2 + (vx / vz) * scale, y: viewport.h / 2 - (vy / vz) * scale, depth: vz, scale: scale / vz };
   }
 
-  return { geo, toWorld, POSES, BONES, TORSO, CAP_PARTS, CAP, jointsWorld, poseFor, sceneAt, worldPool, goalPosts, zoneFloorQuads, makeCamera, orbit, eyeOf, project };
+  return { geo, toWorld, POSES, BONES, TORSO, CAP_PARTS, CAP, jointsWorld, poseFor, sceneAt, worldPool, goalPosts, zoneFloorQuads, makeCamera, orbit, eyeOf, project, camSpace, projectPoly, projectSeg, NEAR, nearFade, FADE_NEAR, FADE_FULL };
 })();
 
 // Node/CommonJS interop (no-op in the browser)
